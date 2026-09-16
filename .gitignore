@@ -1,0 +1,63 @@
+# Secretos
+application-local.properties
+**/application-local.properties
+**/*-local.properties
+*.secret
+.env
+.env.*
+
+# Backend Java
+BackendJava/target/
+BackendJava/build/
+BackendJava/out/
+BackendJava/logs/
+BackendJava/uploads/
+BackendJava/*.log
+BackendJava/*.pid
+
+# Frontend React
+FrontendReact/node_modules/
+FrontendReact/dist/
+FrontendReact/build/
+FrontendReact/.vite/
+FrontendReact/.next/
+FrontendReact/coverage/
+FrontendReact/.cache/
+FrontendReact/.parcel-cache/
+FrontendReact/.eslintcache
+FrontendReact/*.log
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+nbproject/
+nb-configuration.xml
+nbactions.xml
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Compilados
+*.class
+*.war
+*.ear
+*.log
+*.tmp
+*.bak
+*~
+
+# Documentos
+*.docx
+*.doc
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+documentacion/
+documento_analisis_*.md
+requerimiento.txt
