@@ -1,0 +1,38 @@
+# ============================================================================
+# Finales de linea por tipo de archivo.
+#
+# Por que existe este archivo: el proyecto se edita en Windows (CRLF) pero el
+# CI, el Dockerfile y los scripts .sh se ejecutan en Linux (LF). Sin esta regla,
+# un script con CRLF falla en Linux con errores desconcertantes del tipo
+# "$'\r': command not found" o "bad interpreter", y un Dockerfile con CRLF puede
+# romper las continuaciones de linea con "\".
+#
+# Con esto, git guarda SIEMPRE LF para lo que corre en Linux, sin importar en
+# que sistema se edite.
+# ============================================================================
+
+* text=auto
+
+# Linux: scripts, contenedores, SQL y workflows
+*.sh        text eol=lf
+*.sql       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+Dockerfile  text eol=lf
+Caddyfile   text eol=lf
+.dockerignore text eol=lf
+.env.ejemplo  text eol=lf
+
+# Windows: scripts de PowerShell
+*.ps1       text eol=crlf
+
+# Binarios: git no debe tocarlos
+*.war       binary
+*.jar       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.woff      binary
+*.woff2     binary
