@@ -1,0 +1,38 @@
+# ============================================================================
+# Caddy: la unica puerta de entrada.
+#
+# Hace dos cosas:
+#   1. Reverse proxy: reenvia todo a la aplicacion (servicio 'app', puerto 8080).
+#   2. HTTPS: cuando SITIO es un dominio real, pide y renueva el certificado de
+#      Let's Encrypt solo, sin configurar nada mas. Con 'http://...' no intenta
+#      TLS, que es lo que queremos en local.
+#
+# El valor sale del .env (lo inyecta docker-compose.yml):
+#   Local      : SITIO=:80                  -> escucha en el 80, cualquier host, sin TLS
+#   Produccion : SITIO=sih.tudominio.mx     -> TLS automatico de Let's Encrypt
+#
+# OJO con el puerto: en una directiva de sitio, el numero es el puerto INTERNO
+# del contenedor. El 9080 del host es solo el mapeo (9080:80), asi que aqui va
+# ':80' y no 'http://localhost:9080' (eso haria que Caddy escuchara en el 9080
+# de dentro, donde nadie llega).
+#
+# Requisitos en produccion (los aplica el despliegue a Oracle):
+#   - El DNS del dominio apunta a la IP publica de la VM.
+#   - Los puertos 80 y 443 estan abiertos en la Security List de Oracle y en el
+#     firewall de la propia VM. Sin el 80 no se puede validar el certificado.
+# ============================================================================
+
+{$SITIO} {
+	# Compresion: el bundle de React y el JSON del horario se reducen mucho.
+	encode zstd gzip
+
+	# Un solo upstream: no hay que repartir rutas entre front y back porque el
+	# WAR ya sirve el front de React en classpath:/static.
+	reverse_proxy app:8080
+
+	# Log de acceso a la salida del contenedor (se ve con 'docker compose logs caddy').
+	log {
+		output stdout
+		format console
+	}
+}

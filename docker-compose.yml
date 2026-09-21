@@ -1,0 +1,147 @@
+# ============================================================================
+# SIH-IA: PostgreSQL + aplicacion + Caddy (HTTPS).
+#
+# Tres servicios, un solo comando:
+#     docker compose up -d --build
+#
+# Quien ve Internet es Caddy (puerto 80/443). La aplicacion y la base NO
+# publican puertos al exterior: viven en la red interna de Docker. Asi, aunque
+# alguien escanee el servidor, solo encuentra el proxy.
+#
+# La configuracion sale del archivo .env (ver la plantilla .env.ejemplo).
+#
+# NOTA sobre las comillas: los valores con ${VAR:?mensaje} van entrecomillados
+# porque el mensaje puede contener ": ", y YAML sin comillas lo leeria como un
+# mapa anidado ("mapping values are not allowed in this context").
+# ============================================================================
+
+name: sih-ia
+
+services:
+
+  # --------------------------------------------------------------------------
+  # PostgreSQL 17
+  # --------------------------------------------------------------------------
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       "${DB_NAME:-SIH}"
+      POSTGRES_USER:     "${DB_USER:-User_app}"
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?falta DB_PASSWORD. Copia .env.ejemplo a .env y rellenalo}"
+    volumes:
+      # Los datos viven en un volumen con nombre, no dentro del contenedor:
+      # 'docker compose down' no los borra (solo 'down -v' lo haria).
+      - datos_pg:/var/lib/postgresql/data
+
+      # Bootstrap: Postgres ejecuta estos scripts SOLO la primera vez que crea
+      # el volumen, en orden alfabetico. Con el volumen ya creado se ignoran.
+      - ./db/esquema.sql:/docker-entrypoint-initdb.d/01_esquema.sql:ro
+      - ./db/02_solape.sql:/docker-entrypoint-initdb.d/02_solape.sql:ro
+      # 03_datos.sql es el que se cambia segun el caso (ver SCRIPT_DATOS en .env):
+      #   migracion de este cliente -> 04_datos_cliente.sql
+      #   cliente nuevo desde cero  -> 03_semilla.sql
+      # OJO: son alternativos entre si, nunca los dos a la vez (ambos insertan
+      # roles, menu, rol_menu y escuelas: chocarian las PRIMARY KEY).
+      - "./db/${SCRIPT_DATOS:-03_semilla.sql}:/docker-entrypoint-initdb.d/03_datos.sql:ro"
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # --------------------------------------------------------------------------
+  # Aplicacion Spring Boot (el WAR lleva el front de React dentro)
+  # --------------------------------------------------------------------------
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # Identidad del despliegue, que se lee en GET /api/version. El pipeline los
+      # rellena con el tag y el commit; en local quedan como dev/desconocido.
+      args:
+        APP_VERSION: "${APP_VERSION:-dev}"
+        GIT_COMMIT:  "${GIT_COMMIT:-desconocido}"
+        FECHA_BUILD: "${FECHA_BUILD:-desconocido}"
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      # La documentacion de la API (/scalar y /v3/api-docs) queda CERRADA en
+      # produccion. Quien la cierra es la capa de seguridad con esta propiedad
+      # (app.api-docs.publica), porque las claves de springdoc no bastan: el
+      # starter de Scalar sirve /scalar por defecto y esas rutas NO estan bajo
+      # /api/**, asi que quedaban publicas. Comprobado en el contenedor.
+      SPRINGDOC_API_DOCS_ENABLED: "false"
+      APP_API_DOCS_PUBLICA: "false"
+
+      # La URL apunta al servicio 'db' por su nombre en la red de Docker.
+      DB_URL:      "jdbc:postgresql://db:5432/${DB_NAME:-SIH}?currentSchema=sih"
+      DB_USER:     "${DB_USER:-User_app}"
+      DB_PASSWORD: "${DB_PASSWORD:?falta DB_PASSWORD en .env}"
+
+      JWT_SECRETO: "${JWT_SECRETO:?falta JWT_SECRETO en .env. Genera uno con openssl rand -base64 48}"
+
+      # Ruta absoluta: una relativa dependeria del directorio de trabajo.
+      UPLOAD_DIR: "/var/lib/sih/uploads/maestros/"
+
+      # El front se sirve del mismo origen, asi que CORS casi no se usa; se deja
+      # apuntando al sitio publico por si algun dia se abre desde otro dominio.
+      CORS_ORIGINS: "${URL_PUBLICA:-http://localhost:9080}"
+
+      # Correo (recuperacion de contrasena). Con valores vacios la aplicacion
+      # arranca igual; solo fallaria al intentar enviar un correo.
+      MAIL_HOST:     "${MAIL_HOST:-localhost}"
+      MAIL_PORT:     "${MAIL_PORT:-587}"
+      MAIL_USERNAME: "${MAIL_USERNAME:-noreply@tudominio.com}"
+      MAIL_PASSWORD: "${MAIL_PASSWORD:-}"
+      MAIL_FROM:     "${MAIL_FROM:-noreply@tudominio.com}"
+
+      # URL publica que se usa en los enlaces de recuperacion de contrasena.
+      FRONTEND_URL: "${URL_PUBLICA:-http://localhost:9080}"
+
+      # Asesor LLM del generador de horarios: opcional. Vacio = solo heuristica.
+      IA_API_KEY: "${IA_API_KEY:-}"
+      IA_URL:     "${IA_URL:-https://api.openai.com/v1/chat/completions}"
+      IA_MODELO:  "${IA_MODELO:-gpt-4o-mini}"
+
+      TZ: "America/Mexico_City"
+    volumes:
+      # Las fotos de maestros sobreviven a las actualizaciones de la aplicacion.
+      - uploads:/var/lib/sih/uploads
+
+  # --------------------------------------------------------------------------
+  # Caddy: reverse proxy y certificado HTTPS automatico
+  # --------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      # Local:      9080 -> 80  (SITIO=:80, sin TLS)
+      # Produccion: 80 y 443    (SITIO=tu.dominio.mx, TLS de Let's Encrypt)
+      - "${PUERTO_HTTP:-9080}:80"
+      - "${PUERTO_HTTPS:-9443}:443"
+    environment:
+      # Directiva de sitio de Caddy. OJO: el puerto aqui es el INTERNO del
+      # contenedor, no el del host. ':80' = escucha en el 80 y atiende
+      # cualquier nombre; un dominio real activa el TLS automatico.
+      SITIO: "${SITIO:-:80}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificados y estado de Caddy: si se pierden, los vuelve a pedir (y
+      # Let's Encrypt tiene limite de peticiones, mejor conservarlos).
+      - caddy_datos:/data
+      - caddy_config:/config
+
+volumes:
+  datos_pg:
+  uploads:
+  caddy_datos:
+  caddy_config:

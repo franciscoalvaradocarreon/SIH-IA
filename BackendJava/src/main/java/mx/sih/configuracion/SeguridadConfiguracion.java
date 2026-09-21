@@ -31,6 +31,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
  *  3. CORS por configuración exacta, sin comodines en dominios compartidos.
  *  4. 401 para "no autenticado" (antes 403, que confundía al frontend con "sin permiso").
  *  5. Cabeceras de seguridad: CSP, nosniff, frame-ancestors y HSTS.
+ *  6. La documentación de la API se CIERRA en producción (ver {@link #apiDocsPublica}).
  */
 @Configuration
 @EnableMethodSecurity(prePostEnabled = true)   // 🔥 IMPRESCINDIBLE
@@ -43,6 +44,36 @@ public class SeguridadConfiguracion {
     /** Solo true si en el futuro se migra el JWT a cookie; con Bearer debe quedarse en false. */
     @Value("${app.cors.allow-credentials:false}")
     private boolean permitirCredenciales;
+
+    /**
+     * ¿La documentación de la API (Scalar / OpenAPI) es pública?
+     *
+     * <p>Antes esta regla era {@code permitAll()} fijo, confiando en que en
+     * producción bastaba con {@code springdoc.api-docs.enabled=false}. Se
+     * comprobó en el contenedor que <b>no basta</b>: el starter de Scalar sirve
+     * su interfaz en {@code /scalar} por defecto y {@code /v3/api-docs}
+     * respondía 200 con el perfil de producción activo. Como esas rutas NO están
+     * bajo {@code /api/**}, quedaban accesibles para cualquiera y exponían la
+     * descripción completa de la API.
+     *
+     * <p>Por eso el cierre se hace aquí, que sí es determinista, con una
+     * propiedad propia: {@code true} en desarrollo (application.properties) y
+     * {@code false} en producción (application-prod.properties).
+     */
+    @Value("${app.api-docs.publica:false}")
+    private boolean apiDocsPublica;
+
+    /**
+     * Rutas de la documentación, con y sin barra final.
+     *
+     * <p>Se listan ambas formas a propósito: el patrón {@code /scalar/**} NO
+     * cubre {@code /scalar} exacto, y era justo la URL que respondía 200.
+     */
+    private static final String[] RUTAS_DOCUMENTACION = {
+        "/scalar", "/scalar/**",
+        "/v3/api-docs", "/v3/api-docs/**",
+        "/swagger-ui.html", "/swagger-ui/**"
+    };
 
     @Bean
     public PasswordEncoder codificadorPassword() {
@@ -79,46 +110,55 @@ public class SeguridadConfiguracion {
                     .includeSubDomains(true)
                     .maxAgeInSeconds(31_536_000L))
             )
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                 // ---- Público: SOLO el login y el error ----
-                .requestMatchers(HttpMethod.POST,
+                auth.requestMatchers(HttpMethod.POST,
                     "/api/auth/login",
                     "/api/auth/recuperar-password",
-                    "/api/auth/restablecer-password").permitAll()    
-                .requestMatchers("/error").permitAll()
+                    "/api/auth/restablecer-password").permitAll();
+                auth.requestMatchers("/error").permitAll();
+
+                // Identidad de la version: publica a proposito, para que un monitor
+                // externo compruebe que el servicio responde y saber que version corre.
+                // No expone datos de negocio (ver VersionControlador).
+                auth.requestMatchers(HttpMethod.GET, "/api/version").permitAll();
 
                 // Preflight CORS
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
                 // Imágenes de maestros: siguen siendo públicas porque un <img src> del
                 // navegador NO envía la cabecera Authorization. El XSS se cerró en
                 // ArchivoServicio (re-codificación + lista blanca), no aquí.
-                .requestMatchers("/uploads/**").permitAll()
+                auth.requestMatchers("/uploads/**").permitAll();
 
-                // Documentación: solo en desarrollo (en producción, springdoc.api-docs.enabled=false)
-                .requestMatchers("/scalar/**", "/v3/api-docs/**").permitAll()
+                // Documentación de la API: abierta solo en desarrollo.
+                if (apiDocsPublica) {
+                    auth.requestMatchers(RUTAS_DOCUMENTACION).permitAll();
+                } else {
+                    auth.requestMatchers(RUTAS_DOCUMENTACION).denyAll();
+                }
 
                 // ---- Reglas de ruta (defensa en profundidad, además de @PreAuthorize) ----
                 // OJO: /api/usuarios/escuelas lo usa CUALQUIER usuario en el selector de
                 // escuela, por eso va ANTES de la regla de ADMIN.
-                .requestMatchers("/api/usuarios/escuelas").authenticated()
-                .requestMatchers("/api/usuarios/mis-roles").authenticated()   // 🔥 movida aquí
-                .requestMatchers("/api/usuarios/**").hasRole("ADMIN")
+                auth.requestMatchers("/api/usuarios/escuelas").authenticated();
+                auth.requestMatchers("/api/usuarios/mis-roles").authenticated();   // 🔥 movida aquí
+                auth.requestMatchers("/api/usuarios/**").hasRole("ADMIN");
 
-                .requestMatchers("/api/roles/**", "/api/rol-menu/**").hasRole("ADMIN")
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.DELETE, "/api/escuelas/**").hasRole("ADMIN")
-                .requestMatchers("/api/escuelas/**").authenticated()
+                auth.requestMatchers("/api/roles/**", "/api/rol-menu/**").hasRole("ADMIN");
+                auth.requestMatchers("/api/admin/**").hasRole("ADMIN");
+                auth.requestMatchers(HttpMethod.DELETE, "/api/escuelas/**").hasRole("ADMIN");
+                auth.requestMatchers("/api/escuelas/**").authenticated();
 
-                // Todo el API exige autenticación (las reglas de arriba ya abrieron login, /uploads y docs).
-                .requestMatchers("/api/**").authenticated()
+                // Todo el API exige autenticación (las reglas de arriba ya abrieron login y /uploads).
+                auth.requestMatchers("/api/**").authenticated();
 
                 // EL SHELL DEL FRONT ES PÚBLICO: index.html, /assets/**, favicon y las rutas del SPA
                 // (/reportes/..., /horarios/...). Esos archivos NO llevan datos; los datos salen del API,
                 // que sigue protegido. Sin esta regla el navegador recibía 401 al abrir la aplicación y
                 // el front servido desde el propio programa (-jar) nunca cargaba.
-                .anyRequest().permitAll()
-            )
+                auth.anyRequest().permitAll();
+            })
             .addFilterBefore(filtroJwt, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(ex -> ex
                 // No autenticado (sin token o token inválido) => 401

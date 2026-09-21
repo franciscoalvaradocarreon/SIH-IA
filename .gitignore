@@ -1,11 +1,15 @@
 # Secretos
 application-local.properties
 **/application-local.properties
-**/application-prod.properties
+# application-prod.properties SI se versiona: no lleva secretos (solo apaga la
+# documentacion de la API, ajusta logs y define la ruta de uploads). Sin el, un
+# clon limpio construiria el WAR sin perfil de produccion.
 **/*-local.properties
 *.secret
 .env
 .env.*
+# La plantilla SI se versiona (no lleva secretos); el .env real nunca.
+!.env.ejemplo
 
 # Backend Java
 BackendJava/target/
@@ -62,3 +66,4 @@ desktop.ini
 documentacion/
 documento_analisis_*.md
 requerimiento.txt
+db/04_datos_cliente.sql

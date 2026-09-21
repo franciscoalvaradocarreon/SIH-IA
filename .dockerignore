@@ -1,0 +1,38 @@
+# ============================================================================
+# Contexto de build: lo que NO debe viajar al demonio de Docker.
+# Sin este archivo, el contexto serian ~520 MB (node_modules 308 + target 209)
+# y cada build tardaria minutos solo en copiar basura.
+# ============================================================================
+
+# Dependencias y artefactos: se regeneran dentro de la imagen
+**/node_modules
+**/dist
+**/target
+**/build
+**/.vite
+**/coverage
+
+# Repositorio y CI: no hacen falta para compilar
+.git
+.github
+.gitignore
+
+# DATOS REALES DEL CLIENTE: contiene hashes bcrypt de usuarios. No debe copiarse
+# a ninguna capa de imagen ni quedar en el historial del build.
+db/04_datos_cliente.sql
+
+# Secretos locales
+**/application-local.properties
+**/*-local.properties
+.env
+.env.*
+
+# El front se compila en la etapa 1; esta copia vieja solo confundiria al WAR
+BackendJava/src/main/resources/static
+
+# Scripts de escritorio y documentacion
+*.ps1
+*.md
+*.log
+.idea
+.vscode

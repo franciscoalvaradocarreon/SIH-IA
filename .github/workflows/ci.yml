@@ -1,0 +1,163 @@
+name: CI (compilar, QA del esquema, empaquetar)
+
+# Se ejecuta en cada push y pull request. Es la "aduana": si algo no compila o
+# el esquema no pasa el QA, no pasa.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  # --------------------------------------------------------------------------
+  # Front: compila y revisa tipos SOLO de los archivos tocados
+  # --------------------------------------------------------------------------
+  frontend:
+    name: Front (React + Vite)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: FrontendReact
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: FrontendReact/package-lock.json
+      - run: npm ci
+      # Mismo comando que usa el Dockerfile: el type-check no bloquea el bundle.
+      - run: node node_modules/vite/bin/vite.js build
+      # Verificacion de tipos solo de los archivos NUEVOS/EDITADOS (el proyecto
+      # arrastra errores previos de TypeScript; se iran limpiando sin bloquear)
+      - name: Tipos de los archivos cambiados
+        run: |
+          FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'src/**/*.ts' 'src/**/*.tsx' | tr '\n' ' ')
+          if [ -n "$FILES" ]; then npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -E "$(echo $FILES | tr ' ' '|')" && exit 1 || echo "Sin errores en los archivos cambiados"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: FrontendReact/dist
+
+  # --------------------------------------------------------------------------
+  # Backend: compila y corre las pruebas contra un PostgreSQL 17 de verdad
+  # --------------------------------------------------------------------------
+  backend:
+    name: Backend (Spring Boot + Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: SIH
+        ports: [ '5432:5432' ]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DB_URL: jdbc:postgresql://localhost:5432/SIH?currentSchema=sih
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      JWT_SECRETO: clave-de-pruebas-solo-para-ci-con-32-o-mas-caracteres
+      UPLOAD_DIR: uploads/maestros/
+    defaults:
+      run:
+        working-directory: BackendJava
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Preparar la base para las pruebas
+        env:
+          PGPASSWORD: postgres
+        run: |
+          set -e
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/esquema.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/02_solape.sql
+      - name: Compilar y correr pruebas
+        run: mvn -B clean verify
+      - name: Empaquetar el programa (WAR ejecutable)
+        run: mvn -B package -DskipTests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sih-war
+          path: BackendJava/target/SIH-IA-1.0.war
+
+  # --------------------------------------------------------------------------
+  # QA DEL ESQUEMA: el corazon del control de calidad de la base de datos.
+  # Levanta una base limpia, aplica el bootstrap COMPLETO y exige el veredicto.
+  # --------------------------------------------------------------------------
+  esquema:
+    name: QA del esquema (Postgres 17)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: SIH
+        ports: [ '5432:5432' ]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Aplicar el bootstrap completo (esquema + red de solape + semilla)
+        run: |
+          set -e
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/esquema.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/02_solape.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/03_semilla.sql
+
+      - name: QA del esquema (el veredicto es un gate)
+        run: |
+          psql -h localhost -U postgres -d SIH -f db/qa_esquema.sql | tee /tmp/qa.txt
+          if ! grep -q 'OK  -> base lista para produccion' /tmp/qa.txt; then
+            echo "::error::El QA del esquema no dio OK. Revisa la salida de arriba."
+            exit 1
+          fi
+
+      # Prueba de fuego: no basta con que el indice exista, tiene que MORDER.
+      # Se insertan dos filas con el mismo (grupo_id, turno_horario_id) y se
+      # espera que la segunda sea rechazada. session_replication_role=replica
+      # evita tener que montar toda la cadena de claves foraneas.
+      - name: La red de solape rechaza de verdad un duplicado
+        run: |
+          set -euo pipefail
+          Q="INSERT INTO sih.horario (escuela_id, grupo_id, asignacion_id, turno_horario_id, aula_id, version, semestre_id, maestro_id) VALUES"
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -c "BEGIN; SET session_replication_role = replica; $Q (1, 777777, 1, 888888, 1, 1, 1, 1); ROLLBACK;"
+
+          if psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -c "SET session_replication_role = replica; $Q (1, 777777, 2, 888888, 2, 1, 1, 2);" 2>/tmp/err.txt; then
+            echo "::error::El indice no rechazo un solape: la red de seguridad no funciona."
+            exit 1
+          fi
+          if grep -q 'no_solape_grupo_bloque' /tmp/err.txt; then
+            echo "OK: el solape fue rechazado por no_solape_grupo_bloque"
+          else
+            echo "::error::Fallo por un motivo inesperado:"; cat /tmp/err.txt; exit 1
+          fi
+
+  # --------------------------------------------------------------------------
+  # Imagen Docker: si el Dockerfile se rompe, el despliegue no existe.
+  # --------------------------------------------------------------------------
+  imagen:
+    name: Imagen Docker
+    needs: [ frontend, backend ]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Construir la imagen (sin publicarla)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: sih-ia:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
