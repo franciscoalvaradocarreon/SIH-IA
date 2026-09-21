@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/especialidades")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
 public class EspecialidadControlador {
 
     private final EspecialidadServicio especialidadServicio;
@@ -46,7 +47,6 @@ public class EspecialidadControlador {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<EspecialidadDTO> crearEspecialidad(
             @Valid @RequestBody EspecialidadCrearDTO dto) {
         EspecialidadDTO creada = especialidadServicio.crearEspecialidad(dto);
@@ -54,7 +54,6 @@ public class EspecialidadControlador {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<EspecialidadDTO> actualizarEspecialidad(
             @PathVariable Long id,
             @Valid @RequestBody EspecialidadCrearDTO dto) {
@@ -63,7 +62,6 @@ public class EspecialidadControlador {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> eliminarEspecialidad(@PathVariable Long id) {
         especialidadServicio.eliminarEspecialidad(id);
         return ResponseEntity.noContent().build();

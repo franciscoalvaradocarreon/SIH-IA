@@ -2,6 +2,8 @@ package mx.sih.modelo.entidad;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,9 +36,17 @@ public class Maestro {
 
     @Column(name = "foto_url", length = 100)
     private String fotoUrl;
-    
+
     @Column(name = "titulo", length = 20)
     private String titulo;
+
+    /**
+     * Apodo o sobrenombre con el que se conoce al maestro en la escuela
+     * ("El Profe", "Chava"...). Es opcional: la columna admite null, así que
+     * los maestros que ya existían simplemente quedan sin apodo.
+     */
+    @Column(name = "apodo", length = 15)
+    private String apodo;
 
     @ManyToOne
     @JoinColumn(name = "escuela_id", nullable = false)
@@ -46,27 +56,39 @@ public class Maestro {
 
     @Column(name = "creado")
     private LocalDateTime creado = LocalDateTime.now();
-    
+
     @ManyToOne
     @JoinColumn(name = "semestre_id", nullable = false)
     private Semestre semestre;
-    
+
     @ManyToOne
     @JoinColumn(name = "turno_id", nullable = false)
     private Turno turno;
 
-    // Método auxiliar para obtener nombre completo
     public String getNombreCompleto() {
-        return ((nombre != null ? nombre : "")+" "+(apellidos != null ? apellidos : ""));
+        return unirPartes(nombre, apellidos);
     }
-    
+
     public String getTituloNombreCompleto() {
-        return ((titulo != null ? titulo : "")+" "+(nombre != null ? nombre : "")+" "+(apellidos != null ? apellidos : ""));
+        return unirPartes(titulo, nombre, apellidos);
     }
 
     public String getApellidoNombre() {
-        return ((apellidos != null ? apellidos : "")+ ", " + (nombre != null ? nombre : ""));
+        String ape = (apellidos != null) ? apellidos.trim() : "";
+        String nom = (nombre != null) ? nombre.trim() : "";
+        if (ape.isEmpty()) return nom;
+        if (nom.isEmpty()) return ape;
+        return ape + ", " + nom;
     }
 
-    
+    /**
+     * Une las partes no nulas y no vacías con un espacio simple.
+     * Si todas las partes son null/vacías, devuelve cadena vacía.
+     */
+    private static String unirPartes(String... partes) {
+        return Stream.of(partes)
+                .filter(p -> p != null && !p.isBlank())
+                .map(String::trim)
+                .collect(Collectors.joining(" "));
+    }
 }

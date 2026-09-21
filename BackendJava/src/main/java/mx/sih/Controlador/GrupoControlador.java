@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/grupos")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
 public class GrupoControlador {
 
     private final GrupoServicio grupoServicio;
@@ -43,14 +44,12 @@ public class GrupoControlador {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<GrupoDTO> crearGrupo(@Valid @RequestBody GrupoCrearDTO dto) {
         GrupoDTO creado = grupoServicio.crearGrupo(dto);
         return ResponseEntity.status(201).body(creado);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<GrupoDTO> actualizarGrupo(
             @PathVariable Long id,
             @Valid @RequestBody GrupoCrearDTO dto) {
@@ -59,17 +58,14 @@ public class GrupoControlador {
     }
 
     @PatchMapping("/{id}/estado")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<Void> cambiarEstado(
             @PathVariable Long id,
             @RequestParam boolean activo) {
-        System.out.println("📌 Cambiando estado del grupo " + id + " a " + activo);
         grupoServicio.cambiarEstado(id, activo);
         return ResponseEntity.noContent().build();
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<Void> eliminarGrupo(@PathVariable Long id) {
         grupoServicio.eliminarGrupo(id);
         return ResponseEntity.noContent().build();

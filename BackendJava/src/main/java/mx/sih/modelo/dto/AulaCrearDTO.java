@@ -28,6 +28,9 @@ public class AulaCrearDTO {
     private String descripcion;
 
     private Boolean activo = true;
+
+    /** true = el aula es un taller (sala de practica). */
+    private Boolean taller = false;
     
     @NotNull(message = "El semestre es obligatorio")
     private Long semestreId;

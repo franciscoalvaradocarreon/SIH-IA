@@ -4,13 +4,9 @@ import jakarta.validation.Valid;
 import mx.sih.modelo.dto.AulaCrearDTO;
 import mx.sih.modelo.dto.AulaDTO;
 import mx.sih.modelo.dto.AulaDetalleDTO;
-import mx.sih.modelo.entidad.Aula;
-import mx.sih.modelo.entidad.Semestre;
 import mx.sih.servicio.AulaServicio;
-import mx.sih.servicio.SemestreServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -18,6 +14,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/aulas")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
 public class AulaControlador {
 
     private final AulaServicio aulaServicio;
@@ -43,14 +40,12 @@ public class AulaControlador {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<AulaDTO> crearAula(@Valid @RequestBody AulaCrearDTO dto) {
         AulaDTO creada = aulaServicio.crearAula(dto);
         return ResponseEntity.status(201).body(creada);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<AulaDTO> actualizarAula(
             @PathVariable Long id,
             @Valid @RequestBody AulaCrearDTO dto) {
@@ -59,7 +54,6 @@ public class AulaControlador {
     }
 
     @PatchMapping("/{id}/estado")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<Void> cambiarEstado(
             @PathVariable Long id,
             @RequestParam boolean activo) {
@@ -68,7 +62,6 @@ public class AulaControlador {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<Void> eliminarAula(@PathVariable Long id) {
         aulaServicio.eliminarAula(id);
         return ResponseEntity.noContent().build();

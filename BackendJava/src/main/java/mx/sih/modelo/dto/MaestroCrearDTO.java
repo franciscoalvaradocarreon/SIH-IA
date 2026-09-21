@@ -36,6 +36,10 @@ public class MaestroCrearDTO {
     
     @Size(max = 20)
     private String titulo;
+
+    /** Apodo o sobrenombre del maestro (opcional). */
+    @Size(max = 15, message = "El apodo no puede exceder 15 caracteres")
+    private String apodo;
     
     private MultipartFile fotoArchivo;
     

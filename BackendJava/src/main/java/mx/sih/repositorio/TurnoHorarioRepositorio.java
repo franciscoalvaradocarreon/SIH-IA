@@ -65,4 +65,9 @@ public interface TurnoHorarioRepositorio extends JpaRepository<TurnoHorario, Lon
            "ORDER BY th.orden ASC")
     List<TurnoHorario> findByTurnoIdAndDiaSemanaAndSemestreId(@Param("turnoId") Long turnoId,
                                                            @Param("semestreId") Long semestreId);
+
+    /** Cuenta bloques horarios que referencian a un turno. */
+    @Query("SELECT COUNT(th) FROM TurnoHorario th WHERE th.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
+
 }

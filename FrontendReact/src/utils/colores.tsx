@@ -56,7 +56,7 @@ export const CirculoColor: React.FC<{
       className={`w-7 h-7 rounded-full border-2 transition-all duration-200 hover:scale-110 ${
         selected
           ? 'border-blue-500 ring-2 ring-blue-300 ring-offset-2 scale-110'
-          : 'border-gray-300 dark:border-gray-600 hover:border-gray-400'
+          : 'border-gray-400 dark:border-gray-600 hover:border-gray-400'
       } ${className}`}
       style={{ backgroundColor: color }}
       title={color}

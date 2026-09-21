@@ -39,6 +39,10 @@ public class Aula {
 
     private Boolean activo = true;
 
+    /** true = taller (aula de practica: es la que deben usar las materias de taller). */
+    @Column(name = "taller")
+    private Boolean taller = false;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
     

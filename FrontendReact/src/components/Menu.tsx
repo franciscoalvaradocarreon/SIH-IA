@@ -145,7 +145,7 @@ const SemestreSelector: React.FC<{ collapsed: boolean }> = ({ collapsed }) => {
     <select
       value={selectedValue}
       onChange={handleSemestreChange}
-      className="w-42 px-0.5 py-1 text-sm bg-transparent border border-gray-200 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 dark:text-gray-300 cursor-pointer"
+      className="w-42 px-0.5 py-1 text-sm bg-transparent border border-gray-400 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 dark:text-gray-300 cursor-pointer"
     >
       <option value="">Seleccionar semestre</option>
       {semestres.map((semestre) => (
@@ -228,7 +228,7 @@ const Menu: React.FC = () => {
 
   if (loading) {
     return (
-      <div className={`h-screen bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-200 dark:border-gray-700 p-4 animate-pulse transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
+      <div className={`h-screen bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-400 dark:border-gray-700 p-4 animate-pulse transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
         <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mb-6"></div>
         <div className="space-y-3">
           <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded"></div>
@@ -241,17 +241,17 @@ const Menu: React.FC = () => {
 
   if (!escuelaActivaId) {
     return (
-      <div className={`h-screen bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-200 dark:border-gray-700 p-4 transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
+      <div className={`h-screen bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-400 dark:border-gray-700 p-4 transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
         <p className="text-yellow-600 dark:text-yellow-400 text-sm">Selecciona una escuela</p>
       </div>
     );
   }
 
   return (
-    <nav className={`h-screen sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-200 dark:border-gray-700 flex flex-col shadow-lg transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
+    <nav className={`h-screen sticky top-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border-r border-gray-400 dark:border-gray-700 flex flex-col shadow-lg transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
 
       {/* Header del menú */}
-      <div className={`flex items-start ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-5 border-b border-gray-200 dark:border-gray-700`}>
+      <div className={`flex items-start ${collapsed ? 'justify-center' : 'justify-between'} px-4 py-5 border-b border-gray-400 dark:border-gray-700`}>
         {!collapsed && (
           <div className="flex items-center gap-3">
             <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-xl text-blue-600 dark:text-blue-400 shadow-inner">
@@ -284,7 +284,7 @@ const Menu: React.FC = () => {
       </div>
 
       {/* Recuadro: escuela + semestre */}
-      <div className="px-4 py-3 border-b border-gray-200/50 dark:border-gray-700/50">
+      <div className="px-4 py-3 border-b border-gray-400/50 dark:border-gray-700/50">
         {!collapsed ? (
           <div className="space-y-2">
             {/* Fila: icono + nombre escuela + badge rol */}
@@ -300,7 +300,7 @@ const Menu: React.FC = () => {
               )}
             </div>
 
-            <div className="border-t border-gray-200/30 dark:border-gray-700/30"></div>
+            <div className="border-t border-gray-400/30 dark:border-gray-700/30"></div>
 
             {/* Fila: icono + selector semestre */}
             <div className="flex items-center gap-2 justify-between">
@@ -349,7 +349,7 @@ const Menu: React.FC = () => {
       </ul>
 
       {/* Footer: Controles */}
-      <div className={`border-t border-gray-200 dark:border-gray-700 p-3 space-y-2 ${collapsed ? 'flex flex-col items-center' : ''}`}>
+      <div className={`border-t border-gray-400 dark:border-gray-700 p-3 space-y-2 ${collapsed ? 'flex flex-col items-center' : ''}`}>
         <button
           onClick={toggleTheme}
           className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} w-full px-4 py-2.5 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200`}
@@ -401,6 +401,12 @@ const MenuItemRenderer: React.FC<{
   }, [isParentActive, collapsed]);
 
   const handleClick = () => {
+    // Si hay una generación de horario en curso (bandera puesta por HorarioIA), no se deja navegar:
+    // así no se pierde la página que sigue el avance de los intentos.
+    if ((window as unknown as { __generandoIA?: boolean }).__generandoIA) {
+      window.alert('Hay una generación de horario en curso. Termínala o espera a que acabe antes de cambiar de página.');
+      return;
+    }
     if (collapsed) {
       if (item.path) {
         navigate(item.path);

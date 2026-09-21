@@ -9,16 +9,17 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/escuelas")
 public class EscuelaControlador {
 
     private final EscuelaServicio escuelaServicio;
-
 
     public EscuelaControlador(EscuelaServicio escuelaServicio,
                               UsuarioEscuelaRolRepositorio usuarioEscuelaRolRepositorio) {
@@ -30,31 +31,39 @@ public class EscuelaControlador {
     public ResponseEntity<Page<EscuelaDTO>> listarEscuelas(
             @PageableDefault(size = 10, sort = "nombre", direction = Sort.Direction.ASC) Pageable pageable,
             @RequestParam(required = false) String busqueda) {
-        Page<EscuelaDTO> pagina = escuelaServicio.listarEscuelas(pageable, busqueda);
-        return ResponseEntity.ok(pagina);
+        return ResponseEntity.ok(escuelaServicio.listarEscuelas(pageable, busqueda));
     }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<EscuelaDTO> obtenerEscuela(@PathVariable Long id) {
-        EscuelaDTO dto = escuelaServicio.obtenerEscuela(id);
-        return ResponseEntity.ok(dto);
+        return ResponseEntity.ok(escuelaServicio.obtenerEscuela(id));
     }
 
-    @PostMapping
+    /**
+     * Crear escuela con logo opcional.
+     *
+     * El frontend envía multipart/form-data con:
+     *   - "datos": Blob JSON con el DTO (nombre, direccion, telefono, etc.)
+     *   - "logoArchivo": opcional, imagen binaria.
+     */
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<EscuelaDTO> crearEscuela(@Valid @RequestBody EscuelaCrearDTO dto) {
-        EscuelaDTO creada = escuelaServicio.crearEscuela(dto);
-        return ResponseEntity.status(201).body(creada);
+    public ResponseEntity<EscuelaDTO> crearEscuela(
+            @Valid @RequestPart("datos") EscuelaCrearDTO dto,
+            @RequestPart(value = "logoArchivo", required = false) MultipartFile logoArchivo) {
+        dto.setLogoArchivo(logoArchivo);
+        return ResponseEntity.status(201).body(escuelaServicio.crearEscuela(dto));
     }
 
-    @PutMapping("/{id}")
+    @PutMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<EscuelaDTO> actualizarEscuela(
             @PathVariable Long id,
-            @Valid @RequestBody EscuelaCrearDTO dto) {
-        EscuelaDTO actualizada = escuelaServicio.actualizarEscuela(id, dto);
-        return ResponseEntity.ok(actualizada);
+            @Valid @RequestPart("datos") EscuelaCrearDTO dto,
+            @RequestPart(value = "logoArchivo", required = false) MultipartFile logoArchivo) {
+        dto.setLogoArchivo(logoArchivo);
+        return ResponseEntity.ok(escuelaServicio.actualizarEscuela(id, dto));
     }
 
     @PatchMapping("/{id}/estado")
@@ -72,6 +81,4 @@ public class EscuelaControlador {
         escuelaServicio.eliminarEscuela(id);
         return ResponseEntity.noContent().build();
     }
-
-
 }

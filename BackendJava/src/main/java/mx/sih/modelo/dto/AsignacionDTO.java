@@ -19,6 +19,8 @@ public class AsignacionDTO {
     private String materiaClave;
     private Long maestroId;
     private String maestroNombre;
+    /** Apellidos del maestro, para poder ordenar los combos por apellido y no por nombre. */
+    private String maestroApellidos;
     private Long aulaId;
     private String aulaNombre;
     private Integer horas;

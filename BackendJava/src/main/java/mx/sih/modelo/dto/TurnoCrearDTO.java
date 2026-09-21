@@ -19,7 +19,16 @@ public class TurnoCrearDTO {
 
     private String descripcion;
     
-    private Boolean activo = true;
+    /**
+     * SIN valor por defecto a propósito.
+     *
+     * Si se inicializa a true, un PUT que no envíe el campo llega como true y
+     * REACTIVA el turno al editarlo (un turno inactivo volvía a estar activo solo
+     * por cambiarle la descripción). Al dejarlo nulo:
+     *   · crear  -> nulo significa "activo por defecto" (lo resuelve TurnoServicio)
+     *   · editar -> nulo significa "no cambiar el estado" (hay PATCH /{id}/estado)
+     */
+    private Boolean activo;
 
     private Long semestreId;
 }

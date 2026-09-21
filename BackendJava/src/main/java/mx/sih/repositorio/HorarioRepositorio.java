@@ -93,7 +93,7 @@ public interface HorarioRepositorio extends JpaRepository<Horario, Long> {
            "JOIN FETCH h.turnoHorario th " +
            "JOIN FETCH h.aula au " +
            "JOIN FETCH h.semestre s " +
-           "WHERE ma.maestroId = :maestroId " +
+           "WHERE h.maestroId = :maestroId " +
            "AND h.escuela.escuelaId = :escuelaId " +
            "AND h.semestre.semestreId = :semestreId " +
            "ORDER BY th.diaSemana ASC, th.orden ASC")

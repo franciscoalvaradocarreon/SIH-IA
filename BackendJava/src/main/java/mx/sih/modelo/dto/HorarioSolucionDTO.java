@@ -1,7 +1,6 @@
-// mx.sih.modelo.dto.HorarioSolucionDTO.java
 package mx.sih.modelo.dto;
 
-import ai.timefold.solver.core.api.score.buildin.hardsoft.HardSoftScore;
+import ai.timefold.solver.core.api.score.buildin.hardmediumsoft.HardMediumSoftScore;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -11,10 +10,6 @@ import java.util.ArrayList;
 import java.util.List;
 import mx.sih.modelo.solver.ClaseNoAsignadaDTO;
 
-/**
- * Resultado de generar el horario de UN grupo.
- * NO es un ítem de horario (eso es HorarioDTO).
- */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -28,7 +23,7 @@ public class HorarioSolucionDTO {
 
     // Metadatos de la generación
     private LocalDateTime fechaGeneracion;
-    private HardSoftScore score;
+    private HardMediumSoftScore score;
     private Integer version;
 
     // Resumen

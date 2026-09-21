@@ -87,4 +87,8 @@ public interface MateriaRepositorio extends JpaRepository<Materia, Long> {
                                                           @Param("semestreId") Long semestreId,
                                                           @Param("turnoId") Long turnoId,
                                                           @Param("id") Long id);
+
+    /** Cuenta materias que referencian a un turno. */
+    @Query("SELECT COUNT(m) FROM Materia m WHERE m.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
 }

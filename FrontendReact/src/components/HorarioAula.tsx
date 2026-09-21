@@ -1,5 +1,4 @@
-// src/components/HorarioAula.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { horarioService } from '../api/horarioService';
 import { aulaService } from '../api/aulaService';
 import { turnoService } from '../api/turnoService';
@@ -7,21 +6,21 @@ import { turnoHorarioService } from '../api/turnoHorarioService';
 import { useAuth } from '../context/AuthContext';
 import type { Horario, Aula, Turno, TurnoHorario } from '../types';
 import {
-  MdRefresh, MdMeetingRoom, MdAccessTime, MdSchedule,
-  MdClass, MdPerson, MdChevronLeft, MdChevronRight
+  MdRefresh, MdMeetingRoom, MdSchedule,
+  MdChevronLeft, MdChevronRight, MdWarning,
 } from 'react-icons/md';
-
-const DIAS_SEMANA = [
-  { value: 1, label: 'Lunes' },
-  { value: 2, label: 'Martes' },
-  { value: 3, label: 'Miércoles' },
-  { value: 4, label: 'Jueves' },
-  { value: 5, label: 'Viernes' },
-];
+import FilaBloqueHorario from '../components/FilaBloqueHorario';
+import {
+  DIAS_SEMANA,
+  construirBloquesFilas,
+  extraerLista,
+  indexarHorarios,
+} from '../utils/horarioUtils';
 
 const HorarioAula: React.FC = () => {
   const { semestreActivo } = useAuth();
 
+  // ── Estado ──
   const [aulas, setAulas] = useState<Aula[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<number>(0);
@@ -33,91 +32,68 @@ const HorarioAula: React.FC = () => {
   const [cargandoHorario, setCargandoHorario] = useState(false);
   const [error, setError] = useState('');
 
-  const normalizarHora = (hora: string | undefined): string => {
-    if (!hora) return '';
-    return hora.substring(0, 5);
-  };
+  // Nonce para forzar recarga
+  const [reloadNonce, setReloadNonce] = useState(0);
 
-  const extraerTurnoHorarios = (respuesta: any): TurnoHorario[] => {
-    if (respuesta?.data) {
-      if (Array.isArray(respuesta.data)) return respuesta.data;
-      if (respuesta.data.data && Array.isArray(respuesta.data.data)) return respuesta.data.data;
-    }
-    if (Array.isArray(respuesta)) return respuesta;
-    return [];
-  };
+  // ── Derivados ──
+  const bloquesFilas = useMemo(
+    () => construirBloquesFilas(bloquesTurno),
+    [bloquesTurno]
+  );
 
-  // 🔥 EFECTO 1: Cargar turnos al cambiar semestre
-  useEffect(() => {
-    if (semestreActivo?.id) {
-      cargarTurnos();
-    }
-  }, [semestreActivo]);
+  const horarioIndex = useMemo(() => indexarHorarios(horarios), [horarios]);
 
-  // 🔥 EFECTO 2: Cargar aulas cuando cambia el turno
-  useEffect(() => {
-    if (!loading) {
-      cargarAulas(turnoSeleccionado);
-    }
-  }, [turnoSeleccionado]);
-
-  // 🔥 EFECTO 3: Cargar bloques del turno
-  useEffect(() => {
-    if (turnoSeleccionado > 0 && semestreActivo?.id) {
-      cargarBloquesTurno(turnoSeleccionado);
-    } else {
-      setBloquesTurno([]);
-    }
-  }, [turnoSeleccionado, semestreActivo]);
-
-  // 🔥 EFECTO 4: Cargar horario del aula
-  useEffect(() => {
-    if (aulaSeleccionada > 0 && semestreActivo?.id) {
-      cargarHorarioAula(aulaSeleccionada);
-    } else {
-      setHorarios([]);
-    }
-  }, [aulaSeleccionada, semestreActivo]);
-
-  // 🔥 Cuando cambia la lista de aulas (por cambio de turno), ajustar selección
-  useEffect(() => {
-    if (!cargandoAulas && aulas.length >= 0 && turnoSeleccionado >= 0) {
-      const aulaActualValida = aulas.some(a => a.id === aulaSeleccionada);
-      if (!aulaActualValida && aulas.length > 0) {
-        setAulaSeleccionada(aulas[0].id);
-      } else if (aulas.length === 0) {
-        setAulaSeleccionada(0);
+  /**
+   * 🔥 Solapamientos del aula: 2 grupos distintos ocupando la misma aula
+   * en el mismo bloque. Con las constraints activas, esto debería ser siempre 0.
+   */
+  const solapamientos = useMemo(() => {
+    let bloquesAfectados = 0;
+    let clasesInvolucradas = 0;
+    for (const arr of horarioIndex.values()) {
+      if (arr.length > 1) {
+        bloquesAfectados++;
+        clasesInvolucradas += arr.length;
       }
     }
-  }, [aulas]);
+    return { bloquesAfectados, clasesInvolucradas };
+  }, [horarioIndex]);
 
-  // 🔥 Atajos de teclado
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
-      if (e.key === 'ArrowLeft') irAnterior();
-      if (e.key === 'ArrowRight') irSiguiente();
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  });
+  const indiceActual = useMemo(
+    () => aulas.findIndex((a) => a.id === aulaSeleccionada),
+    [aulas, aulaSeleccionada]
+  );
+  const tieneAnterior = indiceActual > 0;
+  const tieneSiguiente =
+    indiceActual >= 0 && indiceActual < aulas.length - 1;
 
-  // 🔥 Cargar turnos
-  const cargarTurnos = async () => {
+  const aulaActual = useMemo(
+    () => aulas.find((a) => a.id === aulaSeleccionada) ?? null,
+    [aulas, aulaSeleccionada]
+  );
+
+  const turnoActual = useMemo(
+    () => turnos.find((t) => t.id === turnoSeleccionado) ?? null,
+    [turnos, turnoSeleccionado]
+  );
+
+  // ── Carga de turnos ──
+  const cargarTurnos = useCallback(async () => {
+    if (!semestreActivo?.id) {
+      setTurnos([]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const semestreId = semestreActivo?.id;
-      if (!semestreId) {
-        setTurnos([]);
-        setLoading(false);
-        return;
-      }
-      const res = await turnoService.listar(0, 100, '', semestreId);
+      const res = await turnoService.listar(0, 100, '', semestreActivo.id);
       const activos = res.data.content.filter((t: Turno) => t.activo === true);
       setTurnos(activos);
 
       if (activos.length > 0) {
-        setTurnoSeleccionado(activos[0].id);
+        setTurnoSeleccionado((prev) =>
+          activos.some((t) => t.id === prev) ? prev : activos[0].id
+        );
       } else {
         setTurnoSeleccionado(0);
         setAulas([]);
@@ -129,10 +105,14 @@ const HorarioAula: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [semestreActivo?.id]);
 
-  // 🔥 Cargar aulas filtradas por turno
-  const cargarAulas = async (turnoId: number) => {
+  useEffect(() => {
+    void cargarTurnos();
+  }, [cargarTurnos]);
+
+  // ── Carga de aulas filtradas por turno ──
+  const cargarAulas = useCallback(async (turnoId: number) => {
     if (!semestreActivo?.id) return;
     setCargandoAulas(true);
     try {
@@ -145,14 +125,9 @@ const HorarioAula: React.FC = () => {
       );
       const activas = res.data.content.filter((a: Aula) => a.activo === true);
       setAulas(activas);
-
-      // Si el aula actual ya no pertenece al turno, seleccionar la primera
-      const aulaValida = activas.some((a: Aula) => a.id === aulaSeleccionada);
-      if (!aulaValida && activas.length > 0) {
-        setAulaSeleccionada(activas[0].id);
-      } else if (activas.length === 0) {
-        setAulaSeleccionada(0);
-      }
+      setAulaSeleccionada((prev) =>
+        activas.some((a) => a.id === prev) ? prev : activas[0]?.id ?? 0
+      );
     } catch (err) {
       console.error('Error al cargar aulas:', err);
       setAulas([]);
@@ -160,95 +135,121 @@ const HorarioAula: React.FC = () => {
     } finally {
       setCargandoAulas(false);
     }
-  };
+  }, [semestreActivo?.id]);
 
-  // Cargar horario del aula (con semestreId)
-  const cargarHorarioAula = async (aulaId: number) => {
+  useEffect(() => {
+    if (!loading) {
+      void cargarAulas(turnoSeleccionado);
+    }
+  }, [turnoSeleccionado, loading, cargarAulas]);
+
+  // ── Carga de bloques del turno ──
+  useEffect(() => {
+    if (turnoSeleccionado === 0 || !semestreActivo?.id) {
+      setBloquesTurno([]);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await turnoHorarioService.listar(
+          turnoSeleccionado,
+          semestreActivo.id
+        );
+        if (cancelled) return;
+        const data = extraerLista<TurnoHorario>(res);
+        setBloquesTurno(data);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Error al cargar bloques del turno:', err);
+        setBloquesTurno([]);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [turnoSeleccionado, semestreActivo?.id, reloadNonce]);
+
+  // ── Carga de horario del aula ──
+  useEffect(() => {
+    if (aulaSeleccionada === 0 || !semestreActivo?.id) {
+      setHorarios([]);
+      return;
+    }
+
     setCargandoHorario(true);
     setError('');
-    try {
-      const res = await horarioService.obtenerPorAula(aulaId, semestreActivo?.id);
-      setHorarios(res.data);
-    } catch (err) {
-      console.error('Error al cargar horario del aula:', err);
-      setHorarios([]);
-      setError('Error al cargar el horario del aula');
-    } finally {
-      setCargandoHorario(false);
-    }
-  };
 
-  // Cargar bloques del turno (para la matriz)
-  const cargarBloquesTurno = async (turnoId: number) => {
-    try {
-      const semestreId = semestreActivo?.id;
-      if (!semestreId) {
-        setBloquesTurno([]);
-        return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await horarioService.obtenerPorAula(
+          aulaSeleccionada,
+          semestreActivo.id
+        );
+        if (cancelled) return;
+        setHorarios(res.data);
+      } catch (err) {
+        if (cancelled) return;
+        console.error('Error al cargar horario del aula:', err);
+        setHorarios([]);
+        setError('Error al cargar el horario del aula');
+      } finally {
+        if (!cancelled) setCargandoHorario(false);
       }
-      const res = await turnoHorarioService.listar(turnoId, semestreId);
-      const data = extraerTurnoHorarios(res);
-      setBloquesTurno(data.filter((h: TurnoHorario) => !h.descanso));
-    } catch (err) {
-      console.error('Error al cargar bloques del turno:', err);
-      setBloquesTurno([]);
-    }
-  };
+    })();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [aulaSeleccionada, semestreActivo?.id, reloadNonce]);
+
+  // ── Navegación entre aulas ──
+  const irAnterior = useCallback(() => {
+    if (!tieneAnterior) return;
+    setAulaSeleccionada(aulas[indiceActual - 1].id);
+  }, [tieneAnterior, aulas, indiceActual]);
+
+  const irSiguiente = useCallback(() => {
+    if (!tieneSiguiente) return;
+    setAulaSeleccionada(aulas[indiceActual + 1].id);
+  }, [tieneSiguiente, aulas, indiceActual]);
+
+  const irAnteriorRef = useRef(irAnterior);
+  const irSiguienteRef = useRef(irSiguiente);
+  irAnteriorRef.current = irAnterior;
+  irSiguienteRef.current = irSiguiente;
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const t = e.target;
+      if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement) return;
+      if (e.key === 'ArrowLeft') irAnteriorRef.current();
+      if (e.key === 'ArrowRight') irSiguienteRef.current();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  // ── Handlers ──
   const handleTurnoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setTurnoSeleccionado(Number(e.target.value));
   };
 
   const handleRecargar = () => {
-    if (aulaSeleccionada > 0) {
-      cargarHorarioAula(aulaSeleccionada);
-    }
-    if (turnoSeleccionado > 0) {
-      cargarBloquesTurno(turnoSeleccionado);
-    }
+    setReloadNonce((n) => n + 1);
   };
 
-  const getOrdenesUnicos = (): number[] => {
-    const ordenes = bloquesTurno.map(h => h.orden || 0);
-    return [...new Set(ordenes)].sort((a, b) => a - b);
-  };
-
-  const getBloqueTurno = (dia: number, orden: number): TurnoHorario | null => {
-    return bloquesTurno.find(h => h.diaSemana === dia && h.orden === orden) || null;
-  };
-
-  const getClaseAula = (dia: number, horaInicio: string): Horario | null => {
-    const horaNorm = normalizarHora(horaInicio);
-    return horarios.find(h =>
-      h.diaSemana === dia && normalizarHora(h.horaInicio) === horaNorm
-    ) || null;
-  };
-
-  // 🔥 Navegación entre aulas (solo las del turno)
-  const indiceActual = aulas.findIndex(a => a.id === aulaSeleccionada);
-  const tieneAnterior = indiceActual > 0;
-  const tieneSiguiente = indiceActual >= 0 && indiceActual < aulas.length - 1;
-
-  function irAnterior() {
-    if (tieneAnterior) {
-      setAulaSeleccionada(aulas[indiceActual - 1].id);
-    }
-  }
-
-  function irSiguiente() {
-    if (tieneSiguiente) {
-      setAulaSeleccionada(aulas[indiceActual + 1].id);
-    }
-  }
-
-  const aulaActual = aulas.find(a => a.id === aulaSeleccionada);
-  const turnoActual = turnos.find(t => t.id === turnoSeleccionado);
-
+  // ── Guards de render ──
   if (!semestreActivo) {
     return (
       <div className="p-6 text-center text-yellow-600 dark:text-yellow-400">
         <p className="text-lg font-semibold">⚠️ No hay semestre activo</p>
-        <p className="text-sm">Selecciona un semestre en el menú para ver los horarios.</p>
+        <p className="text-sm">
+          Selecciona un semestre en el menú para ver los horarios.
+        </p>
       </div>
     );
   }
@@ -261,8 +262,9 @@ const HorarioAula: React.FC = () => {
     );
   }
 
+  // ── Render ──
   return (
-    <div className="p-4 max-w-7xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
@@ -281,18 +283,42 @@ const HorarioAula: React.FC = () => {
             </span>
           </p>
         </div>
-        <button
-          onClick={handleRecargar}
-          disabled={aulaSeleccionada === 0 && turnoSeleccionado === 0}
-          className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg shadow-md transition disabled:opacity-50"
-        >
-          <MdRefresh className="text-xl" />
-          Recargar
-        </button>
+        <div className="flex gap-3 flex-wrap">
+          <button
+            onClick={handleRecargar}
+            disabled={aulaSeleccionada === 0 && turnoSeleccionado === 0}
+            className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg shadow-md transition disabled:opacity-50"
+          >
+            <MdRefresh className="text-xl" />
+            Recargar
+          </button>
+        </div>
       </div>
 
-      {/* 🔥 Filtros: Turno + Aula */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-100 dark:border-gray-700">
+      {/* Banner de solapamientos (aula ocupada por 2 grupos a la vez) */}
+      {solapamientos.bloquesAfectados > 0 && (
+        <div className="bg-red-50 dark:bg-red-900/20 border-2 border-red-500 dark:border-red-700 rounded-xl p-4 mb-6">
+          <div className="flex items-start gap-3">
+            <MdWarning className="text-3xl text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-bold text-red-800 dark:text-red-200 text-lg">
+                ⚠️ El aula tiene {solapamientos.bloquesAfectados} bloque(s) con solapamiento
+              </h3>
+              <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+                {solapamientos.clasesInvolucradas} clases de distintos grupos coinciden
+                en el mismo bloque de esta aula. Esto <strong>no debería pasar</strong> con
+                las constraints activas.
+              </p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-2 italic">
+                Regenera el horario desde el Generador de Horarios para corregirlo.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filtros */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-400 dark:border-gray-700">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Turno */}
           <div>
@@ -303,7 +329,7 @@ const HorarioAula: React.FC = () => {
             <select
               value={turnoSeleccionado}
               onChange={handleTurnoChange}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value={0}>Seleccionar turno...</option>
               {turnos.map((t) => (
@@ -329,7 +355,7 @@ const HorarioAula: React.FC = () => {
               value={aulaSeleccionada}
               onChange={(e) => setAulaSeleccionada(Number(e.target.value))}
               disabled={cargandoAulas || aulas.length === 0}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value={0}>
                 {cargandoAulas
@@ -361,19 +387,19 @@ const HorarioAula: React.FC = () => {
         )}
       </div>
 
-      {/* Matriz */}
+      {/* Matriz o mensajes vacíos */}
       {cargandoHorario ? (
         <div className="flex justify-center items-center h-48">
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
         </div>
-      ) : bloquesTurno.length > 0 && aulaActual ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
-          {/* Header con navegación */}
-          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
+      ) : bloquesFilas.length > 0 && aulaActual ? (
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
+          {/* Header con info + navegación + total */}
+          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
             {/* Info del aula */}
             <div className="flex items-center gap-3 md:flex-1 md:justify-start">
               <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
-                {aulaActual.nombre?.charAt(0) || 'A'}
+                {aulaActual.nombre?.charAt(0) ?? 'A'}
               </div>
               <div>
                 <h3 className="font-semibold text-lg text-gray-800 dark:text-white">
@@ -389,7 +415,7 @@ const HorarioAula: React.FC = () => {
             </div>
 
             {/* Navegación */}
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 shadow-md px-2 py-1">
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-400 dark:border-gray-600 shadow-md px-2 py-1">
               <button
                 onClick={irAnterior}
                 disabled={!tieneAnterior}
@@ -404,8 +430,10 @@ const HorarioAula: React.FC = () => {
                 <span>Anterior</span>
               </button>
 
-              <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
-                {indiceActual >= 0 ? indiceActual + 1 : 0} <span className="text-gray-400 font-normal">de</span> {aulas.length}
+              <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-400 dark:border-gray-600 whitespace-nowrap">
+                {indiceActual >= 0 ? indiceActual + 1 : 0}{' '}
+                <span className="text-gray-400 font-normal">de</span>{' '}
+                {aulas.length}
               </span>
 
               <button
@@ -425,14 +453,18 @@ const HorarioAula: React.FC = () => {
 
             {/* Total de clases */}
             <div className="md:flex-1 md:flex md:justify-end">
-              <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm">
-                Total de clases: <span className="font-bold text-gray-800 dark:text-white text-base">{horarios.length}</span>
+              <span className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-400 dark:border-gray-600 shadow-sm">
+                Total de clases:{' '}
+                <span className="font-bold text-gray-800 dark:text-white text-base">
+                  {horarios.length}
+                </span>
               </span>
             </div>
           </div>
 
+          {/* Matriz (misma estructura que HorarioView) */}
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -448,92 +480,21 @@ const HorarioAula: React.FC = () => {
                   ))}
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                {getOrdenesUnicos().map((orden) => {
-                  const ref = bloquesTurno.find(h => h.orden === orden);
-                  if (!ref) return null;
-
-                  return (
-                    <tr key={orden} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
-                      <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <div className="flex flex-col items-center leading-tight">
-                          <span>{normalizarHora(ref.horaInicio)}</span>
-                          <span className="text-xs text-gray-400">-</span>
-                          <span className="text-xs text-gray-500">{normalizarHora(ref.horaFin)}</span>
-                        </div>
-                      </td>
-                      {DIAS_SEMANA.map((dia) => {
-                        const bloque = getBloqueTurno(dia.value, orden);
-
-                        if (!bloque) {
-                          return (
-                            <td key={dia.value} className="px-2 py-2 text-center">
-                              <span className="text-gray-300 dark:text-gray-600 text-xs">-</span>
-                            </td>
-                          );
-                        }
-
-                        const clase = getClaseAula(dia.value, ref.horaInicio);
-
-                        if (clase) {
-                          return (
-                            <td key={dia.value} className="px-2 py-2 text-center align-top">
-                              <div
-                                className="rounded-lg p-1 text-xs border-4 transition hover:shadow-md"
-                                style={{
-                                  borderColor: clase.colorHex || '#e5e7eb',
-                                  backgroundColor: `${clase.colorHex || '#808080'}15`,
-                                }}
-                              >
-                                <div
-                                  className="font-bold text-lg truncate"
-                                  style={{ color: clase.colorHex || '#374151' }}
-                                >
-                                  {clase.materiaClave || clase.materiaNombre}
-                                </div>
-                                <div className="flex items-center justify-center gap-1">
-                                  <span className="text-lg truncate max-w-[80px]">{clase.grupoNombre}</span>
-                                </div>
-                                <div className="flex items-center justify-center gap-1">
-                                  <span className="text-base truncate max-w-[180px]">{clase.maestroNombre}</span>
-                                </div>
-                              </div>
-                            </td>
-                          );
-                        }
-
-                        return (
-                          <td key={dia.value} className="px-2 py-2 text-center align-center">
-                            <div className="rounded-lg p-2 border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50/50 dark:bg-gray-800/50">
-                              <span className="text-gray-400 text-[20px]">Libre</span>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
+                {bloquesFilas.map((bloque) => (
+                  <FilaBloqueHorario
+                    key={bloque.id}
+                    bloque={bloque}
+                    horarioIndex={horarioIndex}
+                    variante="aula"
+                  />
+                ))}
               </tbody>
             </table>
           </div>
-
-          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-4 text-sm">
-            <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <span className="w-4 h-4 bg-indigo-100 dark:bg-indigo-900/40 border border-gray-300 dark:border-gray-600 rounded"></span>
-              Clase asignada
-            </span>
-            <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <span className="w-4 h-4 border-2 border-dashed border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 rounded"></span>
-              Libre
-            </span>
-            <span className="inline-flex items-center gap-2 text-gray-600 dark:text-gray-400">
-              <span className="text-gray-300 dark:text-gray-600">-</span>
-              Sin horario en el turno
-            </span>
-          </div>
         </div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-100 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-400 dark:border-gray-700">
           <MdSchedule className="text-6xl text-gray-300 dark:text-gray-600 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
             No hay bloques para mostrar

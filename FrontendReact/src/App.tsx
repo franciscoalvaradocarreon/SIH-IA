@@ -36,6 +36,9 @@ import DisponibilidadGrupoForm from './components/DisponibilidadGrupoForm';
 import HorarioView from './components/HorarioView.tsx';
 import HorarioMaestroView from './components/HorarioMaestro.tsx';
 import HorarioAutomatico from './components/HorarioAutomatico';
+import HorarioIA from './components/HorarioIA';
+import ReporteMateriasEspecialidad from './components/ReporteMateriasEspecialidad';
+import HorarioManual from './components/HorarioManual';
 import SemestreForm from './components/SemestreForm.tsx';
 import Semestre from './components/Semestre.tsx';
 import HorarioAula from './components/HorarioAula.tsx';
@@ -156,9 +159,12 @@ function App() {
 
               {/* Generador de Horarios */}
               <Route path="/horarios/generador/automatico" element={<HorarioAutomatico />} />
+              <Route path="/horarios/generador/ia" element={<HorarioIA />} />
+              <Route path="/horarios/generador/manual" element={<HorarioManual />} />
 
               {/* Reportes */}
               <Route path="/reportes/horario-grupos" element={<ReporteHorariosGrupos />} />
+              <Route path="/reportes/materias-especialidad" element={<ReporteMateriasEspecialidad />} />
 
               {/* Agrega más rutas aquí */}
             </Route>

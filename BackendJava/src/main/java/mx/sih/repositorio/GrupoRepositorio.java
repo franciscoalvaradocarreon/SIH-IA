@@ -171,4 +171,9 @@ public interface GrupoRepositorio extends JpaRepository<Grupo, Long> {
            @Param("escuelaId") Long escuelaId,
            @Param("semestreId") Long semestreId,
            @Param("turnoId") Long turnoId);
+
+    /** Cuenta grupos que referencian a un turno. */
+    @Query("SELECT COUNT(g) FROM Grupo g WHERE g.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
+
 }

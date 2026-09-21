@@ -7,7 +7,7 @@ interface AuthContextType {
   user: LoginResponse | null;
   token: string | null;
   roles: string[];
-  rolesEscuelaActiva: string[];   // 🔥 NUEVO
+  rolesEscuelaActiva: string[];
   escuelaActiva: Escuela | null;
   escuelaActivaId: number | null;
   escuelasDisponibles: Escuela[];

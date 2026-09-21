@@ -374,7 +374,7 @@ const Materias: React.FC = () => {
               value={busqueda}
               onChange={handleBusquedaChange}
               onKeyPress={handleKeyPress}
-              className="w-full pl-10 pr-24 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full pl-10 pr-24 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             />
             <button
               onClick={() => {
@@ -400,7 +400,7 @@ const Materias: React.FC = () => {
           <select
             value={turnoId}
             onChange={handleTurnoChange}
-            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
           >
             <option value={0}>Todos los turnos</option>
             {turnos.map((t) => (
@@ -423,9 +423,9 @@ const Materias: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -469,7 +469,7 @@ const Materias: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                   {materias.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
@@ -544,7 +544,7 @@ const Materias: React.FC = () => {
                         <td className="px-3 py-1.5 whitespace-nowrap text-center">
                           {materia.colorHex ? (
                             <div
-                              className="w-5 h-5 rounded-full border border-gray-300 dark:border-gray-600 mx-auto"
+                              className="w-5 h-5 rounded-full border border-gray-400 dark:border-gray-600 mx-auto"
                               style={{ backgroundColor: materia.colorHex }}
                               title={materia.colorHex}
                             />
@@ -606,7 +606,7 @@ const Materias: React.FC = () => {
           </div>
 
           {/* Paginación */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-400 dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Mostrando <span className="font-medium">{materias.length}</span> de{' '}
               <span className="font-medium">{total}</span> materias
@@ -625,14 +625,14 @@ const Materias: React.FC = () => {
               <button
                 onClick={() => setPage(Math.max(0, page - 1))}
                 disabled={page === 0}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Anterior
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={materias.length < size}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Siguiente
               </button>
@@ -644,7 +644,7 @@ const Materias: React.FC = () => {
       {/* 🔥 Modal de confirmación de eliminación */}
       {modalEliminar.abierto && modalEliminar.materia && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
                 <MdWarning className="text-2xl" />
@@ -704,7 +704,7 @@ const Materias: React.FC = () => {
               <button
                 onClick={() => setModalEliminar({ abierto: false, materia: null })}
                 disabled={eliminando}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
                 Cancelar
               </button>

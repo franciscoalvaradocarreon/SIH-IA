@@ -1,6 +1,7 @@
 # Secretos
 application-local.properties
 **/application-local.properties
+**/application-prod.properties
 **/*-local.properties
 *.secret
 .env

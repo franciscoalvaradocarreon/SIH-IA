@@ -5,7 +5,7 @@ import Menu from './Menu';
 
 const Layout: React.FC = () => {
   return (
-    <div className="min-h-screen flex relative overflow-hidden bg-gradient-to-br from-blue-100 via-indigo-50 to-white dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="min-h-screen flex relative overflow-x-clip bg-gradient-to-br from-blue-100 via-indigo-50 to-white dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       
       <div className="absolute inset-0 pointer-events-none">
         {/* Círculo 1: Arriba derecha - Tamaño grande */}
@@ -58,8 +58,13 @@ const Layout: React.FC = () => {
       </div>
 
       {/* CONTENIDO PRINCIPAL */}
+      {/*
+        Sin overflow-auto: con el padre en min-h-screen, <main> crece con el contenido y nunca
+        scrolleaba por dentro; el que scrollea es la ventana. Al no ser contenedor de scroll, el
+        sticky de la caja de pines se pega a la ventana, que es donde el usuario se desplaza.
+      */}
       <main className="
-        flex-1 p-6 overflow-auto relative z-10 
+        flex-1 p-6 relative z-10 
         m-4 rounded-2xl 
         bg-white/40 dark:bg-gray-900/40
         backdrop-blur-md

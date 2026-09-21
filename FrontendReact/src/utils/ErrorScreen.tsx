@@ -127,7 +127,7 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({
           {mostrarVolver && (
             <button
               onClick={() => navigate(-1)}
-              className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-5 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdArrowBack className="text-lg" />
               Volver
@@ -152,7 +152,7 @@ const ErrorScreen: React.FC<ErrorScreenProps> = ({
           {mostrarInicio && (
             <button
               onClick={() => navigate('/')}
-              className="flex items-center gap-2 px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-5 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdHome className="text-lg" />
               Ir al inicio

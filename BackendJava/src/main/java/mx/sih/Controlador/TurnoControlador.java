@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/api/turnos")
+@PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
 public class TurnoControlador {
 
     private final TurnoServicio turnoServicio;
@@ -45,14 +46,12 @@ public class TurnoControlador {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<TurnoDTO> crearTurno(@Valid @RequestBody TurnoCrearDTO dto) {
         TurnoDTO creado = turnoServicio.crearTurno(dto);
         return ResponseEntity.status(201).body(creado);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<TurnoDTO> actualizarTurno(
             @PathVariable Long id,
             @Valid @RequestBody TurnoCrearDTO dto) {
@@ -61,7 +60,6 @@ public class TurnoControlador {
     }
 
     @PatchMapping("/{id}/estado")
-    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
     public ResponseEntity<Void> cambiarEstado(
             @PathVariable Long id,
             @RequestParam boolean activo) {
@@ -70,7 +68,6 @@ public class TurnoControlador {
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Void> eliminarTurno(@PathVariable Long id) {
         turnoServicio.eliminarTurno(id);
         return ResponseEntity.noContent().build();

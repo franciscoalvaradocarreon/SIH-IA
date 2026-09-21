@@ -105,7 +105,7 @@ const MenuCrudForm: React.FC = () => {
 
     return (
         <div className="max-w-2xl mx-auto p-6">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
                 <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
                     {isEdit ? 'Editar Menú' : 'Nuevo Menú'}
                 </h1>
@@ -132,7 +132,7 @@ const MenuCrudForm: React.FC = () => {
                                 value={form.label}
                                 onChange={handleChange}
                                 required
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                 placeholder="Ej: Dashboard, Catálogos, Administración"
                             />
                         </div>
@@ -152,7 +152,7 @@ const MenuCrudForm: React.FC = () => {
                                 name="path"
                                 value={form.path || ''}
                                 onChange={handleChange}
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                 placeholder="Ej: /dashboard, /catalogo/maestros"
                             />
                         </div>
@@ -174,7 +174,7 @@ const MenuCrudForm: React.FC = () => {
                                     type="text"
                                     value={form.icono || ''}
                                     readOnly
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-pointer"
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white cursor-pointer"
                                     placeholder="Seleccionar icono"
                                     onClick={() => setMostrarSelector(!mostrarSelector)}
                                 />
@@ -195,7 +195,7 @@ const MenuCrudForm: React.FC = () => {
 
                         {/* Selector visual de iconos */}
                         {mostrarSelector && (
-                            <div className="mt-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg p-4">
+                            <div className="mt-3 bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-600 rounded-lg shadow-lg p-4">
                                 {/* Barra de búsqueda */}
                                 <div className="relative mb-3">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -206,7 +206,7 @@ const MenuCrudForm: React.FC = () => {
                                         placeholder="Buscar icono..."
                                         value={filtroIconos}
                                         onChange={(e) => setFiltroIconos(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                        className="w-full pl-10 pr-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                     />
                                 </div>
 
@@ -257,7 +257,7 @@ const MenuCrudForm: React.FC = () => {
                                     name="parienteId"
                                     value={form.parienteId || 0}
                                     onChange={handleChange}
-                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                    className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                                 >
                                     <option value={0}>Sin padre (Raíz)</option>
                                     {menusPadre
@@ -282,7 +282,7 @@ const MenuCrudForm: React.FC = () => {
                                 value={form.menuOrden || 0}
                                 onChange={handleChange}
                                 min={0}
-                                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                             />
                         </div>
                     </div>
@@ -294,7 +294,7 @@ const MenuCrudForm: React.FC = () => {
                             name="activo"
                             checked={form.activo !== false}
                             onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
                         />
                         <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
                             Menú activo
@@ -314,7 +314,7 @@ const MenuCrudForm: React.FC = () => {
                         <button
                             type="button"
                             onClick={() => navigate('/administracion/menus')}
-                            className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+                            className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
                         >
                             <MdCancel className="text-xl" />
                             Cancelar

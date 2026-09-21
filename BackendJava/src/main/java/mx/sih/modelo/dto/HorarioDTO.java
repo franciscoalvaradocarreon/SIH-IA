@@ -17,6 +17,7 @@ public class HorarioDTO {
     private Long asignacionId;
     private String materiaNombre;
     private String materiaClave;
+    private Long maestroId;
     private String maestroNombre;
     private Long turnoHorarioId;
     private Integer diaSemana;

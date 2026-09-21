@@ -34,9 +34,10 @@ public class AsignacionControlador {
             @RequestParam(required = false) Long grupoId,          // 🔥 NUEVO
             @RequestParam(required = false) Long especialidadId,
             @RequestParam(required = false) Long turnoId,
+            @RequestParam(required = false) Long maestroId,
             @RequestParam(required = false) Long semestreId) {
         Page<AsignacionDTO> page = asignacionServicio.listarAsignaciones(
-                pageable, busqueda, grupoId, especialidadId, turnoId, semestreId);
+                pageable, busqueda, grupoId, especialidadId, turnoId, maestroId, semestreId);
         return ResponseEntity.ok(page);
     }
     /**

@@ -135,7 +135,14 @@ const AsignacionForm: React.FC = () => {
 
       setGrupos(gruposActivos);
       setMaterias(materiasActivas);
-      setMaestros(maestrosActivos);
+      // Mismo criterio que en la lista: por apellido, con el nombre completo como desempate.
+      setMaestros(
+        [...maestrosActivos].sort(
+          (a: any, b: any) =>
+            (a.apellidos || '').localeCompare(b.apellidos || '', 'es') ||
+            (a.nombreCompleto || '').localeCompare(b.nombreCompleto || '', 'es')
+        )
+      );
       setAulas(aulasActivas);
     } catch (error) {
       console.error('Error al cargar catálogos:', error);
@@ -325,7 +332,7 @@ const AsignacionForm: React.FC = () => {
 
   return (
     <div className="max-w-3xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Asignación' : 'Nueva Asignación'}
         </h1>
@@ -352,7 +359,7 @@ const AsignacionForm: React.FC = () => {
                   value={form.grupoId}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value={0}>Seleccionar grupo</option>
                   {grupos.map((grupo) => {
@@ -387,7 +394,7 @@ const AsignacionForm: React.FC = () => {
                   type="text"
                   value={turnoNombre || 'Selecciona un grupo primero'}
                   readOnly
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 cursor-not-allowed"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 cursor-not-allowed"
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">
@@ -412,7 +419,7 @@ const AsignacionForm: React.FC = () => {
                   onChange={handleChange}
                   required
                   disabled={materiasFiltradas.length === 0}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
                     {form.turnoId > 0
@@ -444,7 +451,7 @@ const AsignacionForm: React.FC = () => {
                   onChange={handleChange}
                   required
                   disabled={maestrosFiltrados.length === 0}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
                     {form.turnoId > 0
@@ -479,7 +486,7 @@ const AsignacionForm: React.FC = () => {
                   onChange={handleChange}
                   required
                   disabled={aulasFiltradas.length === 0}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
                     {form.turnoId > 0
@@ -513,7 +520,7 @@ const AsignacionForm: React.FC = () => {
                   min={1}
                   max={35}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="Ej: 3"
                 />
               </div>
@@ -531,7 +538,7 @@ const AsignacionForm: React.FC = () => {
                 name="colorHex"
                 value={form.colorHex}
                 onChange={handleChange}
-                className="w-12 h-12 p-1 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer bg-white dark:bg-gray-700"
+                className="w-12 h-12 p-1 border border-gray-400 dark:border-gray-600 rounded-lg cursor-pointer bg-white dark:bg-gray-700"
               />
               <input
                 type="text"
@@ -539,7 +546,7 @@ const AsignacionForm: React.FC = () => {
                 value={form.colorHex}
                 onChange={handleChange}
                 pattern="^#[0-9A-Fa-f]{6}$"
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition font-mono"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition font-mono"
                 placeholder="#3B82F6"
               />
             </div>
@@ -561,7 +568,7 @@ const AsignacionForm: React.FC = () => {
                   ? 'border-red-500 dark:border-red-500'
                   : form.distribucion && distribucionValida && sumaResultado?.valido
                   ? 'border-green-500 dark:border-green-500'
-                  : 'border-gray-300 dark:border-gray-600'
+                  : 'border-gray-400 dark:border-gray-600'
               }`}
             />
 
@@ -581,7 +588,7 @@ const AsignacionForm: React.FC = () => {
               </div>
             )}
 
-            <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+            <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-400 dark:border-gray-700">
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 <span className="font-medium">Formato:</span> Números separados por comas.
                 La suma debe coincidir con las horas totales.
@@ -607,7 +614,7 @@ const AsignacionForm: React.FC = () => {
               name="activo"
               checked={form.activo !== false}
               onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
             />
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Asignación activa
@@ -615,7 +622,7 @@ const AsignacionForm: React.FC = () => {
           </div>
 
           {/* Botones */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">
             <button
               type="submit"
               disabled={loading || !semestreActivo}
@@ -627,7 +634,7 @@ const AsignacionForm: React.FC = () => {
             <button
               type="button"
               onClick={volverConFiltros}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar

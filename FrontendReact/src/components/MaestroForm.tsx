@@ -6,7 +6,7 @@ import { turnoService } from '../api/turnoService';
 import type { MaestroForm as MaestroFormType, Turno } from '../types';
 import {
   MdDelete, MdSave, MdCancel, MdPerson, MdEmail, MdPhone,
-  MdPhoto, MdClass, MdWarning, MdSchedule
+  MdPhoto, MdClass, MdWarning, MdSchedule, MdBadge
 } from 'react-icons/md';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,6 +28,7 @@ const MaestroForm: React.FC = () => {
     email: '',
     telefono: '',
     titulo: '',
+    apodo: '',
     fotoUrl: '',
     fotoArchivo: null,
     semestreId: semestreActivo?.id || 0,
@@ -93,6 +94,7 @@ const MaestroForm: React.FC = () => {
         email: data.email || '',
         telefono: data.telefono || '',
         titulo: data.titulo || '',
+        apodo: data.apodo || '',
         fotoUrl: data.fotoUrl || '',
         fotoArchivo: null,
         semestreId: data.semestreId || semestreActivo?.id || 0,
@@ -181,6 +183,7 @@ const MaestroForm: React.FC = () => {
       if (form.email) formData.append('email', form.email);
       if (form.telefono) formData.append('telefono', form.telefono);
       if (form.titulo) formData.append('titulo', form.titulo);
+      if (form.apodo) formData.append('apodo', form.apodo);
       if (fotoArchivo) {
         formData.append('fotoArchivo', fotoArchivo);
       } else if (form.fotoUrl) {
@@ -225,8 +228,8 @@ const MaestroForm: React.FC = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+    <div className="max-w-4xl mx-auto p-6">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Maestro' : 'Nuevo Maestro'}
         </h1>
@@ -268,7 +271,7 @@ const MaestroForm: React.FC = () => {
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Título */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -283,7 +286,7 @@ const MaestroForm: React.FC = () => {
                 name="titulo"
                 value={form.titulo || ''}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="Ej: Lic., Mtro., Dr., Mtra."
               />
             </div>
@@ -304,7 +307,7 @@ const MaestroForm: React.FC = () => {
                 value={form.nombre}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="Juan"
               />
             </div>
@@ -325,40 +328,31 @@ const MaestroForm: React.FC = () => {
                 value={form.apellidos}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="Pérez"
               />
             </div>
           </div>
 
-          {/* Turno */}
+          {/* Apodo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Turno *
+              Apodo
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <MdSchedule className="text-gray-400 dark:text-gray-500 text-lg" />
+                <MdBadge className="text-gray-400 dark:text-gray-500 text-lg" />
               </div>
-              <select
-                name="turnoId"
-                value={form.turnoId || 0}
+              <input
+                type="text"
+                name="apodo"
+                value={form.apodo || ''}
                 onChange={handleChange}
-                required
-                disabled={turnos.length === 0}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
-              >
-                <option value={0}>Seleccionar turno...</option>
-                {turnos.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.nombre}
-                  </option>
-                ))}
-              </select>
+                maxLength={15}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                placeholder="Ej: El Profe, Chava, La Mtra. Lupita"
+              />
             </div>
-            <p className="text-xs text-gray-400 mt-1">
-              El maestro quedará asignado a este turno dentro del semestre
-            </p>
           </div>
 
           {/* Email */}
@@ -375,7 +369,7 @@ const MaestroForm: React.FC = () => {
                 name="email"
                 value={form.email}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="juan.perez@escuela.com"
               />
             </div>
@@ -395,10 +389,40 @@ const MaestroForm: React.FC = () => {
                 name="telefono"
                 value={form.telefono}
                 onChange={handleChange}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="555-1234"
               />
             </div>
+          </div>
+
+          {/* Turno */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Turno *
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <MdSchedule className="text-gray-400 dark:text-gray-500 text-lg" />
+              </div>
+              <select
+                name="turnoId"
+                value={form.turnoId || 0}
+                onChange={handleChange}
+                required
+                disabled={turnos.length === 0}
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+              >
+                <option value={0}>Seleccionar turno...</option>
+                {turnos.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">
+              El maestro quedará asignado a este turno dentro del semestre
+            </p>
           </div>
 
           {/* Foto */}
@@ -412,7 +436,7 @@ const MaestroForm: React.FC = () => {
                   <img
                     src={previewUrl}
                     alt="Vista previa"
-                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-300 dark:border-gray-600"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-400 dark:border-gray-600"
                     onError={(e) => {
                       console.error('❌ Error al cargar la vista previa:', previewUrl);
                       e.currentTarget.style.display = 'none';
@@ -430,7 +454,7 @@ const MaestroForm: React.FC = () => {
 
               <div className="flex-1">
                 <label className="cursor-pointer">
-                  <div className="flex items-center gap-2 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                  <div className="flex items-center gap-2 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
                     <MdPhoto className="text-gray-400 text-xl" />
                     <span className="text-sm text-gray-600 dark:text-gray-300">
                       {previewUrl ? 'Cambiar foto' : 'Seleccionar foto'}
@@ -451,7 +475,7 @@ const MaestroForm: React.FC = () => {
           </div>
 
           {/* Botones */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="md:col-span-2 flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">
             <button
               type="submit"
               disabled={loading || !semestreActivo || turnos.length === 0}
@@ -463,7 +487,7 @@ const MaestroForm: React.FC = () => {
             <button
               type="button"
               onClick={volverConFiltros}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar

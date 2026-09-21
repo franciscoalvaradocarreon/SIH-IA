@@ -104,4 +104,8 @@ public interface AulaRepositorio extends JpaRepository<Aula, Long> {
                                                            @Param("semestreId") Long semestreId,
                                                            @Param("turnoId") Long turnoId,
                                                            @Param("id") Long id);
+
+    /** Cuenta aulas que referencian a un turno. */
+    @Query("SELECT COUNT(a) FROM Aula a WHERE a.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
 }

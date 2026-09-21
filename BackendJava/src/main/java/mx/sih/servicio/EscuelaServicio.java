@@ -1,6 +1,8 @@
 package mx.sih.servicio;
 
+import java.io.IOException;
 import java.util.List;
+
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.modelo.dto.ClaimsUsuario;
 import mx.sih.modelo.dto.EscuelaCrearDTO;
@@ -17,25 +19,19 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * CRUD de escuelas.
  *
- * ANTES: listarEscuelas() usaba findAll() y obtenerEscuela/actualizar/eliminar
- * operaban por id sin comprobar nada: un ADMIN de la escuela A podía listar,
- * renombrar, desactivar o BORRAR cualquier escuela del SaaS (enumeración de
- * clientes y denegación de servicio multi-tenant).
- *
- * AHORA: toda operación se valida contra las escuelas del usuario autenticado
+ * Toda operación se valida contra las escuelas del usuario autenticado
  * (claims.escuelaIds() del JWT, que a su vez se emiten desde usuario_escuela_rol).
- *
- * Nota de arquitectura: crear escuelas es una operación de PLATAFORMA. Si el SaaS
- * crece, debe moverse a un rol SUPERADMIN que no se otorgue por escuela; mientras
- * tanto queda restringida por @PreAuthorize("hasRole('ADMIN')") en el controlador.
  */
 @Service
 public class EscuelaServicio {
 
     private final EscuelaRepositorio escuelaRepositorio;
+    private final ArchivoServicio archivoServicio;
 
-    public EscuelaServicio(EscuelaRepositorio escuelaRepositorio) {
+    public EscuelaServicio(EscuelaRepositorio escuelaRepositorio,
+                           ArchivoServicio archivoServicio) {
         this.escuelaRepositorio = escuelaRepositorio;
+        this.archivoServicio = archivoServicio;
     }
 
     /** Claims del usuario autenticado (identidad + escuelas permitidas). */
@@ -61,7 +57,7 @@ public class EscuelaServicio {
             return Page.empty(pageable);
         }
         String busquedaNormalizada = (busqueda == null) ? "" : busqueda.trim();
-        return escuelaRepositorio.buscarPorNombre( busquedaNormalizada, pageable).map(this::toDTO);
+        return escuelaRepositorio.buscarPorIds(ids, busquedaNormalizada, pageable).map(this::toDTO);
     }
 
     public EscuelaDTO obtenerEscuela(Long id) {
@@ -80,13 +76,24 @@ public class EscuelaServicio {
             }
         }
 
+        // Guardar logo si viene archivo
+        String logoUrl = dto.getLogoUrl();
+        if (dto.getLogoArchivo() != null && !dto.getLogoArchivo().isEmpty()) {
+            try {
+                logoUrl = archivoServicio.guardarArchivo(dto.getLogoArchivo(), "escuela_");
+            } catch (IOException e) {
+                throw new NegocioExcepcion("error_logo",
+                        "Error al guardar el logo: " + e.getMessage());
+            }
+        }
+
         Escuela escuela = new Escuela();
         escuela.setNombre(dto.getNombre());
         escuela.setNombreLargo(dto.getNombreLargo());
         escuela.setDireccion(dto.getDireccion());
         escuela.setTelefono(dto.getTelefono());
         escuela.setClave(dto.getClave());
-        escuela.setLogoUrl(dto.getLogoUrl());
+        escuela.setLogoUrl(logoUrl);
         escuela.setActivo(true);
 
         Escuela guardada = escuelaRepositorio.save(escuela);
@@ -107,12 +114,40 @@ public class EscuelaServicio {
             }
         }
 
+        // ------------------------------------------------------------
+        // LOGO
+        // Reglas:
+        //   · Si viene archivo nuevo → eliminar el logo anterior y guardar el nuevo.
+        //   · Si no viene archivo pero sí logoUrl → usar la URL tal cual.
+        //     (cadena vacía limpia el logo; null significa "no tocar").
+        // ------------------------------------------------------------
+        if (dto.getLogoArchivo() != null && !dto.getLogoArchivo().isEmpty()) {
+            if (escuela.getLogoUrl() != null) {
+                archivoServicio.eliminarArchivo(escuela.getLogoUrl());
+            }
+            try {
+                String nuevoLogoUrl = archivoServicio.guardarArchivo(dto.getLogoArchivo(), "escuela_");
+                escuela.setLogoUrl(nuevoLogoUrl);
+            } catch (IOException e) {
+                throw new NegocioExcepcion("error_logo",
+                        "Error al guardar el logo: " + e.getMessage());
+            }
+        } else if (dto.getLogoUrl() != null) {
+            if (dto.getLogoUrl().isBlank()) {
+                if (escuela.getLogoUrl() != null) {
+                    archivoServicio.eliminarArchivo(escuela.getLogoUrl());
+                }
+                escuela.setLogoUrl(null);
+            } else {
+                escuela.setLogoUrl(dto.getLogoUrl());
+            }
+        }
+
         escuela.setNombre(dto.getNombre());
         escuela.setNombreLargo(dto.getNombreLargo());
         escuela.setDireccion(dto.getDireccion());
         escuela.setTelefono(dto.getTelefono());
         escuela.setClave(dto.getClave());
-        escuela.setLogoUrl(dto.getLogoUrl());
 
         Escuela actualizada = escuelaRepositorio.save(escuela);
         return toDTO(actualizada);
@@ -130,10 +165,15 @@ public class EscuelaServicio {
     @Transactional
     public void eliminarEscuela(Long id) {
         exigirAcceso(id);
-        if (!escuelaRepositorio.existsById(id)) {
-            throw new NegocioExcepcion("Escuela no encontrada con ID: " + id);
+        Escuela escuela = escuelaRepositorio.findById(id)
+                .orElseThrow(() -> new NegocioExcepcion("Escuela no encontrada con ID: " + id));
+
+        // Eliminar el logo del disco antes de borrar la entidad
+        if (escuela.getLogoUrl() != null) {
+            archivoServicio.eliminarArchivo(escuela.getLogoUrl());
         }
-        escuelaRepositorio.deleteById(id);
+
+        escuelaRepositorio.delete(escuela);
     }
 
     private EscuelaDTO toDTO(Escuela escuela) {

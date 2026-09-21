@@ -109,7 +109,15 @@ public class SeguridadConfiguracion {
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/escuelas/**").hasRole("ADMIN")
                 .requestMatchers("/api/escuelas/**").authenticated()
-                .anyRequest().authenticated()
+
+                // Todo el API exige autenticación (las reglas de arriba ya abrieron login, /uploads y docs).
+                .requestMatchers("/api/**").authenticated()
+
+                // EL SHELL DEL FRONT ES PÚBLICO: index.html, /assets/**, favicon y las rutas del SPA
+                // (/reportes/..., /horarios/...). Esos archivos NO llevan datos; los datos salen del API,
+                // que sigue protegido. Sin esta regla el navegador recibía 401 al abrir la aplicación y
+                // el front servido desde el propio programa (-jar) nunca cargaba.
+                .anyRequest().permitAll()
             )
             .addFilterBefore(filtroJwt, UsernamePasswordAuthenticationFilter.class)
             .exceptionHandling(ex -> ex

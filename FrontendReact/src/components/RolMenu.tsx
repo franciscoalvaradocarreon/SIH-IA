@@ -455,7 +455,7 @@ const RolMenu: React.FC = () => {
             </div>
 
             {/* Selector de Rol */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-100 dark:border-gray-700">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-400 dark:border-gray-700">
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                     <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -464,7 +464,7 @@ const RolMenu: React.FC = () => {
                         <select
                             value={selectedRol}
                             onChange={(e) => handleRolChange(Number(e.target.value))}
-                            className="w-full max-w-md px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full max-w-md px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value={0}>Seleccionar rol...</option>
                             {roles.map((rol) => (
@@ -488,7 +488,7 @@ const RolMenu: React.FC = () => {
 
             {/* Formulario de asignación (árbol) */}
             {showForm && selectedRol > 0 && (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-100 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-400 dark:border-gray-700">
                     <div className="flex items-center justify-between mb-4">
                         <h2 className="text-xl font-bold text-gray-800 dark:text-white">
                             Asignar Menús a <span className="text-blue-600 dark:text-blue-400">{getRolNombre()}</span>
@@ -507,13 +507,13 @@ const RolMenu: React.FC = () => {
                                 placeholder="Buscar menú..."
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                             />
                         </div>
                     </div>
 
                     {/* Árbol de menús o lista filtrada */}
-                    <div className="border border-gray-200 dark:border-gray-700 rounded-lg max-h-[500px] overflow-y-auto p-2">
+                    <div className="border border-gray-400 dark:border-gray-700 rounded-lg max-h-[500px] overflow-y-auto p-2">
                         {menusFiltrados ? (
                             // Vista filtrada: lista plana
                             menusFiltrados.length === 0 ? (
@@ -625,7 +625,7 @@ const RolMenu: React.FC = () => {
                                 placeholder="Buscar por menú o ruta..."
                                 value={busqueda}
                                 onChange={(e) => setBusqueda(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                             />
                         </div>
                     </div>
@@ -635,9 +635,9 @@ const RolMenu: React.FC = () => {
                             <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
                         </div>
                     ) : (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
                             <div className="overflow-x-auto">
-                                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                                     <thead className="bg-gray-50 dark:bg-gray-700/50">
                                         <tr>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -654,7 +654,7 @@ const RolMenu: React.FC = () => {
                                             </th>
                                         </tr>
                                     </thead>
-                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                                         {asignaciones.length === 0 ? (
                                             <tr>
                                                 <td colSpan={3} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
@@ -698,7 +698,7 @@ const RolMenu: React.FC = () => {
                     )}
                 </>
             ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-100 dark:border-gray-700">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-400 dark:border-gray-700">
                     <div className="text-6xl mb-4">🔒</div>
                     <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
                         Selecciona un rol para gestionar sus permisos
@@ -712,7 +712,7 @@ const RolMenu: React.FC = () => {
             {/* Modal de confirmación de desasignación */}
             {modalDesasignar.abierto && modalDesasignar.asignacion && (
                 <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
                         <div className="flex items-center gap-3 mb-4">
                             <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
                                 <MdWarning className="text-2xl" />
@@ -756,7 +756,7 @@ const RolMenu: React.FC = () => {
                             <button
                                 onClick={() => setModalDesasignar({ abierto: false, asignacion: null })}
                                 disabled={desasignando}
-                                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
                             >
                                 Cancelar
                             </button>

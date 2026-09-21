@@ -55,6 +55,7 @@ public class AsignacionServicio {
                                                    Long grupoId,
                                                    Long especialidadId,
                                                    Long turnoId,
+                                                   Long maestroId,
                                                    Long semestreId) {
         Long escuelaId = getEscuelaId();
 
@@ -69,6 +70,7 @@ public class AsignacionServicio {
         Long grupoIdFiltro = (grupoId != null && grupoId > 0) ? grupoId : null;
         Long especialidadIdFiltro = (especialidadId != null && especialidadId > 0) ? especialidadId : null;
         Long turnoIdFiltro = (turnoId != null && turnoId > 0) ? turnoId : null;
+        Long maestroIdFiltro = (maestroId != null && maestroId > 0) ? maestroId : null;
 
         Page<Asignacion> pagina = asignacionRepositorio.buscarPorEscuelaYSemestreYFiltros(
                 escuelaId,
@@ -76,6 +78,7 @@ public class AsignacionServicio {
                 grupoIdFiltro,
                 especialidadIdFiltro,
                 turnoIdFiltro,
+                maestroIdFiltro,
                 busquedaNormalizada,
                 pageable);
 
@@ -252,6 +255,7 @@ public class AsignacionServicio {
         if (asignacion.getMaestro() != null) {
             dto.setMaestroId(asignacion.getMaestro().getMaestroId());
             dto.setMaestroNombre(asignacion.getMaestro().getNombreCompleto());
+            dto.setMaestroApellidos(asignacion.getMaestro().getApellidos());
         }
 
         // Aula

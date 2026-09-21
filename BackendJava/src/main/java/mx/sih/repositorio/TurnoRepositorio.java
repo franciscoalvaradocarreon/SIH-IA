@@ -25,6 +25,29 @@ public interface TurnoRepositorio extends JpaRepository<Turno, Long> {
     Optional<Turno> findByEscuelaIdAndNombreIgnoreCase(@Param("escuelaId") Long escuelaId,
                                                         @Param("nombre") String nombre);
 
+    /**
+     * ¿Existe ya un turno con ese nombre en la escuela Y EN ESE SEMESTRE?
+     *
+     * Dos decisiones importantes:
+     *
+     *  1. La unicidad es por (escuela, semestre, nombre), NO por escuela: cada semestre
+     *     tiene su propio "MATUTINO" (en la base conviven uno del semestre 11 y otro del
+     *     14, y eso es correcto). La lista de turnos se consulta filtrando por semestre.
+     *
+     *  2. Devuelve boolean y NO Optional: un Optional con dos filas lanza
+     *     IncorrectResultSizeDataAccessException, es decir, un 500 en lugar del mensaje
+     *     de negocio (era lo que ocurría con findByEscuelaIdAndNombreIgnoreCase).
+     */
+    @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END " +
+           "FROM Turno t WHERE t.escuela.escuelaId = :escuelaId " +
+           "AND LOWER(t.nombre) = LOWER(:nombre) " +
+           "AND ((:semestreId IS NULL AND t.semestre IS NULL) " +
+           "     OR (t.semestre IS NOT NULL AND t.semestre.semestreId = :semestreId))")
+    boolean existsByEscuelaIdAndSemestreIdAndNombreIgnoreCase(
+            @Param("escuelaId") Long escuelaId,
+            @Param("semestreId") Long semestreId,
+            @Param("nombre") String nombre);
+
     @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END " +
            "FROM Turno t WHERE t.escuela.escuelaId = :escuelaId " +
            "AND LOWER(t.nombre) = LOWER(:nombre) AND t.turnoId != :id")

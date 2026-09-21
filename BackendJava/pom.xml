@@ -154,6 +154,15 @@
                         <target>21</target>
                     </configuration>
             </plugin>
+            <!-- Hace el WAR EJECUTABLE: java -jar target/SIH-IA-1.0.war (Tomcat embebido, un solo
+                 programa). El WAR desplegable en Tomcat se conserva como SIH-IA-1.0.war.original. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <mainClass>mx.sih.SihApp</mainClass>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>

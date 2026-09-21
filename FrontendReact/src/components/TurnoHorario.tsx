@@ -579,7 +579,7 @@ const TurnoHorario: React.FC = () => {
       </div>
 
       {/* Selector de Turno */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-400 dark:border-gray-700">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
             Seleccionar Turno:
@@ -587,7 +587,7 @@ const TurnoHorario: React.FC = () => {
           <select
             value={turnoSeleccionado}
             onChange={handleTurnoChange}
-            className="w-full sm:max-w-md px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full sm:max-w-md px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value={0}>
               {turnosActivos.length === 0 ? 'No hay turnos activos' : 'Seleccionar un turno...'}
@@ -638,7 +638,7 @@ const TurnoHorario: React.FC = () => {
 
       {/* Formulario de horario */}
       {showForm && turnoSeleccionado > 0 && isTurnoActivo && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-100 dark:border-gray-700">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6 border border-gray-400 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-800 dark:text-white">
               {editingId ? 'Editar Hora' : 'Nueva Hora'}
@@ -666,7 +666,7 @@ const TurnoHorario: React.FC = () => {
                 name="diaSemana"
                 value={form.diaSemana}
                 onChange={handleFormChange}
-                className="w-full text-xl px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-xl px-4 py-3 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 {diasSemana.map(d => (
                   <option key={d.value} value={d.value}>{d.label}</option>
@@ -685,7 +685,7 @@ const TurnoHorario: React.FC = () => {
                 onChange={handleFormChange}
                 step="60"
                 lang="es-419"
-                className="w-full text-lg px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-lg px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -700,7 +700,7 @@ const TurnoHorario: React.FC = () => {
                 onChange={handleFormChange}
                 step="60"
                 lang="es-419"
-                className="w-full text-lg px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-lg px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -715,7 +715,7 @@ const TurnoHorario: React.FC = () => {
                 onChange={handleFormChange}
                 min={0}
                 step={1}
-                className="w-full text-lg px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full text-lg px-4 py-3 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -751,8 +751,8 @@ const TurnoHorario: React.FC = () => {
           {diasSemana.map(dia => {
             const horariosDia = getHorariosPorDia(dia.value);
             return (
-              <div key={dia.value} className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
-                <div className="px-6 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between gap-4">
+              <div key={dia.value} className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
+                <div className="px-6 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex items-center justify-between gap-4">
                   <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
                     <span className="text-blue-500">{dia.label}</span>
                     <span className="text-sm text-gray-400 font-normal">
@@ -782,7 +782,7 @@ const TurnoHorario: React.FC = () => {
                   )}
                 </div>
                 <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                  <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                     <thead className="bg-gray-50 dark:bg-gray-700/50">
                       <tr>
                         <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -802,7 +802,7 @@ const TurnoHorario: React.FC = () => {
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                       {horariosDia.length === 0 ? (
                         <tr>
                           <td colSpan={5} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
@@ -901,7 +901,7 @@ const TurnoHorario: React.FC = () => {
       {/* 🔥 Modal de confirmación de copiado */}
       {modalCopiar && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-indigo-100 dark:bg-indigo-900/40 rounded-lg text-indigo-600 dark:text-indigo-400">
                 <MdContentCopy className="text-2xl" />
@@ -969,7 +969,7 @@ const TurnoHorario: React.FC = () => {
               <button
                 onClick={() => setModalCopiar(null)}
                 disabled={copiando}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -998,7 +998,7 @@ const TurnoHorario: React.FC = () => {
       {/* 🔥 Modal de confirmación de eliminación */}
       {modalEliminar.abierto && modalEliminar.horario && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
                 <MdWarning className="text-2xl" />
@@ -1047,7 +1047,7 @@ const TurnoHorario: React.FC = () => {
               <button
                 onClick={() => setModalEliminar({ abierto: false, horario: null })}
                 disabled={eliminando}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
                 Cancelar
               </button>

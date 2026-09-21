@@ -9,7 +9,8 @@ export const asignacionService = {
     grupoId = 0,
     especialidadId = 0,
     semestreId?: number,
-    turnoId?: number
+    turnoId?: number,
+    maestroId?: number
   ) => {
     const params = new URLSearchParams();
     params.set('page', String(page));
@@ -19,6 +20,7 @@ export const asignacionService = {
     if (especialidadId) params.set('especialidadId', String(especialidadId));
     if (semestreId) params.set('semestreId', String(semestreId));
     if (turnoId) params.set('turnoId', String(turnoId));
+    if (maestroId) params.set('maestroId', String(maestroId));
     return api.get<{ content: Asignacion[]; totalElements: number }>(
       `/asignaciones?${params.toString()}`
     );

@@ -61,9 +61,14 @@ public class GlobalExceptionHandler {
      * convertiría en un 500 "error interno").
      */
     @ExceptionHandler(AccessDeniedException.class)
-    public void manejarAccesoDenegado(AccessDeniedException e) throws AccessDeniedException {
+    public ResponseEntity<Map<String, Object>> manejarAccesoDenegado(AccessDeniedException e) {
         logger.warn("Acceso denegado: {}", e.getMessage());
-        throw e;
+
+        Map<String, Object> body = new HashMap<>();
+        body.put("success", false);
+        body.put("error", "no_autorizado");
+        body.put("message", "No tienes permisos para realizar esta operación");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(body);
     }
 
     /** Datos de entrada inválidos (@Valid): se enumeran los campos que fallan. */

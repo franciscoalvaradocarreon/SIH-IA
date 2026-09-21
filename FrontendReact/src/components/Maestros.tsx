@@ -6,7 +6,7 @@ import type { Maestro, Turno } from '../types';
 import {
   MdAdd, MdEdit, MdDelete, MdSearch, MdCheckCircle, MdCancel,
   MdPerson, MdEmail, MdPhone, MdRefresh, MdWork, MdWarning, MdClass,
-  MdSchedule
+  MdSchedule, MdBadge
 } from 'react-icons/md';
 import { useAuth } from '../context/AuthContext';
 import ErrorScreen from '../utils/ErrorScreen';
@@ -29,7 +29,7 @@ const Maestros: React.FC = () => {
   const [maestros, setMaestros] = useState<Maestro[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(pageInicial);
-  const [size] = useState(12);
+  const [size] = useState(10);
   const [busqueda, setBusqueda] = useState(busquedaInicial);
   const [turnoId, setTurnoId] = useState<number>(turnoInicial);     // 🔥 NUEVO
   const [turnos, setTurnos] = useState<Turno[]>([]);                // 🔥 NUEVO
@@ -325,7 +325,7 @@ const Maestros: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-1">
       {/* Encabezado */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
@@ -389,11 +389,11 @@ const Maestros: React.FC = () => {
             <input
               ref={inputRef}
               type="text"
-              placeholder="Buscar por nombre, apellido, email o título..."
+              placeholder="Buscar por nombre, apellido, apodo, email o título..."
               value={busqueda}
               onChange={handleBusquedaChange}
               onKeyPress={handleKeyPress}
-              className="w-full pl-10 pr-24 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full pl-10 pr-24 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             />
             <button
               onClick={() => {
@@ -420,7 +420,7 @@ const Maestros: React.FC = () => {
           <select
             value={turnoId}
             onChange={handleTurnoChange}
-            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
           >
             <option value={0}>Todos los turnos</option>
             {turnos.map((t) => (
@@ -443,9 +443,9 @@ const Maestros: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -458,6 +458,12 @@ const Maestros: React.FC = () => {
                       <div className="flex items-center gap-1.5">
                         <MdWork className="text-sm" />
                         Título
+                      </div>
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      <div className="flex items-center gap-1.5">
+                        <MdBadge className="text-sm" />
+                        Apodo
                       </div>
                     </th>
                     {/* 🔥 Columna de turno */}
@@ -487,10 +493,10 @@ const Maestros: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                   {maestros.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
+                      <td colSpan={8} className="px-4 py-6 text-center text-gray-500 dark:text-gray-400">
                         <div className="flex flex-col items-center gap-2">
                           <MdPerson className="text-4xl text-gray-300 dark:text-gray-600" />
                           <p>
@@ -524,7 +530,7 @@ const Maestros: React.FC = () => {
                               <img
                                 src={getFotoUrl(maestro.fotoUrl) || undefined}
                                 alt={maestro.nombreCompleto}
-                                className="w-7 h-10 rounded-full object-cover border border-gray-200 dark:border-gray-600 flex-shrink-0"
+                                className="w-7 h-10 rounded-full object-cover border border-gray-400 dark:border-gray-600 flex-shrink-0"
                                 onError={(e) => {
                                   e.currentTarget.style.display = 'none';
                                 }}
@@ -546,6 +552,18 @@ const Maestros: React.FC = () => {
                           <span className="text-sm text-gray-700 dark:text-gray-300">
                             {maestro.titulo || '-'}
                           </span>
+                        </td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          {maestro.apodo ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400">
+                              <MdBadge className="text-sm" />
+                              {maestro.apodo}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 dark:text-gray-500 italic">
+                              -
+                            </span>
+                          )}
                         </td>
                         {/* 🔥 Celda de turno */}
                         <td className="px-3 py-1.5 whitespace-nowrap">
@@ -624,7 +642,7 @@ const Maestros: React.FC = () => {
           </div>
 
           {/* Paginación */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-400 dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Mostrando <span className="font-medium">{maestros.length}</span> de{' '}
               <span className="font-medium">{total}</span> maestros
@@ -643,14 +661,14 @@ const Maestros: React.FC = () => {
               <button
                 onClick={() => setPage(Math.max(0, page - 1))}
                 disabled={page === 0}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Anterior
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={maestros.length < size}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Siguiente
               </button>
@@ -662,7 +680,7 @@ const Maestros: React.FC = () => {
       {/* Modal de confirmación de eliminación */}
       {modalEliminar.abierto && modalEliminar.maestro && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
                 <MdWarning className="text-2xl" />
@@ -682,7 +700,7 @@ const Maestros: React.FC = () => {
                   <img
                     src={getFotoUrl(modalEliminar.maestro.fotoUrl) || undefined}
                     alt={modalEliminar.maestro.nombreCompleto}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-200 dark:border-gray-600"
+                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-400 dark:border-gray-600"
                     onError={(e) => {
                       e.currentTarget.style.display = 'none';
                     }}
@@ -744,7 +762,7 @@ const Maestros: React.FC = () => {
               <button
                 onClick={() => setModalEliminar({ abierto: false, maestro: null })}
                 disabled={eliminando}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
                 Cancelar
               </button>

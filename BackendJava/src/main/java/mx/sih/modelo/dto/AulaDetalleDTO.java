@@ -16,6 +16,7 @@ public class AulaDetalleDTO {
     private String piso;
     private String descripcion;
     private Boolean activo;
+    private Boolean taller;
     private Long semestreId;
     private String semestreNombre;
     private Long turnoId;

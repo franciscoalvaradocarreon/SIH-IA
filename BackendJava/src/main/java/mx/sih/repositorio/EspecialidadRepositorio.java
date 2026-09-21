@@ -103,4 +103,8 @@ public interface EspecialidadRepositorio extends JpaRepository<Especialidad, Lon
     List<Especialidad> findByEscuelaIdAndTurnoId(@Param("escuelaId") Long escuelaId,
                                                   @Param("turnoId") Long turnoId);
 
+    /** Cuenta especialidades que referencian a un turno. */
+    @Query("SELECT COUNT(e) FROM Especialidad e WHERE e.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
+
 }

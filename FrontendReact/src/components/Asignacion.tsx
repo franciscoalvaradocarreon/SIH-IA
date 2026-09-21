@@ -5,6 +5,7 @@ import { asignacionService } from '../api/asignacionService';
 import { especialidadService } from '../api/especialidadService';
 import { turnoService } from '../api/turnoService';
 import { grupoService } from '../api/grupoService';
+import { maestroService } from '../api/maestroService';
 import type { Asignacion, Especialidad, Turno, Grupo } from '../types';
 import { useAuth } from '../context/AuthContext';
 import ErrorScreen from '../utils/ErrorScreen';
@@ -23,6 +24,7 @@ const Asignaciones: React.FC = () => {
   const grupoInicial = parseInt(queryParams.get('grupo') || '0');
   const especialidadInicial = parseInt(queryParams.get('especialidad') || '0');
   const turnoInicial = parseInt(queryParams.get('turno') || '0');
+  const maestroInicial = parseInt(queryParams.get('maestro') || '0');
   const pageInicial = parseInt(queryParams.get('page') || '0');
 
   const autoSeleccionarPrimerGrupo = useRef(grupoInicial === 0);
@@ -34,6 +36,11 @@ const Asignaciones: React.FC = () => {
   const [grupoId, setGrupoId] = useState<number>(grupoInicial);
   const [especialidadId, setEspecialidadId] = useState<number>(especialidadInicial);
   const [turnoId, setTurnoId] = useState<number>(turnoInicial);
+  const [maestroId, setMaestroId] = useState<number>(maestroInicial);
+  /** Maestros que dan clase con los filtros actuales (turno, especialidad y grupo). */
+  const [maestrosFiltro, setMaestrosFiltro] = useState<
+    { id: number; nombre: string; apellidos: string }[]
+  >([]);
 
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [especialidades, setEspecialidades] = useState<Especialidad[]>([]);
@@ -62,6 +69,10 @@ const Asignaciones: React.FC = () => {
     }[];
   } | null>(null);
 
+  // 🔥 Flag derivado: los combos de especialidad y grupo solo se activan
+  //    cuando hay un turno seleccionado.
+  const turnoSeleccionado = turnoId > 0;
+
   useEffect(() => {
     cargarCatalogos();
   }, [semestreActivo?.id]);
@@ -70,26 +81,27 @@ const Asignaciones: React.FC = () => {
     if (!cargandoCatalogos && semestreActivo?.id) {
       cargarEspecialidades(turnoId);
     }
-  }, [turnoId]);
+  }, [turnoId, cargandoCatalogos, semestreActivo?.id]);
 
   useEffect(() => {
     if (!cargandoCatalogos && semestreActivo?.id) {
-      cargarGrupos(turnoId);
+      cargarGrupos(turnoId, especialidadId);
     }
-  }, [turnoId]);
+  }, [turnoId, especialidadId, cargandoCatalogos, semestreActivo?.id]);
 
   useEffect(() => {
     if (!cargandoCatalogos && semestreActivo?.id) {
       cargarAsignaciones();
       actualizarURL();
     }
-  }, [page, grupoId, especialidadId, turnoId, cargandoCatalogos, semestreActivo]);
+  }, [page, grupoId, especialidadId, turnoId, maestroId, cargandoCatalogos, semestreActivo]);
 
   const actualizarURL = () => {
     const params = new URLSearchParams();
     if (grupoId > 0) params.set('grupo', String(grupoId));
     if (especialidadId > 0) params.set('especialidad', String(especialidadId));
     if (turnoId > 0) params.set('turno', String(turnoId));
+    if (maestroId > 0) params.set('maestro', String(maestroId));
     if (page > 0) params.set('page', String(page));
 
     const nuevaURL = `${location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
@@ -148,7 +160,17 @@ const Asignaciones: React.FC = () => {
     }
   };
 
-  const cargarGrupos = async (turnoActual: number) => {
+  /**
+   * 🔥 Carga grupos filtrando por turno Y por especialidad.
+   *
+   * - Si `especialidadActual > 0`, el backend solo devuelve grupos que
+   *   pertenezcan a esa especialidad.
+   * - Si es 0, devuelve todos los grupos del turno.
+   *
+   * Auto-selecciona el primer grupo si el grupo actual no está en la lista
+   * filtrada (por ejemplo, cuando el usuario cambia la especialidad).
+   */
+  const cargarGrupos = async (turnoActual: number, especialidadActual: number) => {
     if (!semestreActivo?.id) {
       setGrupos([]);
       return;
@@ -158,7 +180,7 @@ const Asignaciones: React.FC = () => {
         0,
         100,
         '',
-        0,
+        especialidadActual > 0 ? especialidadActual : 0,
         semestreActivo.id,
         turnoActual > 0 ? turnoActual : undefined
       );
@@ -193,7 +215,8 @@ const Asignaciones: React.FC = () => {
         grupoId,
         especialidadId,
         semestreId,
-        turnoId > 0 ? turnoId : undefined
+        turnoId > 0 ? turnoId : undefined,
+        maestroId > 0 ? maestroId : undefined
       );
       setAsignaciones(res.data.content);
       setTotal(res.data.totalElements);
@@ -204,14 +227,80 @@ const Asignaciones: React.FC = () => {
     }
   };
 
+  /**
+   * Maestros que aparecen en las asignaciones de los filtros actuales.
+   *
+   * Los IDs salen de las asignaciones (así el combo respeta turno, especialidad y grupo sin
+   * repetir esa lógica), pero los APELLIDOS se toman del catálogo de maestros: es el mismo dato
+   * que usa el formulario de asignación, y no depende de que la asignación los traiga. Si un
+   * maestro no estuviera en el catálogo, se queda con el nombre completo y no desaparece.
+   */
+  const cargarMaestrosFiltro = async () => {
+    try {
+      const semestreId = semestreActivo?.id;
+      const res = await asignacionService.listar(
+        0,
+        1000,
+        '',
+        grupoId,
+        especialidadId,
+        semestreId,
+        turnoId > 0 ? turnoId : undefined
+      );
+      const porId = new Map<number, { nombre: string; apellidos: string }>();
+      res.data.content.forEach((a) => {
+        if (a.maestroId && !porId.has(a.maestroId)) {
+          porId.set(a.maestroId, {
+            nombre: a.maestroNombre || 'Sin nombre',
+            apellidos: a.maestroApellidos || '',
+          });
+        }
+      });
+
+      const catalogo = await maestroService.listar(0, 500, undefined, semestreId);
+      catalogo.data.content.forEach((m: any) => {
+        const actual = porId.get(m.id);
+        if (actual && m.apellidos) {
+          actual.apellidos = m.apellidos;
+        }
+      });
+
+      // Se ordena por APELLIDO, no por el nombre completo: si no, "Carlos Ramírez Ledezma"
+      // aparecería en la C de Carlos en vez de en la R de Ramírez.
+      setMaestrosFiltro(
+        Array.from(porId, ([id, v]) => ({ id, nombre: v.nombre, apellidos: v.apellidos }))
+          .sort(
+            (x, y) =>
+              (x.apellidos || x.nombre).localeCompare(y.apellidos || y.nombre, 'es') ||
+              x.nombre.localeCompare(y.nombre, 'es')
+          )
+      );
+    } catch (error) {
+      console.error('Error al cargar los maestros del filtro:', error);
+      setMaestrosFiltro([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!cargandoCatalogos && semestreActivo?.id) {
+      cargarMaestrosFiltro();
+    }
+  }, [turnoId, especialidadId, grupoId, cargandoCatalogos, semestreActivo]);
+
   const handleGrupoChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setGrupoId(Number(e.target.value));
+    setMaestroId(0);
     autoSeleccionarPrimerGrupo.current = false;
     setPage(0);
   };
 
+  // 🔥 Al cambiar especialidad, resetear el grupo y auto-seleccionar
+  //    el primero de la nueva lista filtrada.
   const handleEspecialidadChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setEspecialidadId(Number(e.target.value));
+    setGrupoId(0);
+    setMaestroId(0);
+    autoSeleccionarPrimerGrupo.current = true;
     setPage(0);
   };
 
@@ -219,6 +308,7 @@ const Asignaciones: React.FC = () => {
     setTurnoId(Number(e.target.value));
     setGrupoId(0);
     setEspecialidadId(0);
+    setMaestroId(0);
     autoSeleccionarPrimerGrupo.current = true;
     setPage(0);
   };
@@ -248,11 +338,15 @@ const Asignaciones: React.FC = () => {
     setGrupoId(0);
     setEspecialidadId(0);
     setTurnoId(0);
+    setMaestroId(0);
     autoSeleccionarPrimerGrupo.current = false;
     setPage(0);
   };
 
-  const hayFiltrosActivos = grupoId > 0 || especialidadId > 0 || turnoId > 0;
+  const hayFiltrosActivos = grupoId > 0 || especialidadId > 0 || turnoId > 0 || maestroId > 0;
+
+  /** Suma de las horas de clase de las asignaciones que se están mostrando en la página. */
+  const horasEnPantalla = asignaciones.reduce((suma, a) => suma + (a.horas || 0), 0);
 
   const irANuevo = () => {
     const params = new URLSearchParams();
@@ -406,7 +500,9 @@ const Asignaciones: React.FC = () => {
           </button>
           <button
             onClick={irANuevo}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg shadow-md transition"
+            disabled={!turnoSeleccionado}
+            title={!turnoSeleccionado ? 'Selecciona un turno primero' : 'Nueva asignación'}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-lg shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-blue-600"
           >
             <MdAdd className="text-xl" />
             Nueva Asignación
@@ -414,9 +510,9 @@ const Asignaciones: React.FC = () => {
         </div>
       </div>
 
-      {/* Filtros: 3 columnas */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-100 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      {/* Filtros: turno, especialidad, grupo y maestro en una sola linea */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-400 dark:border-gray-700">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {/* Turno */}
           <div>
             <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -426,15 +522,20 @@ const Asignaciones: React.FC = () => {
             <select
               value={turnoId}
               onChange={handleTurnoChange}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              className="w-full px-3 py-2 text-sm border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
             >
-              <option value={0}>Todos los turnos</option>
+              <option value={0}>Selecciona un turno...</option>
               {turnos.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.nombre}
                 </option>
               ))}
             </select>
+            {turnos.length === 0 && (
+              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                No hay turnos activos en este semestre
+              </p>
+            )}
           </div>
 
           {/* Especialidad */}
@@ -446,10 +547,15 @@ const Asignaciones: React.FC = () => {
             <select
               value={especialidadId}
               onChange={handleEspecialidadChange}
-              disabled={especialidades.length === 0}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+              disabled={!turnoSeleccionado || especialidades.length === 0}
+              title={!turnoSeleccionado ? 'Selecciona un turno primero' : undefined}
+              className="w-full px-3 py-2 text-sm border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value={0}>Todas las especialidades</option>
+              <option value={0}>
+                {!turnoSeleccionado
+                  ? 'Selecciona un turno primero'
+                  : 'Todas las especialidades'}
+              </option>
               {especialidades.map((esp) => (
                 <option key={esp.id} value={esp.id}>
                   {esp.nombre}
@@ -467,13 +573,62 @@ const Asignaciones: React.FC = () => {
             <select
               value={grupoId}
               onChange={handleGrupoChange}
-              disabled={grupos.length === 0}
-              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+              disabled={!turnoSeleccionado || grupos.length === 0}
+              title={!turnoSeleccionado ? 'Selecciona un turno primero' : undefined}
+              className="w-full px-3 py-2 text-sm border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <option value={0}>Todos los grupos</option>
-              {grupos.map((g) => (
-                <option key={g.id} value={g.id}>
-                  {g.nombre} - {g.grado}°
+              <option value={0}>
+                {!turnoSeleccionado
+                  ? 'Selecciona un turno primero'
+                  : grupos.length === 0 && especialidadId > 0
+                  ? 'Sin grupos en esta especialidad'
+                  : 'Todos los grupos'}
+              </option>
+              {grupos.map((g) => {
+                // 🔥 Extraer el nombre de la especialidad soportando string u objeto
+                let especialidadTexto = '';
+                if (g.especialidad) {
+                  if (typeof g.especialidad === 'string') {
+                    especialidadTexto = g.especialidad;
+                  } else if (typeof g.especialidad === 'object' && g.especialidad.nombre) {
+                    especialidadTexto = g.especialidad.nombre;
+                  }
+                }
+                return (
+                  <option key={g.id} value={g.id}>
+                    {g.nombre} - {g.grado}°
+                    {especialidadTexto ? ` (${especialidadTexto})` : ''}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          {/* Maestro: solo los que dan clase con los filtros actuales */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Maestro
+            </label>
+            <select
+              value={maestroId}
+              onChange={(e) => {
+                setMaestroId(Number(e.target.value));
+                setPage(0);
+              }}
+              disabled={!turnoSeleccionado || maestrosFiltro.length === 0}
+              title={!turnoSeleccionado ? 'Selecciona un turno primero' : undefined}
+              className="w-full px-3 py-2 text-sm border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value={0}>
+                {!turnoSeleccionado
+                  ? 'Selecciona un turno primero'
+                  : maestrosFiltro.length === 0
+                  ? 'Sin maestros en estos filtros'
+                  : 'Todos los maestros'}
+              </option>
+              {maestrosFiltro.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.nombre}
                 </option>
               ))}
             </select>
@@ -481,7 +636,7 @@ const Asignaciones: React.FC = () => {
         </div>
 
         {hayFiltrosActivos && (
-          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3 border-t border-gray-400 dark:border-gray-700">
             <span className="text-xs text-gray-500 dark:text-gray-400">
               Filtros activos:
             </span>
@@ -498,6 +653,11 @@ const Asignaciones: React.FC = () => {
             {grupoId > 0 && grupos.find(g => g.id === grupoId) && (
               <span className="inline-flex items-center gap-1 text-xs bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
                 Grupo: {grupos.find(g => g.id === grupoId)?.nombre}
+              </span>
+            )}
+            {maestroId > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full">
+                Maestro: {maestrosFiltro.find(m => m.id === maestroId)?.nombre || 'seleccionado'}
               </span>
             )}
             <button
@@ -517,9 +677,9 @@ const Asignaciones: React.FC = () => {
         </div>
       ) : (
         <>
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
             {/* Header de navegación entre grupos */}
-            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
               {/* Info del grupo (izquierda) */}
               <div className="flex items-center gap-3 md:flex-1 md:justify-start">
                 {grupoActual ? (
@@ -550,10 +710,12 @@ const Asignaciones: React.FC = () => {
                     </div>
                     <div>
                       <h3 className="font-semibold text-lg text-gray-800 dark:text-white">
-                        Todos los grupos
+                        {turnoSeleccionado ? 'Todos los grupos' : 'Sin turno seleccionado'}
                       </h3>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
-                        Mostrando asignaciones de todos los grupos
+                        {turnoSeleccionado
+                          ? 'Mostrando asignaciones de todos los grupos'
+                          : 'Selecciona un turno para ver las asignaciones'}
                       </p>
                     </div>
                   </>
@@ -561,7 +723,7 @@ const Asignaciones: React.FC = () => {
               </div>
 
               {/* Navegación (centro) */}
-              <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 shadow-md px-2 py-1">
+              <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-400 dark:border-gray-600 shadow-md px-2 py-1">
                 <button
                   onClick={irGrupoAnterior}
                   disabled={!tieneGrupoAnterior}
@@ -576,7 +738,7 @@ const Asignaciones: React.FC = () => {
                   <span>Anterior</span>
                 </button>
 
-                <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
+                <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-400 dark:border-gray-600 whitespace-nowrap">
                   {indiceGrupoActual >= 0 ? indiceGrupoActual + 1 : 0}{' '}
                   <span className="text-gray-400 font-normal">de</span>{' '}
                   {grupos.length}
@@ -601,7 +763,7 @@ const Asignaciones: React.FC = () => {
               <div className="md:flex-1 md:flex md:justify-end">
                 {grupoId > 0 ? (
                   <span
-                    className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm"
+                    className="text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-400 dark:border-gray-600 shadow-sm"
                     title={
                       asignaciones.length < total
                         ? 'Solo se cuentan las horas de esta página'
@@ -620,7 +782,7 @@ const Asignaciones: React.FC = () => {
                     )}
                   </span>
                 ) : (
-                  <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm">
+                  <span className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap bg-white dark:bg-gray-800 px-4 py-2 rounded-lg border border-gray-400 dark:border-gray-600 shadow-sm">
                     Mostrando{' '}
                     <span className="font-bold text-gray-800 dark:text-white text-base">
                       {asignaciones.length}
@@ -637,7 +799,7 @@ const Asignaciones: React.FC = () => {
 
             {/* Tabla */}
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+              <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                 <thead className="bg-gray-50 dark:bg-gray-700/50">
                   <tr>
                     <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -684,24 +846,25 @@ const Asignaciones: React.FC = () => {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                   {asignaciones.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-4 py-8 text-center text-gray-500 dark:text-gray-400">
                         <div className="flex flex-col items-center gap-2">
                           <MdClass className="text-4xl text-gray-300 dark:text-gray-600" />
                           <p>
-                            No hay asignaciones
-                            {hayFiltrosActivos && (
-                              <span className="ml-1">que coincidan con los filtros</span>
-                            )}
+                            {!turnoSeleccionado
+                              ? 'Selecciona un turno para ver las asignaciones'
+                              : `No hay asignaciones${hayFiltrosActivos ? ' que coincidan con los filtros' : ''}`}
                           </p>
-                          <button
-                            onClick={irANuevo}
-                            className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
-                          >
-                            Crear primera asignación
-                          </button>
+                          {turnoSeleccionado && (
+                            <button
+                              onClick={irANuevo}
+                              className="text-blue-600 dark:text-blue-400 hover:underline text-sm font-medium"
+                            >
+                              Crear primera asignación
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -829,23 +992,29 @@ const Asignaciones: React.FC = () => {
           </div>
 
           {/* Paginación */}
-          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-sm border border-gray-400 dark:border-gray-700">
             <div className="text-sm text-gray-600 dark:text-gray-400">
               Mostrando <span className="font-medium">{asignaciones.length}</span> de{' '}
               <span className="font-medium">{total}</span> asignaciones
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                title="Horas de clase de las asignaciones que se muestran en esta página"
+                className="px-3 py-2 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 text-sm font-medium whitespace-nowrap"
+              >
+                {horasEnPantalla} h de clase
+              </span>
               <button
                 onClick={() => setPage(Math.max(0, page - 1))}
                 disabled={page === 0}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Anterior
               </button>
               <button
                 onClick={() => setPage(page + 1)}
                 disabled={asignaciones.length < size}
-                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="px-4 py-2 border border-gray-400 dark:border-gray-600 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed transition"
               >
                 Siguiente
               </button>
@@ -857,7 +1026,7 @@ const Asignaciones: React.FC = () => {
       {/* Modal de eliminación */}
       {modalEliminar.abierto && modalEliminar.asignacion && (
         <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-200 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
             <div className="flex items-center gap-3 mb-4">
               <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
                 <MdWarning className="text-2xl" />
@@ -933,7 +1102,7 @@ const Asignaciones: React.FC = () => {
               <button
                 onClick={() => setModalEliminar({ abierto: false, asignacion: null })}
                 disabled={eliminando}
-                className="flex-1 px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
               >
                 Cancelar
               </button>

@@ -2,13 +2,12 @@
 package mx.sih.modelo.entidad;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
-
-import java.time.LocalTime;
 
 @Entity
 @Table(name = "disponibilidad_maestro", schema = "sih")
@@ -40,7 +39,7 @@ public class DisponibilidadMaestro {
 
     @CreationTimestamp
     @Column(name = "creado", updatable = false)
-    private LocalTime creado;
+    private LocalDateTime creado;
     
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "semestre_id", nullable = false)

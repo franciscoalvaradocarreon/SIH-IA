@@ -94,7 +94,7 @@ const TurnoForm: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Turno' : 'Nuevo Turno'}
         </h1>
@@ -120,7 +120,7 @@ const TurnoForm: React.FC = () => {
                 value={form.nombre}
                 onChange={handleChange}
                 required
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 placeholder="Ej: MATUTINO, VESPERTINO, NOCTURNO"
               />
             </div>
@@ -135,7 +135,7 @@ const TurnoForm: React.FC = () => {
               value={form.descripcion || ''}
               onChange={handleChange}
               rows={3}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-none"
               placeholder="Descripción del turno (ej. Horario de 7:00 a 13:00)"
             />
           </div>
@@ -146,7 +146,7 @@ const TurnoForm: React.FC = () => {
               name="activo"
               checked={form.activo !== false}
               onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
             />
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Turno activo
@@ -165,7 +165,7 @@ const TurnoForm: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/catalogo/turnos')}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar

@@ -5,7 +5,7 @@
 package mx.sih.modelo.entidad;
 
 import jakarta.persistence.*;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -35,7 +35,7 @@ public class UsuarioEscuelaRol {
     private Boolean activo = true;
 
     @Column(name = "creado")
-    private LocalTime creado = LocalTime.now();
+    private LocalDateTime creado = LocalDateTime.now();
 
     public UsuarioEscuelaRol() {
     }

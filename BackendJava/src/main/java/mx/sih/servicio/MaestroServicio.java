@@ -102,7 +102,7 @@ public class MaestroServicio {
         String fotoUrl = null;
         if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
             try {
-                fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo());
+                fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "maestro_");
             } catch (IOException e) {
                 throw new NegocioExcepcion("Error al guardar la foto: " + e.getMessage());
             }
@@ -114,6 +114,7 @@ public class MaestroServicio {
         maestro.setEmail(dto.getEmail());
         maestro.setTelefono(dto.getTelefono());
         maestro.setTitulo(dto.getTitulo());
+        maestro.setApodo(dto.getApodo());
         maestro.setFotoUrl(fotoUrl != null ? fotoUrl : dto.getFotoUrl());
 
         Escuela escuela = new Escuela();
@@ -162,7 +163,7 @@ public class MaestroServicio {
                 archivoServicio.eliminarArchivo(maestro.getFotoUrl());
             }
             try {
-                String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo());
+                String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "maestro_");
                 maestro.setFotoUrl(nuevaFotoUrl);
             } catch (IOException e) {
                 throw new NegocioExcepcion("Error al guardar la foto: " + e.getMessage());
@@ -176,6 +177,7 @@ public class MaestroServicio {
         maestro.setEmail(dto.getEmail());
         maestro.setTelefono(dto.getTelefono());
         maestro.setTitulo(dto.getTitulo());
+        maestro.setApodo(dto.getApodo());
         maestro.setSemestre(semestre);
         maestro.setTurno(turno);   // 🔥 actualizar turno
 
@@ -265,6 +267,7 @@ public class MaestroServicio {
         dto.setTelefono(maestro.getTelefono());
         dto.setFotoUrl(maestro.getFotoUrl());
         dto.setTitulo(maestro.getTitulo());
+        dto.setApodo(maestro.getApodo());
         dto.setActivo(maestro.getActivo());
 
         if (maestro.getSemestre() != null) {
@@ -288,6 +291,7 @@ public class MaestroServicio {
         dto.setTelefono(maestro.getTelefono());
         dto.setFotoUrl(maestro.getFotoUrl());
         dto.setTitulo(maestro.getTitulo());
+        dto.setApodo(maestro.getApodo());
         dto.setActivo(maestro.getActivo());
         return dto;
     }

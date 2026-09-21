@@ -4,16 +4,18 @@ import { usuarioService } from '../api/usuarioService';
 import { escuelaService } from '../api/escuelaService';
 import { rolService } from '../api/rolService';
 import type { UsuarioForm as UsuarioFormType, AsignacionEscuelaRol } from '../types';
-import { 
-  MdSave, 
-  MdCancel, 
-  MdPerson, 
-  MdEmail, 
-  MdLock, 
-  MdSchool, 
+import { urlFoto } from '../utils/imagenes';
+import {
+  MdSave,
+  MdCancel,
+  MdPerson,
+  MdEmail,
+  MdLock,
+  MdSchool,
   MdSecurity,
   MdAdd,
-  MdDelete
+  MdDelete,
+  MdPhoto,
 } from 'react-icons/md';
 
 const UsuarioForm: React.FC = () => {
@@ -30,6 +32,11 @@ const UsuarioForm: React.FC = () => {
     activo: true,
     asignaciones: [],
   });
+
+  // 🔥 Estado para la foto
+  const [fotoArchivo, setFotoArchivo] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string>('');
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [escuelas, setEscuelas] = useState<any[]>([]);
@@ -64,6 +71,7 @@ const UsuarioForm: React.FC = () => {
     try {
       const res = await usuarioService.obtener(Number(id));
       const data = res.data;
+
       setForm({
         usuario: data.usuario,
         nombreCompleto: data.nombreCompleto,
@@ -76,6 +84,11 @@ const UsuarioForm: React.FC = () => {
           activo: a.activo,
         })) || [],
       });
+
+      // Inicializar preview con la foto existente
+      if (data.fotoUrl) {
+        setPreviewUrl(urlFoto(data.fotoUrl) || '');
+      }
     } catch (err) {
       setError('Error al cargar los datos del usuario');
     } finally {
@@ -89,6 +102,42 @@ const UsuarioForm: React.FC = () => {
       ...form,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
     });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validación en el cliente. El backend valida además por CONTENIDO real
+    // (magic bytes) y re-codifica la imagen, así que esto es solo para dar un
+    // mensaje inmediato y no subir 5MB para recibir un error.
+    const TIPOS_PERMITIDOS = ['image/jpeg', 'image/png', 'image/gif'];
+    const MAX_BYTES = 5 * 1024 * 1024;
+
+    if (!TIPOS_PERMITIDOS.includes(file.type)) {
+      setError('Formato no permitido. Usa JPG, PNG o GIF.');
+      e.target.value = '';
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      setError('La imagen no puede exceder 5MB.');
+      e.target.value = '';
+      return;
+    }
+
+    setError('');
+    setFotoArchivo(file);
+    // Liberar la URL anterior para no acumular blobs en memoria.
+    if (previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleRemovePhoto = () => {
+    setFotoArchivo(null);
+    setPreviewUrl('');
+    setForm({ ...form, fotoUrl: '' });
   };
 
   const handleAsignacionChange = (
@@ -126,10 +175,16 @@ const UsuarioForm: React.FC = () => {
     setLoading(true);
 
     try {
+      // Adjuntar la foto al DTO antes de enviar
+      const dataToSend: UsuarioFormType = {
+        ...form,
+        fotoArchivo,
+      };
+
       if (isEdit) {
-        await usuarioService.actualizar(Number(id), form);
+        await usuarioService.actualizar(Number(id), dataToSend);
       } else {
-        await usuarioService.crear(form);
+        await usuarioService.crear(dataToSend);
       }
       navigate('/administracion/usuarios');
     } catch (err: any) {
@@ -161,7 +216,7 @@ const UsuarioForm: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Usuario' : 'Nuevo Usuario'}
         </h1>
@@ -189,7 +244,7 @@ const UsuarioForm: React.FC = () => {
                   value={form.usuario}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="usuario123"
                 />
               </div>
@@ -209,7 +264,7 @@ const UsuarioForm: React.FC = () => {
                   value={form.email}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="usuario@escuela.com"
                 />
               </div>
@@ -231,7 +286,7 @@ const UsuarioForm: React.FC = () => {
                   value={form.nombreCompleto}
                   onChange={handleChange}
                   required
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Juan Pérez"
                 />
               </div>
@@ -251,25 +306,60 @@ const UsuarioForm: React.FC = () => {
                   value={form.password || ''}
                   onChange={handleChange}
                   required={!isEdit}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder={isEdit ? 'Dejar en blanco para mantener' : '******'}
                 />
               </div>
             </div>
           </div>
 
+          {/* Foto */}
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              URL de Foto (opcional)
+              Foto
             </label>
-            <input
-              type="text"
-              name="fotoUrl"
-              value={form.fotoUrl || ''}
-              onChange={handleChange}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-              placeholder="https://ejemplo.com/foto.jpg"
-            />
+            <div className="flex items-center gap-4">
+              {previewUrl && (
+                <div className="relative">
+                  <img
+                    src={previewUrl}
+                    alt="Vista previa"
+                    className="w-20 h-20 rounded-full object-cover border-2 border-gray-400 dark:border-gray-600"
+                    onError={(e) => {
+                      console.error('❌ Error al cargar la vista previa:', previewUrl);
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition"
+                  >
+                    <MdDelete className="text-sm" />
+                  </button>
+                </div>
+              )}
+
+              <div className="flex-1">
+                <label className="cursor-pointer">
+                  <div className="flex items-center gap-2 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                    <MdPhoto className="text-gray-400 text-xl" />
+                    <span className="text-sm text-gray-600 dark:text-gray-300">
+                      {previewUrl ? 'Cambiar foto' : 'Seleccionar foto'}
+                    </span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-xs text-gray-400 mt-1">
+                  Formatos: JPG, PNG, GIF. Máximo 5MB
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Checkbox Activo */}
@@ -279,7 +369,7 @@ const UsuarioForm: React.FC = () => {
               name="activo"
               checked={form.activo !== false}
               onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
             />
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Usuario activo
@@ -287,7 +377,7 @@ const UsuarioForm: React.FC = () => {
           </div>
 
           {/* Asignaciones Escuela-Rol */}
-          <div className="border-t border-gray-200 dark:border-gray-700 pt-5 mt-5">
+          <div className="border-t border-gray-400 dark:border-gray-700 pt-5 mt-5">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold text-gray-800 dark:text-white">
                 Asignaciones
@@ -306,7 +396,7 @@ const UsuarioForm: React.FC = () => {
               {form.asignaciones?.map((asignacion, index) => (
                 <div
                   key={index}
-                  className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600"
+                  className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-400 dark:border-gray-600"
                 >
                   <div>
                     <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
@@ -317,7 +407,7 @@ const UsuarioForm: React.FC = () => {
                       onChange={(e) =>
                         handleAsignacionChange(index, 'escuelaId', Number(e.target.value))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     >
                       <option value={0}>Seleccionar</option>
@@ -338,7 +428,7 @@ const UsuarioForm: React.FC = () => {
                       onChange={(e) =>
                         handleAsignacionChange(index, 'rolId', Number(e.target.value))
                       }
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       required
                     >
                       <option value={0}>Seleccionar</option>
@@ -361,7 +451,7 @@ const UsuarioForm: React.FC = () => {
                         onChange={(e) =>
                           handleAsignacionChange(index, 'activo', e.target.checked)
                         }
-                        className="w-4 h-4 mt-1 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        className="w-4 h-4 mt-1 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
                       />
                     </div>
                     <button
@@ -384,7 +474,7 @@ const UsuarioForm: React.FC = () => {
           </div>
 
           {/* Botones */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">
             <button
               type="submit"
               disabled={loading}
@@ -396,7 +486,7 @@ const UsuarioForm: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/administracion/usuarios')}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar
@@ -409,4 +499,3 @@ const UsuarioForm: React.FC = () => {
 };
 
 export default UsuarioForm;
-

@@ -17,7 +17,8 @@ public interface MaestroRepositorio extends JpaRepository<Maestro, Long> {
 @Query("SELECT m FROM Maestro m WHERE m.escuela.escuelaId = :escuelaId " +
        "AND (LOWER(m.nombre) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
        "OR LOWER(m.apellidos) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
-       "OR LOWER(m.email) LIKE LOWER(CONCAT('%', :busqueda, '%'))) " +
+       "OR LOWER(m.email) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
+       "OR LOWER(m.apodo) LIKE LOWER(CONCAT('%', :busqueda, '%'))) " +
        "ORDER BY m.apellidos ASC, m.nombre ASC")
 Page<Maestro> buscarPorEscuelaYTexto(@Param("escuelaId") Long escuelaId,
                                       @Param("busqueda") String busqueda,
@@ -53,7 +54,8 @@ Page<Maestro> buscarPorEscuelaYTexto(@Param("escuelaId") Long escuelaId,
            "AND (LOWER(m.nombre) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
            "OR LOWER(m.apellidos) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
            "OR LOWER(m.email) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
-           "OR LOWER(m.titulo) LIKE LOWER(CONCAT('%', :busqueda, '%'))) " +
+           "OR LOWER(m.titulo) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
+           "OR LOWER(m.apodo) LIKE LOWER(CONCAT('%', :busqueda, '%'))) " +
            "AND (:semestreId IS NULL OR s.semestreId = :semestreId) " +
            "AND (:turnoId IS NULL OR t.turnoId = :turnoId) " +
            "ORDER BY m.apellidos ASC, m.nombre ASC")
@@ -111,5 +113,8 @@ Page<Maestro> buscarPorEscuelaYTexto(@Param("escuelaId") Long escuelaId,
             @Param("semestreId") Long semestreId,
             @Param("turnoId") Long turnoId,
             @Param("id") Long id);
-    
+ 
+    /** Cuenta maestros que referencian a un turno. */
+    @Query("SELECT COUNT(m) FROM Maestro m WHERE m.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
 }

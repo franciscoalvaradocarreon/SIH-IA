@@ -226,7 +226,7 @@ const MateriaForm: React.FC = () => {
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Materia' : 'Nueva Materia'}
         </h1>
@@ -288,7 +288,7 @@ const MateriaForm: React.FC = () => {
                   onChange={handleChange}
                   required
                   maxLength={50}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="MAT-101"
                 />
               </div>
@@ -310,7 +310,7 @@ const MateriaForm: React.FC = () => {
                   onChange={handleChange}
                   required
                   maxLength={100}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Matemáticas I"
                 />
               </div>
@@ -332,7 +332,7 @@ const MateriaForm: React.FC = () => {
                 onChange={handleChange}
                 required
                 disabled={turnos.length === 0}
-                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
               >
                 <option value={0}>Seleccionar turno...</option>
                 {turnos.map((t) => (
@@ -357,7 +357,7 @@ const MateriaForm: React.FC = () => {
               value={form.descripcion}
               onChange={handleChange}
               rows={3}
-              className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-y"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition resize-y"
               placeholder="Descripción detallada de la materia..."
             />
           </div>
@@ -379,7 +379,7 @@ const MateriaForm: React.FC = () => {
                   onChange={handleChange}
                   min="0"
                   step="1"
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="0"
                 />
               </div>
@@ -401,7 +401,7 @@ const MateriaForm: React.FC = () => {
                   required
                   min="1"
                   step="1"
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="3"
                 />
               </div>
@@ -415,7 +415,7 @@ const MateriaForm: React.FC = () => {
             </label>
             <div className="flex items-center gap-3 relative">
               <div
-                className="w-10 h-10 rounded-lg border-2 border-gray-300 dark:border-gray-600 cursor-pointer hover:scale-105 transition flex-shrink-0"
+                className="w-10 h-10 rounded-lg border-2 border-gray-400 dark:border-gray-600 cursor-pointer hover:scale-105 transition flex-shrink-0"
                 style={{ backgroundColor: form.colorHex }}
                 onClick={toggleColorPicker}
                 title="Haz clic para cambiar el color"
@@ -431,7 +431,7 @@ const MateriaForm: React.FC = () => {
                   value={form.colorHex}
                   onChange={handleChange}
                   maxLength={7}
-                  className="w-full pl-7 pr-2 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
+                  className="w-full pl-7 pr-2 py-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition text-sm"
                   placeholder="#808080"
                 />
               </div>
@@ -448,7 +448,7 @@ const MateriaForm: React.FC = () => {
               {showColorPicker && (
                 <div
                   ref={colorPickerRef}
-                  className="absolute z-50 top-full mt-2 left-0 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700"
+                  className="absolute z-50 top-full mt-2 left-0 bg-white dark:bg-gray-800 p-3 rounded-lg shadow-xl border border-gray-400 dark:border-gray-700"
                   style={{ minWidth: '200px' }}
                 >
                   <div className="flex flex-col items-center gap-2">
@@ -464,7 +464,7 @@ const MateriaForm: React.FC = () => {
                         value={form.colorHex}
                         onChange={handleColorChange}
                         maxLength={7}
-                        className="flex-1 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-1 px-2 py-1 text-sm border border-gray-400 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="#808080"
                       />
                       <button
@@ -495,7 +495,7 @@ const MateriaForm: React.FC = () => {
               name="activo"
               checked={form.activo !== false}
               onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
             />
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Materia activa
@@ -515,7 +515,7 @@ const MateriaForm: React.FC = () => {
             <button
               type="button"
               onClick={volverConFiltros}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar

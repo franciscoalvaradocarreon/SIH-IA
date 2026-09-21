@@ -18,6 +18,7 @@ public class MaestroDTO {
     private String telefono;
     private String fotoUrl;
     private String titulo;
+    private String apodo;
     private Boolean activo;
     private Long semestreId;
     private String semestreNombre;

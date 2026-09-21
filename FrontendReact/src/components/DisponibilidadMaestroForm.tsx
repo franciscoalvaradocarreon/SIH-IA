@@ -319,16 +319,10 @@ const DisponibilidadMaestroForm: React.FC = () => {
 
   return (
     <div className="max-w-6xl mx-auto p-6">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-100 dark:border-gray-700">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 md:p-8 border border-gray-400 dark:border-gray-700">
         <h1 className="text-2xl font-bold text-gray-800 dark:text-white mb-6">
           {isEdit ? 'Editar Disponibilidad de Maestro' : 'Configurar Disponibilidad de Maestro'}
         </h1>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          {isEdit
-            ? 'Edita los bloques horarios en los que el maestro está disponible'
-            : 'Selecciona un turno, luego un maestro, y marca sus bloques disponibles'}
-        </p>
-
         {error && (
           <div className="bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-300 p-4 rounded-lg border border-red-200 dark:border-red-800 mb-6">
             {error}
@@ -355,7 +349,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
                 onChange={handleTurnoChange}
                 required
                 disabled={turnos.length === 0}
-                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 <option value={0}>Seleccionar turno...</option>
                 {turnos.map((turno) => (
@@ -385,7 +379,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
                 onChange={handleMaestroChange}
                 required
                 disabled={cargandoMaestros || maestros.length === 0}
-                className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 <option value={0}>
                   {cargandoMaestros
@@ -410,9 +404,9 @@ const DisponibilidadMaestroForm: React.FC = () => {
 
           {/* Matriz de horarios */}
           {maestroSeleccionado > 0 && horarios.length > 0 && (
-            <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <div className="border border-gray-400 dark:border-gray-700 rounded-lg overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
                   <thead className="bg-gray-50 dark:bg-gray-700/50">
                     <tr>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -428,7 +422,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                     {getOrdenesUnicos().map((orden) => {
                       const ref = horarios.find(h => h.orden === orden);
                       if (!ref) return null;
@@ -470,7 +464,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
+              <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-400 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
                 <span className="inline-flex items-center gap-2 mr-4">
                   <span className="w-4 h-4 bg-green-500 rounded"></span> Disponible
                 </span>
@@ -500,7 +494,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
           )}
 
           {/* Botones */}
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">
             <button
               type="submit"
               disabled={saving || maestroSeleccionado === 0 || horarios.length === 0}
@@ -516,7 +510,7 @@ const DisponibilidadMaestroForm: React.FC = () => {
             <button
               type="button"
               onClick={handleCancel}
-              className="flex items-center gap-2 px-6 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
+              className="flex items-center gap-2 px-6 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition"
             >
               <MdCancel className="text-xl" />
               Cancelar

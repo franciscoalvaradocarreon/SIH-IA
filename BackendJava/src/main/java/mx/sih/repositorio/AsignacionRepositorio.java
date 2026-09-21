@@ -207,6 +207,7 @@ public interface AsignacionRepositorio extends JpaRepository<Asignacion, Long> {
      * Búsqueda paginada de asignaciones con filtros opcionales:
      * - especialidadId (por grupo)
      * - turnoId (por grupo)
+     * - maestroId
      * - semestreId
      */
     @Query("SELECT a FROM Asignacion a " +
@@ -222,6 +223,7 @@ public interface AsignacionRepositorio extends JpaRepository<Asignacion, Long> {
            "AND (:grupoId IS NULL OR g.grupoId = :grupoId) " +
            "AND (:especialidadId IS NULL OR ge.especialidadId = :especialidadId) " +
            "AND (:turnoId IS NULL OR at.turnoId = :turnoId) " +
+           "AND (:maestroId IS NULL OR ma.maestroId = :maestroId) " +
            "AND (LOWER(g.nombre) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
            "OR LOWER(m.nombre) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
            "OR LOWER(m.clave) LIKE LOWER(CONCAT('%', :busqueda, '%')) " +
@@ -235,7 +237,11 @@ public interface AsignacionRepositorio extends JpaRepository<Asignacion, Long> {
             @Param("grupoId") Long grupoId,
             @Param("especialidadId") Long especialidadId,
             @Param("turnoId") Long turnoId,
+            @Param("maestroId") Long maestroId,
             @Param("busqueda") String busqueda,
             Pageable pageable);
 
+    /** Cuenta asignaciones que referencian a un turno. */
+    @Query("SELECT COUNT(a) FROM Asignacion a WHERE a.turno.turnoId = :turnoId")
+    long countByTurnoId(@Param("turnoId") Long turnoId);
 }

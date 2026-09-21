@@ -1,5 +1,6 @@
 package mx.sih.servicio;
 
+import java.io.IOException;
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.modelo.dto.*;
 import mx.sih.modelo.entidad.Escuela;
@@ -54,17 +55,20 @@ public class UsuarioServicio {
     private final EscuelaRepositorio escuelaRepositorio;
     private final RolRepositorio rolRepositorio;
     private final PasswordEncoder passwordEncoder;
+    private final ArchivoServicio archivoServicio;
 
     public UsuarioServicio(UsuarioRepositorio usuarioRepositorio,
                            UsuarioEscuelaRolRepositorio usuarioEscuelaRolRepositorio,
                            EscuelaRepositorio escuelaRepositorio,
                            RolRepositorio rolRepositorio,
-                           PasswordEncoder passwordEncoder) {
+                           PasswordEncoder passwordEncoder,
+                           ArchivoServicio archivoServicio) {
         this.usuarioRepositorio = usuarioRepositorio;
         this.usuarioEscuelaRolRepositorio = usuarioEscuelaRolRepositorio;
         this.escuelaRepositorio = escuelaRepositorio;
         this.rolRepositorio = rolRepositorio;
         this.passwordEncoder = passwordEncoder;
+        this.archivoServicio = archivoServicio;
     }
 
     // ============================================================
@@ -118,11 +122,23 @@ public class UsuarioServicio {
             validarAsignacionesUnicasPorEscuela(dto.getAsignaciones());
         }
 
+        // Foto: si viene archivo, se guarda en disco y se obtiene la URL.
+        // Si no, se usa la fotoUrl que venga en el DTO (o null).
+        String fotoUrl = dto.getFotoUrl();
+        if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
+            try {
+                fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
+            } catch (IOException e) {
+                throw new NegocioExcepcion("error_foto",
+                        "Error al guardar la foto: " + e.getMessage());
+            }
+        }
+
         Usuario usuario = new Usuario();
         usuario.setUsuario(dto.getUsuario());
         usuario.setNombreCompleto(dto.getNombreCompleto());
         usuario.setEmail(dto.getEmail());
-        usuario.setFotoUrl(dto.getFotoUrl());
+        usuario.setFotoUrl(fotoUrl);
         usuario.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
         usuario.setUltimoAcceso(null);
         usuario.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
@@ -163,10 +179,42 @@ public class UsuarioServicio {
             validarAsignacionesUnicasPorEscuela(asignaciones);
         }
 
+        // ------------------------------------------------------------
+        // FOTO
+        // Reglas:
+        //   · Si viene archivo nuevo → eliminar la foto anterior y guardar la nueva.
+        //   · Si no viene archivo pero sí fotoUrl en el DTO → usarla (permite
+        //     limpiar la foto enviando cadena vacía).
+        //   · Si no viene ni archivo ni fotoUrl → NO tocar la foto existente.
+        // ------------------------------------------------------------
+        if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
+            if (usuario.getFotoUrl() != null) {
+                archivoServicio.eliminarArchivo(usuario.getFotoUrl());
+            }
+            try {
+                String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
+                usuario.setFotoUrl(nuevaFotoUrl);
+            } catch (IOException e) {
+                throw new NegocioExcepcion("error_foto",
+                        "Error al guardar la foto: " + e.getMessage());
+            }
+        } else if (dto.getFotoUrl() != null) {
+            // Cadena vacía limpia la foto; null significa "no tocar".
+            if (dto.getFotoUrl().isBlank()) {
+                if (usuario.getFotoUrl() != null) {
+                    archivoServicio.eliminarArchivo(usuario.getFotoUrl());
+                }
+                usuario.setFotoUrl(null);
+            } else {
+                usuario.setFotoUrl(dto.getFotoUrl());
+            }
+        }
+
+        // Campos básicos
         usuario.setUsuario(dto.getUsuario());
         usuario.setNombreCompleto(dto.getNombreCompleto());
         usuario.setEmail(dto.getEmail());
-        usuario.setFotoUrl(dto.getFotoUrl());
+
         if (dto.getActivo() != null) {
             usuario.setActivo(dto.getActivo());
         }
@@ -205,11 +253,16 @@ public class UsuarioServicio {
 
     @Transactional
     public void eliminarUsuario(Long usuarioId) {
-        obtenerUsuarioOError(usuarioId);
+        Usuario usuario = obtenerUsuarioOError(usuarioId);
 
         if (Objects.equals(usuarioId, getUsuarioAutenticadoId())) {
             throw new NegocioExcepcion("auto_eliminacion_no_permitida",
                     "No puedes eliminar tu propia cuenta.");
+        }
+
+        // Eliminar foto del disco si existe
+        if (usuario.getFotoUrl() != null) {
+            archivoServicio.eliminarArchivo(usuario.getFotoUrl());
         }
 
         usuarioEscuelaRolRepositorio.deleteByUsuarioId(usuarioId);

@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -32,16 +33,12 @@ public class UsuarioCrearDTO {
     @Size(max = 255)
     private String fotoUrl;
 
-    /**
-     * Opcional en actualización; obligatoria al crear.
-     * La longitud MÍNIMA se valida en UsuarioServicio, no aquí, porque en las
-     * actualizaciones el campo puede llegar vacío ("") para indicar "sin cambio"
-     * y un @Size(min = 12) rechazaría ese caso legítimo.
-     */
     @Size(max = 128, message = "La contraseña no puede exceder 128 caracteres")
     private String password;
 
     private Boolean activo = true;
 
     private List<AsignacionEscuelaRolDTO> asignaciones;
+
+    private MultipartFile fotoArchivo;
 }

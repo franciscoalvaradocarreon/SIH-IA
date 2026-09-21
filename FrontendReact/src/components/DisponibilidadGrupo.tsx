@@ -310,7 +310,7 @@ const DisponibilidadGrupo: React.FC = () => {
           <select
             value={turnoSeleccionado}
             onChange={handleTurnoChange}
-            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value={0}>Seleccionar turno...</option>
             {turnos.map((turno) => (
@@ -336,7 +336,7 @@ const DisponibilidadGrupo: React.FC = () => {
             value={grupoSeleccionado}
             onChange={handleGrupoChange}
             disabled={cargandoGrupos || grupos.length === 0}
-            className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           >
             <option value={0}>
               {cargandoGrupos
@@ -376,8 +376,8 @@ const DisponibilidadGrupo: React.FC = () => {
 
       {/* Matriz */}
       {grupoSeleccionado > 0 && horarios.length > 0 && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-100 dark:border-gray-700">
-          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
+          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 md:flex-1 md:justify-start">
               <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">
                 {grupos.find(g => g.id === grupoSeleccionado)?.nombre?.charAt(0) || 'G'}
@@ -394,7 +394,7 @@ const DisponibilidadGrupo: React.FC = () => {
             </div>
 
             {/* Navegación */}
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-600 shadow-md px-2 py-1">
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-xl border border-gray-400 dark:border-gray-600 shadow-md px-2 py-1">
               <button
                 onClick={irAnterior}
                 disabled={!tieneAnterior}
@@ -409,7 +409,7 @@ const DisponibilidadGrupo: React.FC = () => {
                 <span>Anterior</span>
               </button>
 
-              <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-200 dark:border-gray-600 whitespace-nowrap">
+              <span className="px-4 py-2 text-base font-bold text-gray-700 dark:text-gray-200 border-l border-r border-gray-400 dark:border-gray-600 whitespace-nowrap">
                 {indiceActual >= 0 ? indiceActual + 1 : 0} <span className="text-gray-400 font-normal">de</span> {grupos.length}
               </span>
 
@@ -454,7 +454,7 @@ const DisponibilidadGrupo: React.FC = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
                   <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
@@ -470,7 +470,7 @@ const DisponibilidadGrupo: React.FC = () => {
                   ))}
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
                 {getOrdenesUnicos().map((orden) => {
                   const ref = horarios.find(h => h.orden === orden);
                   if (!ref) return null;
@@ -511,23 +511,23 @@ const DisponibilidadGrupo: React.FC = () => {
             </table>
           </div>
 
-          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-4">
+          <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/30 border-t border-gray-400 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 flex flex-wrap items-center gap-4">
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-green-500 rounded"></span>
-              Disponible
+              Habilitado
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-gray-300 dark:bg-gray-600 rounded"></span>
-              No disponible
+              Disponible
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="text-gray-300 dark:text-gray-600">-</span>
               Sin horario
             </span>
-            <span className="text-xs text-gray-400 ml-auto">
+            <span className="text-lg text-gray-400 ml-auto">
               Total: <span className="font-medium text-gray-700 dark:text-gray-300">
                 {Array.from(disponibilidades.values()).filter(v => v === true).length}
-              </span> bloques disponibles
+              </span> bloques habilitados
             </span>
           </div>
         </div>

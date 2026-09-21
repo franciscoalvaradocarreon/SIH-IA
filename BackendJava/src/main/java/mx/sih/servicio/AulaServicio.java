@@ -100,6 +100,7 @@ public class AulaServicio {
         aula.setPiso(dto.getPiso() != null ? dto.getPiso().toUpperCase() : null);
         aula.setDescripcion(dto.getDescripcion());
         aula.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
+        aula.setTaller(dto.getTaller() != null ? dto.getTaller() : false);
         aula.setSemestre(semestre);
         aula.setTurno(turno);   // 🔥
 
@@ -143,6 +144,7 @@ public class AulaServicio {
         if (dto.getActivo() != null) {
             aula.setActivo(dto.getActivo());
         }
+        aula.setTaller(dto.getTaller() != null ? dto.getTaller() : false);
         aula.setSemestre(semestre);
         aula.setTurno(turno);   // 🔥
 
@@ -221,6 +223,7 @@ public class AulaServicio {
         dto.setPiso(aula.getPiso());
         dto.setDescripcion(aula.getDescripcion());
         dto.setActivo(aula.getActivo());
+        dto.setTaller(aula.getTaller());
         if (aula.getSemestre() != null) {
             dto.setSemestreId(aula.getSemestre().getSemestreId());
             dto.setSemestreNombre(aula.getSemestre().getNombre());
@@ -240,6 +243,7 @@ public class AulaServicio {
         dto.setPiso(aula.getPiso());
         dto.setDescripcion(aula.getDescripcion());
         dto.setActivo(aula.getActivo());
+        dto.setTaller(aula.getTaller());
         if (aula.getSemestre() != null) {
             dto.setSemestreId(aula.getSemestre().getSemestreId());
             dto.setSemestreNombre(aula.getSemestre().getNombre());

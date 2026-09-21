@@ -71,7 +71,7 @@ public class ArchivoServicio {
      * Guarda una imagen y devuelve su URL pública.
      * Lanza NegocioExcepcion si el archivo no es una imagen permitida.
      */
-    public String guardarArchivo(MultipartFile archivo) throws IOException {
+    public String guardarArchivo(MultipartFile archivo, String prefijo) throws IOException {
         if (archivo == null || archivo.isEmpty()) {
             return null;
         }
@@ -95,7 +95,8 @@ public class ArchivoServicio {
 
         // 3) Nombre generado solo por el servidor
         String extension = EXTENSION_POR_FORMATO.get(formato);
-        String nombreArchivo = "maestro_"
+        String prefijoLimpio = (prefijo == null || prefijo.isBlank()) ? "archivo_" : prefijo;
+        String nombreArchivo = prefijoLimpio
                 + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
                 + "_" + UUID.randomUUID().toString().substring(0, 8)
                 + "." + extension;

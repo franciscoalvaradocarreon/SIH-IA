@@ -1,12 +1,8 @@
 package mx.sih.modelo.entidad;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
-
 import java.time.LocalDateTime;
 
 @Entity
@@ -42,6 +38,9 @@ public class Horario {
     @JoinColumn(name = "aula_id", nullable = false)
     private Aula aula;
 
+    @Column(name = "maestro_id", nullable = false)
+    private Long maestroId;
+
     @CreationTimestamp
     @Column(name = "creado", updatable = false)
     private LocalDateTime creado;
@@ -49,7 +48,6 @@ public class Horario {
     @Column(name = "version")
     private Integer version = 1;
 
-    // 🔥 NUEVO CAMPO: Semestre
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "semestre_id", nullable = false)
     private Semestre semestre;

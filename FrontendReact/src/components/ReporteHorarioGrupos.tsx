@@ -1,29 +1,27 @@
-// src/components/ReporteHorariosGrupos.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { horarioService } from '../api/horarioService';
 import { grupoService } from '../api/grupoService';
 import { turnoService } from '../api/turnoService';
+import { turnoHorarioService } from '../api/turnoHorarioService';
 import { useAuth } from '../context/AuthContext';
-import type { Horario, Grupo, Turno } from '../types';
+import type { Horario, Grupo, Turno, TurnoHorario } from '../types';
 import {
-  MdPrint, MdPictureAsPdf, MdGridOn, MdRefresh, MdSchedule, MdWarning
+  MdPrint, MdPictureAsPdf, MdGridOn, MdRefresh, MdSchedule, MdWarning,
 } from 'react-icons/md';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
+import FilaBloqueHorario from '../components/FilaBloqueHorario';
+import {
+  DIAS_SEMANA,
+  construirBloquesFilas,
+  extraerLista,
+  formatearHora as formatHoraUtil,
+  indexarHorarios,
+} from '../utils/horarioUtils';
 
-const DIAS_SEMANA = [
-  { value: 1, label: 'Lunes', short: 'Lun' },
-  { value: 2, label: 'Martes', short: 'Mar' },
-  { value: 3, label: 'Miércoles', short: 'Mié' },
-  { value: 4, label: 'Jueves', short: 'Jue' },
-  { value: 5, label: 'Viernes', short: 'Vie' },
-];
-
-interface BloqueHorario {
-  horaInicio: string;
-  horaFin: string;
-}
+// Adaptador local para mantener el nombre que ya usaba el archivo
+const formatHora = (hora: string) => formatHoraUtil(hora);
 
 interface MateriaResumen {
   asignacionId: number;
@@ -38,8 +36,10 @@ interface MateriaResumen {
 interface GrupoConHorario {
   grupo: Grupo;
   horarios: Horario[];
-  bloques: BloqueHorario[];
+  bloquesFilas: TurnoHorario[];              // filas de la matriz (únicas por horaInicio)
+  horarioIndex: Map<string, Horario[]>;      // 🔥 agrupado, detecta solapamientos
   materias: MateriaResumen[];
+  solapamientos: number;                     // bloques con más de 1 horario
 }
 
 const ReporteHorariosGrupos: React.FC = () => {
@@ -49,11 +49,13 @@ const ReporteHorariosGrupos: React.FC = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<number>(0);
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [horarios, setHorarios] = useState<Horario[]>([]);
+  const [bloquesPorTurno, setBloquesPorTurno] = useState<Map<number, TurnoHorario[]>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (semestreActivo?.id) cargarTodo();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [semestreActivo?.id]);
 
   const cargarTodo = async () => {
@@ -61,14 +63,39 @@ const ReporteHorariosGrupos: React.FC = () => {
     setError('');
     try {
       const semestreId = semestreActivo!.id;
+
+      // 1. Catálogos base en paralelo
       const [turnosRes, gruposRes, horariosRes] = await Promise.all([
         turnoService.listar(0, 100, '', semestreId),
         grupoService.listar(0, 100, '', 0, semestreId),
         horarioService.obtenerTodos(semestreId),
       ]);
-      setTurnos(turnosRes.data.content.filter((t: Turno) => t.activo === true));
-      setGrupos(gruposRes.data.content.filter((g: Grupo) => g.activo));
+
+      const turnosActivos = turnosRes.data.content.filter((t: Turno) => t.activo === true);
+      const gruposActivos = gruposRes.data.content.filter((g: Grupo) => g.activo);
+
+      setTurnos(turnosActivos);
+      setGrupos(gruposActivos);
       setHorarios(horariosRes.data);
+
+      // 2. Bloques del turno, deduplicando turnos para no repetir llamadas
+      const turnosUnicos = Array.from(
+        new Set(gruposActivos.map((g: Grupo) => g.turnoId).filter((id): id is number => !!id))
+      );
+
+      const bloquesMap = new Map<number, TurnoHorario[]>();
+      await Promise.all(
+        turnosUnicos.map(async (tId) => {
+          try {
+            const res = await turnoHorarioService.listar(tId, semestreId);
+            bloquesMap.set(tId, extraerLista<TurnoHorario>(res));
+          } catch (e) {
+            console.error(`Error al cargar bloques del turno ${tId}:`, e);
+            bloquesMap.set(tId, []);
+          }
+        })
+      );
+      setBloquesPorTurno(bloquesMap);
     } catch (err) {
       console.error('Error al cargar datos del reporte:', err);
       setError('Error al cargar los datos del reporte');
@@ -77,7 +104,7 @@ const ReporteHorariosGrupos: React.FC = () => {
     }
   };
 
-  // Construir estructura: por cada grupo, sus horarios + bloques únicos + materias resumen
+  // Construir estructura: por cada grupo, sus horarios + bloques del turno + materias resumen
   const gruposConHorario: GrupoConHorario[] = useMemo(() => {
     const gruposFiltrados = turnoSeleccionado > 0
       ? grupos.filter(g => g.turnoId === turnoSeleccionado)
@@ -94,14 +121,17 @@ const ReporteHorariosGrupos: React.FC = () => {
       const hs = horariosPorGrupo.get(grupo.id) || [];
       if (hs.length === 0) return;
 
-      // Bloques horarios únicos ordenados
-      const bloquesMap = new Map<string, string>();
-      hs.forEach(h => bloquesMap.set(h.horaInicio, h.horaFin));
-      const bloques: BloqueHorario[] = Array.from(bloquesMap.entries())
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([horaInicio, horaFin]) => ({ horaInicio, horaFin }));
+      const bloquesDelTurno = grupo.turnoId ? (bloquesPorTurno.get(grupo.turnoId) ?? []) : [];
+      const bloquesFilas = construirBloquesFilas(bloquesDelTurno);
+      const horarioIndex = indexarHorarios(hs);
 
-      // 🔥 Resumen de materias y maestros
+      // Contar solapamientos (bloques con más de 1 horario)
+      let solapamientos = 0;
+      for (const arr of horarioIndex.values()) {
+        if (arr.length > 1) solapamientos++;
+      }
+
+      // Resumen de materias y maestros
       const materiasMap = new Map<number, MateriaResumen>();
       hs.forEach(h => {
         const id = h.asignacionId;
@@ -122,7 +152,7 @@ const ReporteHorariosGrupos: React.FC = () => {
       const materias: MateriaResumen[] = Array.from(materiasMap.values())
         .sort((a, b) => a.materiaNombre.localeCompare(b.materiaNombre));
 
-      resultado.push({ grupo, horarios: hs, bloques, materias });
+      resultado.push({ grupo, horarios: hs, bloquesFilas, horarioIndex, materias, solapamientos });
     });
 
     resultado.sort((a, b) => {
@@ -131,12 +161,7 @@ const ReporteHorariosGrupos: React.FC = () => {
     });
 
     return resultado;
-  }, [grupos, horarios, turnoSeleccionado]);
-
-  const getHorario = (hs: Horario[], dia: number, horaInicio: string) =>
-    hs.find(h => h.diaSemana === dia && h.horaInicio === horaInicio);
-
-  const formatHora = (hora: string) => hora.substring(0, 5);
+  }, [grupos, horarios, turnoSeleccionado, bloquesPorTurno]);
 
   const getNombreEspecialidad = (grupo: Grupo): string => {
     if (!grupo.especialidad) return '';
@@ -144,6 +169,9 @@ const ReporteHorariosGrupos: React.FC = () => {
       ? grupo.especialidad
       : grupo.especialidad.nombre || '';
   };
+
+  const getNombreDia = (dia: number) =>
+    DIAS_SEMANA.find(d => d.value === dia)?.label || '';
 
   // ============================================================
   // IMPRIMIR
@@ -153,7 +181,7 @@ const ReporteHorariosGrupos: React.FC = () => {
   };
 
   // ============================================================
-  // PDF
+  // PDF — misma estructura que la vista, con descansos fusionados
   // ============================================================
   const handlePDF = () => {
     if (gruposConHorario.length === 0) {
@@ -167,77 +195,92 @@ const ReporteHorariosGrupos: React.FC = () => {
     const marginX = 12;
 
     gruposConHorario.forEach((g) => {
-
-
-      // Encabezado del PDF
-
-      // Línea 1: nombre largo de la escuela, centrado
+      // ── Encabezado ──
       doc.setFontSize(17);
       doc.setFont('helvetica', 'bold');
       const nombreLargoRaw = escuelaActiva?.nombreLargo || escuelaActiva?.nombre || 'Reporte de Horarios';
-      // Dividir el nombre en líneas según el ancho disponible
-      const anchoMaximo = pageWidth - marginX * 5;   // dejamos margen extra
+      const anchoMaximo = pageWidth - marginX * 5;
       const lineasNombre: string[] = doc.splitTextToSize(nombreLargoRaw, anchoMaximo);
-
-      // Tomamos como máximo 2 líneas para no inflar el encabezado
       const lineasVisibles = lineasNombre.slice(0, 2);
 
-      // Alturas dinámicas
-      const lineHeight = 8;              // mm por línea del nombre
+      const lineHeight = 8;
       const altoNombre = lineasVisibles.length * lineHeight;
-      const headerHeight = 15 + altoNombre + 3;  // 12 arriba + nombre + 8 para la línea 2
+      const headerHeight = 15 + altoNombre + 3;
 
       doc.setFillColor(255, 255, 255);
       doc.rect(0, 0, pageWidth, headerHeight, 'F');
       doc.setTextColor(0, 0, 0);
 
-      // Dibujar las líneas del nombre, centradas
       lineasVisibles.forEach((linea, i) => {
         doc.text(linea, pageWidth / 2, 9 + i * lineHeight, { align: 'center' });
       });
-      // Línea 2: título a la izquierda + info a la derecha
+
       doc.setFontSize(16);
       doc.setFont('helvetica', 'normal');
-      doc.text(
-        `Semestre ${semestreActivo?.nombre || ''}`,
-        pageWidth / 2, 24, { align: 'center' }
-      );
-    
+      doc.text(`Semestre ${semestreActivo?.nombre || ''}`, pageWidth / 2, 24, { align: 'center' });
+
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('Reporte de Horarios por Grupo',pageWidth / 2, 30, {align: 'center'});
+      doc.text('Reporte de Horarios por Grupo', pageWidth / 2, 32, { align: 'center' });
 
-      // Y desplazamos el contenido hacia abajo para no pisar el encabezado ampliado
-      let y = headerHeight + 4;
+      let y = headerHeight + 5;
       doc.setTextColor(0, 0, 0);
 
       const titulo =
         `${g.grupo.nombre} — ${g.grupo.turno || ''}` +
         (getNombreEspecialidad(g.grupo) ? ` · ${getNombreEspecialidad(g.grupo)}` : '');
 
-      // Salto de página si no hay espacio para el título + tabla
       if (y > pageHeight - 60) {
         doc.addPage();
         y = 20;
       }
 
-      // Barra de título del grupo
-      doc.setFillColor(240, 244, 250);
+      doc.setFillColor(255, 255, 255);
       doc.rect(marginX, y - 5, pageWidth - marginX * 2, 8, 'F');
       doc.setFontSize(11);
       doc.setFont('helvetica', 'bold');
       doc.text(titulo, marginX + 2, y);
-      y += 6;
+      y += 3;
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
 
-      // Tabla matriz de horario
+      // ── Tabla matriz ──
       const head = [['Hora', ...DIAS_SEMANA.map(d => d.label)]];
-      const body = g.bloques.map(b => {
-        const fila: string[] = [`${formatHora(b.horaInicio)} - ${formatHora(b.horaFin)}`];
+      const body: any[][] = g.bloquesFilas.map(b => {
+        const horaTexto = `${formatHora(b.horaInicio)} - ${formatHora(b.horaFin)}`;
+
+        // 🔥 Descanso: una sola fila con colSpan sobre las columnas de días
+        if (b.descanso) {
+          return [
+            horaTexto,
+            {
+              content: 'D   E   S   C   A   N   S   O',
+              colSpan: DIAS_SEMANA.length,
+              styles: {
+                halign: 'center',
+                fontStyle: 'italic',
+                fontSize: 14,
+                textColor: [0, 0, 0],
+                fillColor: [255, 255, 255],
+              },
+            },
+          ];
+        }
+
+        // Fila normal: buscar en el índice por (día + horaInicio)
+        const fila: string[] = [horaTexto];
         DIAS_SEMANA.forEach(dia => {
-          const h = getHorario(g.horarios, dia.value, b.horaInicio);
-          fila.push(h ? `${h.materiaClave}\n${h.aulaNombre}` : '—');
+          const arr = g.horarioIndex.get(`${dia.value}|${formatHora(b.horaInicio)}`) ?? [];
+          if (arr.length === 0) {
+            fila.push('—');
+          } else if (arr.length === 1) {
+            const h = arr[0];
+            fila.push(`${h.materiaClave}\n${h.aulaNombre}`);
+          } else {
+            // Solapamiento: avisar en la celda
+            const lineas = arr.map(h => `${h.materiaClave} · ${h.aulaNombre}`).join('\n');
+            fila.push(`⚠️ ${arr.length} solapadas\n${lineas}`);
+          }
         });
         return fila;
       });
@@ -254,29 +297,29 @@ const ReporteHorariosGrupos: React.FC = () => {
           halign: 'center',
           lineColor: [0, 0, 0],
           lineWidth: 0.5,
-          textColor: 0,                       // 🔥 texto negro
-          fillColor: [255, 255, 255],         // fondo base blanco
+          textColor: 0,
+          fillColor: [255, 255, 255],
         },
         headStyles: {
-          fillColor: [240, 244, 250],         // 🔥 gris claro
-          textColor: 0,                        // 🔥 negro
+          fillColor: [240, 244, 250],
+          textColor: 0,
           fontStyle: 'bold',
           halign: 'center',
         },
         alternateRowStyles: {
-          fillColor: [250, 250, 252],         // 🔥 alterno casi blanco
+          fillColor: [250, 250, 252],
         },
         columnStyles: {
           0: {
-            cellWidth: 15,
+            cellWidth: 20,
             fontStyle: 'bold',
-            fillColor: [235, 235, 240],       // 🔥 gris claro
-            textColor: 0,                      // 🔥 negro
+            fillColor: [235, 235, 240],
+            textColor: 0,
           },
         },
       });
 
-      // 🔥 Tabla de materias y maestros
+      // ── Tabla materias/maestros ──
       y = (doc as any).lastAutoTable.finalY + 7;
 
       if (y > pageHeight - 40) {
@@ -293,9 +336,9 @@ const ReporteHorariosGrupos: React.FC = () => {
       y += 2;
 
       const totalHoras = g.materias.reduce((s, m) => s + m.horas, 0);
-      console.log('Horas : '+ g.materias.reduce((s, m) => s + m.horas, 0))
+
       autoTable(doc, {
-        head: [[ 'MATERIA', 'MAESTRO', 'AULA', 'HORAS']],
+        head: [['MATERIA', 'MAESTRO', 'AULA', 'HORAS']],
         body: [
           ...g.materias.map(m => [
             m.materiaNombre,
@@ -306,11 +349,11 @@ const ReporteHorariosGrupos: React.FC = () => {
           [
             {
               content: 'Total de horas',
-              colSpan: 4,
+              colSpan: 3,
               styles: { halign: 'right', fontStyle: 'bold' },
             },
             {
-              content: String('Horas'+ totalHoras),
+              content: String(totalHoras),
               styles: { halign: 'center', fontStyle: 'bold' },
             },
           ],
@@ -318,23 +361,23 @@ const ReporteHorariosGrupos: React.FC = () => {
         startY: y,
         margin: { left: marginX, right: marginX },
         styles: {
-          fontSize: 9.5,
+          fontSize: 9,
           cellPadding: 1.8,
           valign: 'middle',
           lineColor: [0, 0, 0],
           lineWidth: 0.3,
-          textColor: 0,                       // 🔥 texto negro
-          fillColor: [255, 255, 255],         // 🔥 fondo blanco
+          textColor: 0,
+          fillColor: [255, 255, 255],
         },
         headStyles: {
-          fillColor: [230, 230, 235],         // 🔥 gris claro
-          textColor: 0,                        // 🔥 negro
+          fillColor: [230, 230, 235],
+          textColor: 0,
           fontStyle: 'bold',
           halign: 'left',
         },
         columnStyles: {
-          0: { cellWidth: 90 },
-          1: { cellWidth: 60 },
+          0: { cellWidth: 85 },
+          1: { cellWidth: 65 },
           2: { cellWidth: 25, halign: 'center' },
           3: { cellWidth: 16, halign: 'center' },
         },
@@ -345,10 +388,9 @@ const ReporteHorariosGrupos: React.FC = () => {
 
       y = (doc as any).lastAutoTable.finalY + 12;
 
-
-
       doc.addPage();
     });
+
     // Pie de página
     const totalPages = doc.getNumberOfPages();
     for (let i = 1; i <= totalPages; i++) {
@@ -361,19 +403,15 @@ const ReporteHorariosGrupos: React.FC = () => {
         pageHeight - 5,
         { align: 'right' }
       );
-      doc.text(
-        new Date().toLocaleDateString('es-MX'),
-        marginX,
-        pageHeight - 5
-      );
+      doc.text(new Date().toLocaleDateString('es-MX'), marginX, pageHeight - 5);
       doc.setTextColor(0);
     }
-  
+
     doc.save(`horarios-grupos-${semestreActivo?.nombre || 'semestre'}.pdf`);
   };
 
   // ============================================================
-  // EXCEL
+  // EXCEL — sin cambios (mismas 3 hojas)
   // ============================================================
   const handleExcel = () => {
     if (gruposConHorario.length === 0) {
@@ -383,7 +421,7 @@ const ReporteHorariosGrupos: React.FC = () => {
 
     const wb = XLSX.utils.book_new();
 
-    // --- Hoja 1: Resumen ---
+    // Hoja 1: Resumen
     const resumenData: any[][] = [
       ['Reporte de Horarios por Grupo'],
       [`Escuela: ${escuelaActiva?.nombre || ''}`],
@@ -391,7 +429,7 @@ const ReporteHorariosGrupos: React.FC = () => {
       [
         turnoSeleccionado > 0
           ? `Turno: ${turnos.find(t => t.id === turnoSeleccionado)?.nombre || ''}`
-          : 'Turno: Todos'
+          : 'Turno: Todos',
       ],
       [`Fecha de generación: ${new Date().toLocaleString('es-MX')}`],
       [],
@@ -417,7 +455,7 @@ const ReporteHorariosGrupos: React.FC = () => {
     ];
     XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
 
-    // --- Hoja 2: Materias y maestros ---
+    // Hoja 2: Materias y maestros
     const materiasData: any[][] = [
       ['Grupo', 'Grado', 'Turno', 'Clave', 'Materia', 'Maestro', 'Aula', 'Horas/semana'],
     ];
@@ -444,7 +482,7 @@ const ReporteHorariosGrupos: React.FC = () => {
     ];
     XLSX.utils.book_append_sheet(wb, wsMaterias, 'Materias y maestros');
 
-    // --- Hoja 3: Detalle de clases ---
+    // Hoja 3: Detalle de clases
     const detalleData: any[][] = [
       ['Grupo', 'Grado', 'Turno', 'Especialidad', 'Día', 'Hora inicio', 'Hora fin', 'Materia', 'Clave', 'Maestro', 'Aula'],
     ];
@@ -457,13 +495,12 @@ const ReporteHorariosGrupos: React.FC = () => {
           return a.horaInicio.localeCompare(b.horaInicio);
         })
         .forEach(h => {
-          const dia = DIAS_SEMANA.find(d => d.value === h.diaSemana)?.label || '';
           detalleData.push([
             g.grupo.nombre,
             g.grupo.grado,
             g.grupo.turno || '',
             getNombreEspecialidad(g.grupo),
-            dia,
+            getNombreDia(h.diaSemana),
             formatHora(h.horaInicio),
             formatHora(h.horaFin),
             h.materiaNombre,
@@ -579,7 +616,7 @@ const ReporteHorariosGrupos: React.FC = () => {
         </div>
 
         {/* Filtro por turno */}
-        <div className="no-print bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-100 dark:border-gray-700">
+        <div className="no-print bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-400 dark:border-gray-700">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
               <MdSchedule className="inline mr-1" />
@@ -589,7 +626,7 @@ const ReporteHorariosGrupos: React.FC = () => {
               value={turnoSeleccionado}
               onChange={(e) => setTurnoSeleccionado(Number(e.target.value))}
               disabled={loading}
-              className="w-full sm:max-w-md px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+              className="w-full sm:max-w-md px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value={0}>Todos los turnos</option>
               {turnos.map(t => (
@@ -642,81 +679,57 @@ const ReporteHorariosGrupos: React.FC = () => {
             {gruposConHorario.map(g => (
               <div
                 key={g.grupo.id}
-                className="grupo-reporte bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-200 dark:border-gray-700"
+                className="grupo-reporte bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700"
               >
                 {/* Header */}
-                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-bold text-lg text-gray-800 dark:text-white">
-                    {g.grupo.nombre} — {g.grupo.turno || ''}
-                    {g.grupo.especialidad && (
-                      <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
-                        · {getNombreEspecialidad(g.grupo)}
+                <div className="px-4 py-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="font-bold text-lg text-gray-800 dark:text-white">
+                      {g.grupo.nombre} — {g.grupo.turno || ''}
+                      {g.grupo.especialidad && (
+                        <span className="ml-2 text-sm font-normal text-gray-500 dark:text-gray-400">
+                          · {getNombreEspecialidad(g.grupo)}
+                        </span>
+                      )}
+                    </h3>
+                    {g.solapamientos > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-500">
+                        <MdWarning className="text-sm" />
+                        {g.solapamientos} solapamiento(s)
                       </span>
                     )}
-                  </h3>
+                  </div>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
                     {g.horarios.length} clases
                   </span>
                 </div>
 
-                {/* Matriz de horario */}
+                {/* 🔥 Matriz: misma estructura que HorarioView */}
                 <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm border-collapse">
-                    <thead className="bg-gray-100 dark:bg-gray-700/50">
+                  <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
+                    <thead className="bg-gray-50 dark:bg-gray-700/50">
                       <tr>
-                        <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                           Hora
                         </th>
-                        {DIAS_SEMANA.map(d => (
+                        {DIAS_SEMANA.map(dia => (
                           <th
-                            key={d.value}
-                            className="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                            key={dia.value}
+                            className="px-3 py-2 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider"
                           >
-                            {d.label}
+                            {dia.label}
                           </th>
                         ))}
                       </tr>
                     </thead>
-                    <tbody>
-                      {g.bloques.map((b, idx) => (
-                        <tr
-                          key={idx}
-                          className={idx % 2 === 0
-                            ? 'bg-white dark:bg-gray-800'
-                            : 'bg-gray-50 dark:bg-gray-800/50'}
-                        >
-                          <td className="px-3 py-2 whitespace-nowrap font-mono text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
-                            {formatHora(b.horaInicio)} - {formatHora(b.horaFin)}
-                          </td>
-                          {DIAS_SEMANA.map(d => {
-                            const h = getHorario(g.horarios, d.value, b.horaInicio);
-                            return (
-                              <td
-                                key={d.value}
-                                className="px-2 py-2 text-center border border-gray-200 dark:border-gray-700 align-middle"
-                              >
-                                {h ? (
-                                  <div
-                                    className="rounded-md px-2 py-1 border-2"
-                                    style={{
-                                      borderColor: h.colorHex || '#3b82f6',
-                                      backgroundColor: `${h.colorHex || '#3b82f6'}15`,
-                                    }}
-                                  >
-                                    <div className="font-bold text-base text-gray-800 dark:text-white text-xs">
-                                      {h.materiaClave}
-                                    </div>
-                                    <div className="text-[15px] text-gray-500 dark:text-gray-400">
-                                      {h.aulaNombre}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-gray-300 dark:text-gray-600">—</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
+                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-400 dark:divide-gray-700">
+                      {g.bloquesFilas.map((bloque) => (
+                        <FilaBloqueHorario
+                          key={bloque.id}
+                          bloque={bloque}
+                          horarioIndex={g.horarioIndex}
+                          variante="grupo"
+                        />
                       ))}
                     </tbody>
                   </table>
@@ -724,7 +737,7 @@ const ReporteHorariosGrupos: React.FC = () => {
 
                 {/* 🔥 Tabla de materias y maestros */}
                 {g.materias.length > 0 && (
-                  <div className="border-t-2 border-gray-200 dark:border-gray-700 px-4 py-4 bg-gray-50/50 dark:bg-gray-800/50">
+                  <div className="border-t-2 border-gray-400 dark:border-gray-700 px-4 py-4 bg-gray-50/50 dark:bg-gray-800/50">
                     <h4 className="text-sm font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-3">
                       Materias y maestros asignados
                     </h4>
@@ -732,19 +745,19 @@ const ReporteHorariosGrupos: React.FC = () => {
                       <table className="min-w-full text-sm border-collapse">
                         <thead className="bg-gray-100 dark:bg-gray-700/50">
                           <tr>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                               Clave
                             </th>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                               Materia
                             </th>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                               Maestro
                             </th>
-                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            <th className="px-3 py-2 text-left font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                               Aula
                             </th>
-                            <th className="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                            <th className="px-3 py-2 text-center font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                               Horas/sem
                             </th>
                           </tr>
@@ -757,7 +770,7 @@ const ReporteHorariosGrupos: React.FC = () => {
                                 ? 'bg-white dark:bg-gray-800'
                                 : 'bg-gray-50 dark:bg-gray-800/50'}
                             >
-                              <td className="px-3 py-2 whitespace-nowrap border border-gray-200 dark:border-gray-700">
+                              <td className="px-3 py-2 whitespace-nowrap border border-gray-400 dark:border-gray-700">
                                 <div className="flex items-center gap-2">
                                   <div
                                     className="w-3 h-3 rounded-full flex-shrink-0"
@@ -768,29 +781,28 @@ const ReporteHorariosGrupos: React.FC = () => {
                                   </span>
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                                 {m.materiaNombre}
                               </td>
-                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                                 {m.maestroNombre}
                               </td>
-                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
+                              <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
                                 {m.aulaNombre}
                               </td>
-                              <td className="px-3 py-2 text-center font-semibold text-indigo-700 dark:text-indigo-300 border border-gray-200 dark:border-gray-700">
+                              <td className="px-3 py-2 text-center font-semibold text-indigo-700 dark:text-indigo-300 border border-gray-400 dark:border-gray-700">
                                 {m.horas}
                               </td>
                             </tr>
                           ))}
-                          {/* Fila de total */}
                           <tr className="bg-indigo-50 dark:bg-indigo-900/20 font-semibold">
                             <td
                               colSpan={4}
-                              className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700"
+                              className="px-3 py-2 text-right text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700"
                             >
                               Total de horas
                             </td>
-                            <td className="px-3 py-2 text-center text-indigo-700 dark:text-indigo-300 border border-gray-200 dark:border-gray-700">
+                            <td className="px-3 py-2 text-center text-indigo-700 dark:text-indigo-300 border border-gray-400 dark:border-gray-700">
                               {g.materias.reduce((sum, m) => sum + m.horas, 0)}
                             </td>
                           </tr>
