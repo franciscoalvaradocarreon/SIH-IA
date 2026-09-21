@@ -31,6 +31,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # OJO con esto: la VM de Oracle es ARM (aarch64) y el runner de GitHub es
+      # x86_64. Sin emulacion, 'docker build' produce una imagen SOLO para amd64,
+      # y el servidor falla al descargarla con:
+      #   "no matching manifest for linux/arm64/v8 in the manifest list entries"
+      # QEMU permite construir la variante ARM desde el runner x86.
+      - name: Emulacion ARM
+        uses: docker/setup-qemu-action@v3
+
       - uses: docker/setup-buildx-action@v3
 
       - name: Entrar en GHCR
@@ -58,6 +66,9 @@ jobs:
         with:
           context: .
           push: true
+          # Multi-arquitectura: la VM ARM descarga su variante y cualquier
+          # maquina x86 descarga la suya, del MISMO tag.
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Estos tres valores son los que devuelve GET /api/version.
