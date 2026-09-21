@@ -18,15 +18,18 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
 
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
+# Del .env solo se leen el nombre de la base y el usuario (ver la explicacion
+# completa en db/respaldar.sh: hacer 'source' rompe docker compose si el archivo
+# tiene finales de linea de Windows).
+leer_env() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'; }
+
+if [ ! -f .env ]; then
+  echo "ERROR: falta el archivo .env en $RAIZ"
+  exit 1
 fi
 
-USUARIO="${DB_USER:-User_app}"
-BASE="${DB_NAME:-SIH}"
+USUARIO="$(leer_env DB_USER)"; USUARIO="${USUARIO:-User_app}"
+BASE="$(leer_env DB_NAME)";    BASE="${BASE:-SIH}"
 PRUEBA="sih_prueba_restauracion"
 
 # Si no se indica archivo, se toma el mas reciente.

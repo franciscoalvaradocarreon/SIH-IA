@@ -26,18 +26,25 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$RAIZ"
 
-# Los secretos y el nombre de la base salen del .env del despliegue.
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
+# Del .env solo se leen el nombre de la base y el usuario.
+#
+# OJO: aqui NO se hace 'source .env'. Motivo real, nos paso en el despliegue: si
+# el .env llega con finales de linea de Windows (CRLF), 'source' deja un \r
+# pegado al valor, y como las variables del entorno tienen prioridad sobre el
+# .env, docker compose aborta con "invalid hostPort: 80" (el puerto del host
+# queda como "80\r"). Leyendo solo lo necesario con 'tr -d "\r"', y sin exportar
+# nada, docker compose lee el .env por su cuenta y lo interpreta bien.
+leer_env() { grep -E "^$1=" .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '\r'; }
+
+if [ ! -f .env ]; then
+  echo "ERROR: falta el archivo .env en $RAIZ"
+  exit 1
 fi
 
 DESTINO="${1:-$HOME/respaldos}"
 RETENER="${RETENER:-14}"
-BASE="${DB_NAME:-SIH}"
-USUARIO="${DB_USER:-User_app}"
+BASE="$(leer_env DB_NAME)";    BASE="${BASE:-SIH}"
+USUARIO="$(leer_env DB_USER)"; USUARIO="${USUARIO:-User_app}"
 
 mkdir -p "$DESTINO"
 SELLO="$(date +%Y%m%d-%H%M%S)"

@@ -56,6 +56,15 @@ services:
   # Aplicacion Spring Boot (el WAR lleva el front de React dentro)
   # --------------------------------------------------------------------------
   app:
+    # Nombre de la imagen que se ejecuta.
+    #   En local (tu PC): IMAGEN_APP no esta definida -> se construye como
+    #   'sih-ia:local' con el 'build' de abajo.
+    #   En el servidor: IMAGEN_APP apunta a la imagen que publica el pipeline en
+    #   GitHub Container Registry, y se despliega sin compilar:
+    #       docker compose pull app && docker compose up -d --no-build
+    #   El --no-build es la clave: evita compilar en la VM (baja el requisito de
+    #   RAM) y convierte el despliegue en segundos en vez de minutos.
+    image: "${IMAGEN_APP:-sih-ia:local}"
     build:
       context: .
       dockerfile: Dockerfile
