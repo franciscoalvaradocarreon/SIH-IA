@@ -131,17 +131,27 @@ jobs:
         run: |
           set -euo pipefail
           Q="INSERT INTO sih.horario (escuela_id, grupo_id, asignacion_id, turno_horario_id, aula_id, version, semestre_id, maestro_id) VALUES"
-          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -c "BEGIN; SET session_replication_role = replica; $Q (1, 777777, 1, 888888, 1, 1, 1, 1); ROLLBACK;"
+          P="psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -c"
 
-          if psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -c "SET session_replication_role = replica; $Q (1, 777777, 2, 888888, 2, 1, 1, 2);" 2>/tmp/err.txt; then
+          # La fila base DEBE quedar escrita (SIN ROLLBACK). La primera version de
+          # esta prueba la revertia, asi que el segundo INSERT no encontraba
+          # ningun conflicto y la prueba pasaba en falso (lo detecto el propio CI).
+          $P "SET session_replication_role = replica; $Q (1, 777777, 1, 888888, 1, 1, 1, 1);"
+
+          # El duplicado DEBE ser rechazado.
+          if $P "SET session_replication_role = replica; $Q (1, 777777, 2, 888888, 2, 1, 1, 2);" 2>/tmp/err.txt; then
             echo "::error::El indice no rechazo un solape: la red de seguridad no funciona."
             exit 1
           fi
+
           if grep -q 'no_solape_grupo_bloque' /tmp/err.txt; then
             echo "OK: el solape fue rechazado por no_solape_grupo_bloque"
           else
             echo "::error::Fallo por un motivo inesperado:"; cat /tmp/err.txt; exit 1
           fi
+
+          # Limpieza: no dejar rastro en la base de CI.
+          $P "SET session_replication_role = replica; DELETE FROM sih.horario WHERE grupo_id = 777777;"
 
   # --------------------------------------------------------------------------
   # Imagen Docker: si el Dockerfile se rompe, el despliegue no existe.
