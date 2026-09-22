@@ -1,0 +1,82 @@
+name: CD (desplegar en el servidor)
+
+# Se dispara cuando el workflow de Release termina BIEN. Asi, el orden es:
+#   1. Creas el tag           -> git push origin v1.0.2
+#   2. Release construye la imagen y la publica en GHCR
+#   3. Este workflow entra por SSH, descarga la imagen y reinicia la aplicacion
+#   4. Verifica que la version en produccion es EXACTAMENTE la publicada
+#
+# Si el Release falla, esto no se ejecuta: nunca se despliega una imagen que no
+# se construyo correctamente.
+on:
+  workflow_run:
+    workflows: [ "Release (imagen en GHCR + WAR)" ]
+    types: [ completed ]
+  # Permite lanzarlo a mano desde la pestana Actions (util para probarlo).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desplegar:
+    name: Desplegar en Oracle
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    steps:
+
+      - name: Preparar la clave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          # printf (no echo) para garantizar el salto de linea final que OpenSSH
+          # exige en una clave privada; sin el, la clave se rechaza.
+          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Desplegar y verificar la version
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          USER: ${{ secrets.SSH_USER }}
+          # El tag publicado (por ejemplo v1.0.2). Con workflow_dispatch no existe,
+          # y entonces solo se comprueba que el servicio responda.
+          ESPERADA: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 $USER@$HOST"
+
+          echo "=== 1) Actualizar el repositorio y traer la imagen ==="
+          $SSH "cd ~/SIH-IA && git pull && docker compose pull app"
+
+          echo "=== 2) Reiniciar SOLO la aplicacion (la base y los uploads no se tocan) ==="
+          $SSH "cd ~/SIH-IA && docker compose up -d --no-build app"
+
+          echo "=== 3) Verificar que responde la version publicada ==="
+          # La aplicacion tarda ~20 s en arrancar: se reintenta hasta 2 minutos.
+          for intento in $(seq 1 12); do
+            sleep 10
+            VERSION="$($SSH 'curl -s http://127.0.0.1/api/version' || true)"
+            echo "  intento $intento: $VERSION"
+
+            if [ -z "$ESPERADA" ]; then
+              # Lanzado a mano: basta con que el servicio este sano.
+              echo "$VERSION" | grep -q '"estado":"ok"' && { echo "OK: el servicio responde"; exit 0; }
+            else
+              # Despliegue por tag: la version en produccion debe ser la publicada.
+              echo "$VERSION" | grep -q "\"version\":\"$ESPERADA\"" && { echo "OK: $ESPERADA esta en produccion"; exit 0; }
+            fi
+          done
+
+          echo "::error::La version desplegada no coincide con $ESPERADA tras 2 minutos."
+          echo "--- estado de los contenedores ---"
+          $SSH "cd ~/SIH-IA && docker compose ps"
+          echo "--- ultimas lineas del log de la aplicacion ---"
+          $SSH "cd ~/SIH-IA && docker compose logs app --tail 30"
+          exit 1
+
+      - name: Resumen
+        if: always()
+        run: |
+          echo "### Despliegue" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version publicada: \`${{ github.event.workflow_run.head_branch }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Servidor: \`${{ secrets.SSH_HOST }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Estado: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
