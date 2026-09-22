@@ -33,28 +33,70 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
 
+      - name: Verificar que la clave es valida
+        run: |
+          # ssh-keygen -y extrae la clave publica, asi que falla si la privada esta
+          # corrupta o le faltan las lineas BEGIN/END. Sin este paso, un secreto mal
+          # pegado se manifiesta mas tarde como un "Permission denied" que despista.
+          if ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null 2>&1; then
+            echo "Clave privada valida. Su huella es:"
+            ssh-keygen -lf ~/.ssh/id_ed25519
+          else
+            echo "::error::El secreto SSH_KEY no contiene una clave privada valida. Debe incluir las lineas -----BEGIN ... KEY----- y -----END ... KEY----- y sus saltos de linea."
+            exit 1
+          fi
+
       - name: Desplegar y verificar la version
         env:
           HOST: ${{ secrets.SSH_HOST }}
-          USER: ${{ secrets.SSH_USER }}
+          # Se llama USUARIO y no USER a proposito: USER es una variable del
+          # sistema en Linux y reutilizar ese nombre es pedir interferencias.
+          USUARIO: ${{ secrets.SSH_USER }}
           # El tag publicado (por ejemplo v1.0.2). Con workflow_dispatch no existe,
           # y entonces solo se comprueba que el servicio responda.
           ESPERADA: ${{ github.event.workflow_run.head_branch }}
         run: |
           set -euo pipefail
-          SSH="ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 $USER@$HOST"
+
+          # Se usa una FUNCION y no una variable con el comando completo: una
+          # variable se expande por palabras, asi que un espacio o un salto de
+          # linea invisible al final de un secreto parte los argumentos y ssh
+          # falla con "unknown option -- -". Con una funcion, cada argumento va
+          # entre comillas y no hay sorpresas.
+          ssh_sih() {
+            ssh -i "$HOME/.ssh/id_ed25519" \
+                -o StrictHostKeyChecking=accept-new \
+                -o BatchMode=yes \
+                -o IdentitiesOnly=yes \
+                -o ConnectTimeout=20 \
+                "$USUARIO@$HOST" "$@"
+          }
+
+          echo "=== 0) Revisar los secretos ==="
+          for nombre in HOST USUARIO; do
+            valor="${!nombre}"
+            printf '  %s: %s caracteres' "$nombre" "${#valor}"
+            case "$valor" in
+              *[[:space:]]*) printf '  <-- AVISO: contiene espacios o saltos de linea\n' ;;
+              *) printf '\n' ;;
+            esac
+          done
+          if [ -z "$HOST" ] || [ -z "$USUARIO" ]; then
+            echo "::error::Faltan los secretos SSH_HOST o SSH_USER."
+            exit 1
+          fi
 
           echo "=== 1) Actualizar el repositorio y traer la imagen ==="
-          $SSH "cd ~/SIH-IA && git pull && docker compose pull app"
+          ssh_sih "cd ~/SIH-IA && git pull && docker compose pull app"
 
           echo "=== 2) Reiniciar SOLO la aplicacion (la base y los uploads no se tocan) ==="
-          $SSH "cd ~/SIH-IA && docker compose up -d --no-build app"
+          ssh_sih "cd ~/SIH-IA && docker compose up -d --no-build app"
 
           echo "=== 3) Verificar que responde la version publicada ==="
           # La aplicacion tarda ~20 s en arrancar: se reintenta hasta 2 minutos.
           for intento in $(seq 1 12); do
             sleep 10
-            VERSION="$($SSH 'curl -s http://127.0.0.1/api/version' || true)"
+            VERSION="$(ssh_sih 'curl -s http://127.0.0.1/api/version' || true)"
             echo "  intento $intento: $VERSION"
 
             if [ -z "$ESPERADA" ]; then
@@ -66,11 +108,11 @@ jobs:
             fi
           done
 
-          echo "::error::La version desplegada no coincide con $ESPERADA tras 2 minutos."
+          echo "::error::La version desplegada no coincide con '$ESPERADA' tras 2 minutos."
           echo "--- estado de los contenedores ---"
-          $SSH "cd ~/SIH-IA && docker compose ps"
+          ssh_sih "cd ~/SIH-IA && docker compose ps" || true
           echo "--- ultimas lineas del log de la aplicacion ---"
-          $SSH "cd ~/SIH-IA && docker compose logs app --tail 30"
+          ssh_sih "cd ~/SIH-IA && docker compose logs app --tail 30" || true
           exit 1
 
       - name: Resumen
@@ -78,5 +120,4 @@ jobs:
         run: |
           echo "### Despliegue" >> "$GITHUB_STEP_SUMMARY"
           echo "- Version publicada: \`${{ github.event.workflow_run.head_branch }}\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Servidor: \`${{ secrets.SSH_HOST }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Estado: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
