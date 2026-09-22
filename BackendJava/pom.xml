@@ -19,6 +19,22 @@
         <java.version>21</java.version>
         <spring-boot.version>3.3.4</spring-boot.version>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring Boot 4 NO incluye el BOM de Testcontainers (comprobado: sin
+                 esto, Maven falla con "dependencies.dependency.version ... is
+                 missing"). Se importa aqui para fijar la version de TODOS sus
+                 artefactos en un solo sitio. -->
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>1.20.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     
     <dependencies>
         <!-- Spring Boot Starter Web -->
@@ -136,10 +152,51 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- ============================================================
+             PRUEBAS con un PostgreSQL 17 REAL (Testcontainers)
+
+             Por que Testcontainers y no H2: produccion usa PostgreSQL y este
+             proyecto depende de cosas que H2 no tiene (esquema 'sih', tipos
+             'char' de pg_constraint, indices UNIQUE parciales...). Una prueba
+             contra H2 no demuestra nada sobre produccion.
+
+             El contenedor carga los MISMOS scripts que el compose
+             (db/esquema.sql y db/02_solape.sql), asi que no hay dos fuentes de
+             verdad que puedan desincronizarse.
+             ============================================================ -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
     
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- Las pruebas cargan el bootstrap de la base desde db/, que esta
+                         un nivel arriba de BackendJava/. Se pasa como propiedad del
+                         sistema para no depender del directorio desde el que se lance
+                         Maven (que cambia entre local y el CI). -->
+                    <systemPropertyVariables>
+                        <sih.db.dir>${project.basedir}/../db</sih.db.dir>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-war-plugin</artifactId>
