@@ -61,8 +61,12 @@ public class HorarioIAControlador {
     public ResponseEntity<ValidacionIADTO> validar(
             @RequestParam(required = false) Long semestreId,
             @RequestParam(required = false) Long turnoId) {
+        Long escuelaId = EscuelaContexto.getEscuelaId();
+        if (escuelaId == null) {
+            throw new NegocioExcepcion("sin_escuela_activa", "No se ha seleccionado una escuela activa");
+        }
         DatosIA datos = servicio.cargarDatos(semestreId, turnoId);
-        return ResponseEntity.ok(servicio.validar(semestreId, turnoId, datos));
+        return ResponseEntity.ok(servicio.validar(escuelaId, semestreId, turnoId, datos));
     }
 
     /** Lanza la generación en segundo plano. */

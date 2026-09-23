@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { disponibilidadService } from '../api/disponibilidadService';
+import { asignacionService } from '../api/asignacionService';
+import { horarioService } from '../api/horarioService';
 import { maestroService } from '../api/maestroService';
 import { turnoHorarioService } from '../api/turnoHorarioService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
-import type { Maestro, Turno, TurnoHorario } from '../types';
+import type { Asignacion, Horario, Maestro, Turno, TurnoHorario } from '../types';
 import {
   MdAdd, MdEdit, MdRefresh, MdPerson, MdSchedule,
   MdCheck, MdClose, MdChevronLeft, MdChevronRight,
@@ -38,6 +40,14 @@ const DisponibilidadMaestro: React.FC = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<number>(0);
   const [horarios, setHorarios] = useState<TurnoHorario[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Map<number, boolean>>(new Map());
+  // Horas que el maestro debe dar = suma del campo `horas` de sus asignaciones.
+  // `null` significa "aún no cargado" (nunca se muestra NaN/undefined).
+  const [horasAsignadas, setHorasAsignadas] = useState<number | null>(null);
+  // Bloques (TurnoHorario.id) que el maestro YA tiene ocupados por una clase
+  // colocada en el horario vigente. Se usa para pintar la cajita en naranja.
+  // `null` significa "aún no cargado / error": en ese caso ninguna cajita se
+  // pinta naranja (se ve igual que antes).
+  const [bloquesOcupados, setBloquesOcupados] = useState<Set<number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [cargandoMaestros, setCargandoMaestros] = useState(false);
   const [error, setError] = useState('');
@@ -80,6 +90,100 @@ const DisponibilidadMaestro: React.FC = () => {
       setDisponibilidades(new Map());
     }
   }, [maestroSeleccionado, horarios, semestreActivo]);
+
+  // 🔥 EFECTO 4b: Cargar las horas asignadas del maestro (suma del campo `horas`
+  // de TODAS sus asignaciones del semestre activo). Se reutiliza el endpoint
+  // existente GET /api/asignaciones?maestroId=...&semestreId=...
+  useEffect(() => {
+    const semestreId = semestreActivo?.id;
+
+    if (maestroSeleccionado <= 0 || !semestreId) {
+      setHorasAsignadas(null);
+      return;
+    }
+
+    let cancelado = false;
+    setHorasAsignadas(null);
+
+    const cargarHorasAsignadas = async () => {
+      try {
+        const res = await asignacionService.listar(
+          0,
+          1000, // size amplio: se necesita la suma de todas sus asignaciones, no una página
+          '',
+          0,
+          0,
+          semestreId,
+          undefined,
+          maestroSeleccionado
+        );
+        // El backend no filtra por `activo`: las asignaciones desactivadas no
+        // representan horas por cubrir, así que no se suman.
+        const total = (res.data?.content || [])
+          .filter((a: Asignacion) => a.activo !== false)
+          .reduce((suma: number, a: Asignacion) => suma + (Number(a.horas) || 0), 0);
+
+        if (!cancelado) setHorasAsignadas(total);
+      } catch (error) {
+        console.error('Error al cargar las horas asignadas del maestro:', error);
+        if (!cancelado) setHorasAsignadas(null);
+      }
+    };
+
+    cargarHorasAsignadas();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [maestroSeleccionado, semestreActivo?.id]);
+
+  // 🔥 EFECTO 4c: Cargar los BLOQUES YA OCUPADOS del maestro en el horario vigente.
+  // Se reutiliza el MISMO endpoint que la pantalla "Horario de Maestros":
+  // GET /api/horarios/maestro/{maestroId}?semestreId=...
+  // Cada fila devuelta es un bloque ocupado por el maestro; se guarda su
+  // `turnoHorarioId` (campo del HorarioDTO del backend = TurnoHorario.id) para
+  // poder preguntar "¿este bloque ya tiene clase?" al pintar cada cajita.
+  // Mismo patrón de cancelación que el EFECTO 4b: evita carreras al cambiar de
+  // maestro rápido (la respuesta obsoleta se descarta).
+  useEffect(() => {
+    const semestreId = semestreActivo?.id;
+
+    if (maestroSeleccionado <= 0 || !semestreId) {
+      setBloquesOcupados(null);
+      return;
+    }
+
+    let cancelado = false;
+    setBloquesOcupados(null);
+
+    const cargarBloquesOcupados = async () => {
+      try {
+        const res = await horarioService.obtenerPorMaestro(
+          maestroSeleccionado,
+          semestreId
+        );
+        const filas: Horario[] = Array.isArray(res.data) ? res.data : [];
+        const bloques = new Set<number>();
+        filas.forEach((fila) => {
+          // El bloque se identifica por TurnoHorario.id; se ignora cualquier
+          // fila sin ese dato para no marcar cajitas al azar.
+          if (typeof fila.turnoHorarioId === 'number') {
+            bloques.add(fila.turnoHorarioId);
+          }
+        });
+        if (!cancelado) setBloquesOcupados(bloques);
+      } catch (error) {
+        console.error('Error al cargar los bloques ocupados del maestro:', error);
+        if (!cancelado) setBloquesOcupados(null);
+      }
+    };
+
+    cargarBloquesOcupados();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [maestroSeleccionado, semestreActivo?.id]);
 
   // 🔥 EFECTO 5: Sincronizar URL con el estado actual
   useEffect(() => {
@@ -471,19 +575,35 @@ const DisponibilidadMaestro: React.FC = () => {
                           ? disponibilidades.get(horarioDia.id) || false
                           : false;
                         const existe = horarioDia !== undefined;
+                        // 🔥 Prioridad visual: si el bloque ya tiene una clase
+                        // colocada en el horario generado, gana sobre el verde.
+                        // Mientras el horario no se haya cargado
+                        // (bloquesOcupados === null) no se pinta nada naranja.
+                        const ocupado =
+                          existe &&
+                          bloquesOcupados !== null &&
+                          bloquesOcupados.has(horarioDia.id);
 
                         return (
                           <td key={dia.value} className="px-3 py-2 text-center">
                             {existe ? (
                               <div
                                 className={`w-9 h-9 rounded-lg flex items-center justify-center mx-auto transition-all duration-200 ${
-                                  disponible
+                                  ocupado
+                                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200 dark:shadow-none'
+                                    : disponible
                                     ? 'bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none'
                                     : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                                 }`}
-                                title={disponible ? 'Disponible' : 'No disponible'}
+                                title={
+                                  ocupado
+                                    ? 'Con clase en el horario'
+                                    : disponible
+                                    ? 'Disponible'
+                                    : 'No disponible'
+                                }
                               >
-                                {disponible ? (
+                                {ocupado || disponible ? (
                                   <MdCheck className="text-lg" />
                                 ) : (
                                   <MdClose className="text-lg" />
@@ -506,6 +626,10 @@ const DisponibilidadMaestro: React.FC = () => {
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-green-500 rounded"></span>
               Disponible
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="w-4 h-4 bg-orange-500 rounded"></span>
+              Con clase en el horario
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-gray-300 dark:bg-gray-600 rounded"></span>
@@ -540,6 +664,20 @@ const DisponibilidadMaestro: React.FC = () => {
                   <span className="font-medium text-gray-800 dark:text-white">
                     {disponibilidades.size}
                   </span>
+                </span>
+                <span
+                  className="text-gray-600 dark:text-gray-400 ml-4"
+                  title="Horas que el maestro debe dar: suma de las horas de sus asignaciones activas en este semestre"
+                >
+                  Horas:{' '}
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    {horasAsignadas === null ? '—' : `${horasAsignadas} h`}
+                  </span>
+                  {horasAsignadas !== null && (
+                    <span className="font-medium text-blue-600 dark:text-blue-400">
+                      {horasAsignadas === 1 ? ' asignada' : ' asignadas'}
+                    </span>
+                  )}
                 </span>
               </div>
             </div>

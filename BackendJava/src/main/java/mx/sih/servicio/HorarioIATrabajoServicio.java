@@ -184,7 +184,7 @@ public class HorarioIATrabajoServicio {
                 intentos == null || intentos <= 0 ? intentosPorDefecto : Math.min(intentos, 50),
                 segundosPorIntento == null || segundosPorIntento <= 0
                         ? segundosPorIntentoDefecto : Math.min(segundosPorIntento, 1800),
-                maxPasos == null || maxPasos <= 0 ? maxPasosDefecto : Math.min(maxPasos, 2_000_000),
+                maxPasos == null || maxPasos <= 0 ? maxPasosDefecto : Math.min(maxPasos, 20_000_000),
                 Boolean.TRUE.equals(asignarMaestros),
                 solicitadoPor);
         trabajo.asesor = asesor;
@@ -288,7 +288,8 @@ public class HorarioIATrabajoServicio {
                     .sum();
 
             trabajo.mensaje = "Pre-validando la información";
-            ValidacionIADTO validacion = servicio.validar(trabajo.semestreId, trabajo.turnoId, datos);
+            ValidacionIADTO validacion = servicio.validar(trabajo.escuelaId, trabajo.semestreId,
+                    trabajo.turnoId, datos);
             trabajo.validacion = validacion;
             if (!validacion.aptoParaGenerar()) {
                 logger.warn("Trabajo IA {}: la pre-validación encontró errores, se genera igualmente",

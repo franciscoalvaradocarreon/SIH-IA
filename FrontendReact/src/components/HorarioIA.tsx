@@ -2,11 +2,16 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { horarioIAService } from '../api/horarioIAService';
 import { PROVEEDORES_IA } from '../api/horarioIAService';
 import type {
-  ConfigIA, IntentoIA, PendienteIA, TrabajoIA, ValidacionIA,
+  ConfigIA, IntentoIA, PendienteIA, TrabajoIA, ValidacionIA, ChequeoIA, MateriaImposible,
+  AnalisisViabilidadIA, RevisionesViabilidadIA, SeveridadViabilidad,
+  MaestroViabilidadIA, GrupoViabilidadIA, GrupoDesbalanceIA, ResumenViabilidadIA,
+  CupoMaestroGrupoIA, BloquePocosMaestrosIA, GrupoBloquesApretadosIA, MateriaPorDiasIA,
+  SesionLargaSinParesIA, GrupoHorarioVigenteIA, ResumenRevisionesIA,
 } from '../api/horarioIAService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
-import type { Turno } from '../types';
+import type { Turno, Validacion } from '../types';
+import ErrorBoundary from './ErrorBoundary';
 import {
   MdAutoAwesome, MdCheckCircle, MdError, MdWarning, MdInfo, MdPlayArrow,
   MdStop, MdSave, MdExpandMore, MdExpandLess, MdPerson, MdClass,
@@ -32,6 +37,37 @@ const DESCRIPCION_MODELO: Record<string, string> = {
   'gpt-4o': 'potente',
   'gpt-4.1-mini': 'económico reciente',
 };
+
+/**
+ * BLINDAJE DE LOS DATOS QUE VIENEN DEL BACKEND.
+ *
+ * La pre-validación pinta datos de diagnóstico que pueden faltar (el backend todavía no los manda,
+ * llegaron con otro nombre o la respuesta es vieja). En React, un solo acceso a `null.length` tumba
+ * TODA la pantalla. Estos ayudantes convierten cualquier cosa rara en un valor inofensivo para que el
+ * bloque muestre lo que haya en lugar de dejar la página en blanco.
+ */
+
+/** La lista si de verdad es una lista; si no (null, undefined, objeto suelto), una vacía. */
+function listaSegura<T>(valor: unknown): T[] {
+  return Array.isArray(valor) ? (valor as T[]) : [];
+}
+
+/** El número si de verdad es un número; si no, 0: nunca se pinta NaN ni undefined. */
+function numeroSeguro(valor: unknown): number {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : 0;
+}
+
+/** El texto si de verdad es un texto (o un número/booleano); si no, el sustituto. */
+function texto(valor: unknown, porDefecto = '—'): string {
+  if (typeof valor === 'string') return valor;
+  if (typeof valor === 'number' || typeof valor === 'boolean') return String(valor);
+  return porDefecto;
+}
+
+/** El objeto si de verdad es un objeto; si no (null, undefined, texto), undefined. */
+function objetoSeguro<T extends object>(valor: unknown): T | undefined {
+  return valor && typeof valor === 'object' ? (valor as T) : undefined;
+}
 
 const HorarioIA: React.FC = () => {
   const { semestreActivo } = useAuth();
@@ -73,6 +109,12 @@ const HorarioIA: React.FC = () => {
   const enCurso = trabajo?.estado === 'EN_COLA' || trabajo?.estado === 'EN_PROCESO';
   // Hasta que no haya un turno elegido no se habilita nada: generar sin turno no tiene sentido.
   const turnoListo = turnoSeleccionado > 0;
+
+  // Datos de la pre-validación tratados como posiblemente ausentes: si una lista no llega (o llega
+  // como null), su bloque se pinta vacío en vez de tumbar la pantalla entera.
+  const chequeosValidacion = listaSegura<ChequeoIA>(validacion?.chequeos);
+  const imposiblesValidacion = listaSegura<MateriaImposible>(validacion?.imposibles);
+  const validacionesBackend = listaSegura<Validacion>(validacion?.backend?.validaciones);
 
   // Mientras hay una generación en curso, el menú no deja navegar a otra página (bandera global que
   // consulta el componente Menu): así no se pierde el seguimiento de los intentos.
@@ -274,7 +316,7 @@ const HorarioIA: React.FC = () => {
               value={turnoSeleccionado}
               onChange={e => setTurnoSeleccionado(Number(e.target.value))}
               disabled={enCurso}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
             >
               <option value={0}>Selecciona un turno…</option>
               {turnos.map(t => (
@@ -296,7 +338,7 @@ const HorarioIA: React.FC = () => {
                 }
               }}
               disabled={enCurso || !turnoListo}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
             >
               <option value="heuristica">Motor propio</option>
               <option value="llm">Motor propio + asesor IA</option>
@@ -309,7 +351,7 @@ const HorarioIA: React.FC = () => {
               type="number" min={1} max={50} value={intentos}
               onChange={e => setIntentos(Number(e.target.value))}
               disabled={enCurso || !turnoListo}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
             />
           </label>
 
@@ -319,7 +361,7 @@ const HorarioIA: React.FC = () => {
               type="number" min={5} max={1800} value={segundos}
               onChange={e => setSegundos(Number(e.target.value))}
               disabled={enCurso || !turnoListo}
-              className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
             />
           </label>
         </div>
@@ -407,7 +449,7 @@ const HorarioIA: React.FC = () => {
                     setModeloIA(prov.modeloPorDefecto);
                   }
                 }}
-                className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
               >
                 {PROVEEDORES_IA.map(p => (
                   <option key={p.id} value={p.id}>{p.nombre}</option>
@@ -425,7 +467,7 @@ const HorarioIA: React.FC = () => {
                   value={urlIA}
                   onChange={e => setUrlIA(e.target.value)}
                   placeholder="https://…/v1/chat/completions"
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 />
               </label>
             )}
@@ -439,7 +481,7 @@ const HorarioIA: React.FC = () => {
                   autoFocus
                   placeholder={config.llmConfigurado ? 'vacío = usar la del servidor' : 'sk-…'}
                   onChange={e => setClaveIA(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 />
                 <button
                   type="button"
@@ -459,13 +501,13 @@ const HorarioIA: React.FC = () => {
                   value={modeloIA}
                   onChange={e => setModeloIA(e.target.value)}
                   placeholder={config.modeloPorDefecto || 'gpt-4o-mini'}
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 />
               ) : (
                 <select
                   value={modeloIA}
                   onChange={e => setModeloIA(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                  className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
                 >
                   {(() => {
                     const prov = PROVEEDORES_IA.find(p => p.id === proveedorIA);
@@ -527,15 +569,15 @@ const HorarioIA: React.FC = () => {
                 : <span className="flex items-center gap-1 text-xs font-normal text-red-700 dark:text-red-400">
                     <MdError /> con errores
                   </span>}
-              {validacion.imposibles.length > 0 && (
+              {imposiblesValidacion.length > 0 && (
                 <span className="flex items-center gap-1 text-xs font-normal text-amber-700 dark:text-amber-400">
-                  <MdWarning /> {validacion.imposibles.length} sin ventana legal
+                  <MdWarning /> {imposiblesValidacion.length} sin ventana legal
                 </span>
               )}
             </span>
             <span className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
-              {validacion.asignaciones} asignaturas · {validacion.sesiones} sesiones ·{' '}
-              {validacion.horasDemandadas} h · {validacion.ventanasLegales} ventanas
+              {numeroSeguro(validacion.asignaciones)} asignaturas · {numeroSeguro(validacion.sesiones)} sesiones ·{' '}
+              {numeroSeguro(validacion.horasDemandadas)} h · {numeroSeguro(validacion.ventanasLegales)} ventanas
               {verValidacion ? <MdExpandLess /> : <MdExpandMore />}
             </span>
           </button>
@@ -544,45 +586,53 @@ const HorarioIA: React.FC = () => {
             <div className="space-y-3 border-t border-gray-200 p-3 dark:border-gray-700">
               {/* chequeos del motor IA */}
               <div className="space-y-1">
-                {validacion.chequeos.map((c, i) => (
+                {chequeosValidacion.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 text-sm">
-                    <IconoEstado estado={c.estado} />
-                    <span className="font-medium text-gray-800 dark:text-gray-200">{c.nombre}:</span>
-                    <span className="text-gray-600 dark:text-gray-400">{c.detalle}</span>
+                    <IconoEstado estado={c?.estado} />
+                    <span className="font-medium text-gray-800 dark:text-gray-200">{texto(c?.nombre, 'Chequeo')}:</span>
+                    <span className="text-gray-600 dark:text-gray-400">{texto(c?.detalle, '')}</span>
                   </div>
                 ))}
               </div>
 
               {/* lo que ya validaba el backend */}
-              {validacion.backend?.validaciones?.length > 0 && (
+              {validacionesBackend.length > 0 && (
                 <div className="space-y-1 border-t border-gray-200 pt-3 dark:border-gray-700">
-                  {validacion.backend.validaciones.map((v, i) => (
+                  {validacionesBackend.map((v, i) => (
                     <div key={i} className="flex items-start gap-2 text-sm">
-                      <IconoEstado estado={v.estado} />
-                      <span className="font-medium text-gray-800 dark:text-gray-200">{v.titulo}:</span>
-                      <span className="text-gray-600 dark:text-gray-400">{v.mensaje}</span>
+                      <IconoEstado estado={v?.estado} />
+                      <span className="font-medium text-gray-800 dark:text-gray-200">{texto(v?.titulo, 'Validación')}:</span>
+                      <span className="text-gray-600 dark:text-gray-400">{texto(v?.mensaje, '')}</span>
                     </div>
                   ))}
                 </div>
               )}
 
               {/* asignaturas que no caben */}
-              {validacion.imposibles.length > 0 && (
+              {imposiblesValidacion.length > 0 && (
                 <div className="border-t border-gray-200 pt-3 dark:border-gray-700">
                   <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-700 dark:text-amber-400">
                     <MdWarning /> Asignaturas sin ninguna ventana legal
                   </p>
                   <div className="space-y-1">
-                    {validacion.imposibles.map(m => (
-                      <div key={m.asignacionId}
+                    {imposiblesValidacion.map((m, i) => (
+                      <div key={`${texto(m?.asignacionId, String(i))}-${i}`}
                         className="rounded-md bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                        <span className="font-semibold">{m.materia}</span> · {m.grupo} · {m.maestro} ·{' '}
-                        {m.horas} h<br />{m.motivo}
+                        <span className="font-semibold">{texto(m?.materia, 'Asignatura')}</span> ·{' '}
+                        {texto(m?.grupo, 'grupo ?')} · {texto(m?.maestro, 'maestro ?')} ·{' '}
+                        {numeroSeguro(m?.horas)} h<br />{texto(m?.motivo, '')}
                       </div>
                     ))}
                   </div>
                 </div>
               )}
+
+              {/* análisis de viabilidad: ¿cabe esto? ¿y quién va más justo?
+                  Va dentro de un ErrorBoundary: si aun así se nos escapa un dato raro, el usuario ve
+                  el aviso con el mensaje en vez de una pantalla en blanco. */}
+              <ErrorBoundary titulo="el análisis de viabilidad" resetKey={validacion}>
+                <AnalisisViabilidadIA analisis={validacion.analisisViabilidad} />
+              </ErrorBoundary>
             </div>
           )}
         </div>
@@ -779,6 +829,706 @@ const IconoEstado: React.FC<{ estado: 'OK' | 'ADVERTENCIA' | 'ERROR' }> = ({ est
   if (estado === 'OK') return <MdCheckCircle className="mt-0.5 shrink-0 text-emerald-600" />;
   if (estado === 'ERROR') return <MdError className="mt-0.5 shrink-0 text-red-600" />;
   return <MdWarning className="mt-0.5 shrink-0 text-amber-600" />;
+};
+
+/** Cuántos grupos se enseñan en la tabla antes de tener que desplegar el resto. */
+const GRUPOS_VISIBLES = 12;
+
+/** Cuántos bloques con 2 maestros posibles se listan antes de resumir el resto (los de 1 se listan todos). */
+const BLOQUES_DOS_VISIBLES = 10;
+
+/** Colores de la etiqueta de severidad: imposible / ajustado / holgado. */
+const BADGE_SEVERIDAD: Record<SeveridadViabilidad, string> = {
+  IMPOSIBLE: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+  AJUSTADO: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+  HOLGADO: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+};
+
+/**
+ * Etiqueta de severidad. El backend manda "IMPOSIBLE" / "AJUSTADO" / "HOLGADO", pero si manda otra
+ * cosa (o nada) se pinta una etiqueta neutra: aquí no se puede caer por un valor inesperado.
+ */
+const EtiquetaSeveridad: React.FC<{ severidad?: SeveridadViabilidad | null }> = ({ severidad }) => {
+  const clase = (severidad && BADGE_SEVERIDAD[severidad])
+    || 'bg-gray-100 text-gray-600 dark:bg-gray-600 dark:text-gray-200';
+  return (
+    <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-semibold ${clase}`}>
+      {typeof severidad === 'string' && severidad ? severidad.toLowerCase() : 'sin estado'}
+    </span>
+  );
+};
+
+/** Aviso de que un dato del backend no llegó o no llegó con la forma esperada. */
+const AvisoDatoAusente: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="flex items-start gap-2 rounded-lg border border-gray-400 bg-white px-4 py-2.5 text-xs text-gray-700 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200">
+    <span className="flex shrink-0 items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
+      <MdWarning /> aviso
+    </span>
+    <span>{children}</span>
+  </div>
+);
+
+/**
+ * ANÁLISIS DE VIABILIDAD DEL REPARTO.
+ *
+ * Responde, ANTES de generar, a "¿por qué no cabe todo?": qué maestros tienen más horas asignadas
+ * que huecos legales (imposible matemático), qué bloques de un grupo no los puede dar ningún maestro
+ * y qué grupos van tan justos que conviene reacomodar maestros entre ellos.
+ *
+ * Es solo diagnóstico: nada de esto impide generar. La severidad es una pista, no un error
+ * (imposible = no cabe; ajustado = cabe forzado; holgado = hay margen).
+ */
+const AnalisisViabilidadIA: React.FC<{ analisis?: AnalisisViabilidadIA | null }> = ({ analisis }) => {
+  const [verTodos, setVerTodos] = useState(false);
+
+  // Primer nivel del blindaje: si el campo no llegó (o llegó como null / texto / número), se avisa y
+  // se sigue. Antes esto era `const { maestros } = analisis` y un campo ausente tumbaba la pantalla.
+  if (!analisis || typeof analisis !== 'object') {
+    return (
+      <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+        <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          <MdRule className="text-indigo-600" /> Viabilidad del reparto de maestros
+        </p>
+        <AvisoDatoAusente>
+          El backend no devolvió el análisis de viabilidad (<code>analisisViabilidad</code>), o lo
+          devolvió con otro nombre o con un tipo inesperado. Los chequeos de la pre-validación de
+          arriba siguen siendo válidos.
+        </AvisoDatoAusente>
+      </div>
+    );
+  }
+
+  // Cada lista y cada objeto se normaliza: si no es lo que se espera, queda vacío y el bloque sigue.
+  const maestros = listaSegura<MaestroViabilidadIA>(analisis.maestros);
+  const grupos = listaSegura<GrupoViabilidadIA>(analisis.grupos);
+  const desbalance = listaSegura<GrupoDesbalanceIA>(analisis.desbalance);
+  const resumen = objetoSeguro<ResumenViabilidadIA>(analisis.resumen);
+  const revisiones = objetoSeguro<RevisionesViabilidadIA>(analisis.revisiones);
+
+  const maestrosEnDeficit = numeroSeguro(resumen?.maestrosEnDeficit);
+  const horasSinHueco = numeroSeguro(resumen?.horasSinHueco);
+  const bloquesSinMaestroTotal = numeroSeguro(resumen?.bloquesSinMaestro);
+  const gruposAjustados = numeroSeguro(resumen?.gruposAjustados);
+
+  const enDeficit = maestros.filter(m => numeroSeguro(m?.deficit) > 0);
+  // Los bloques sin ningún maestro se listan por grupo; solo puede haberlos en grupos imposibles.
+  const sinMaestro = grupos
+    .map((g, i) => ({
+      grupo: texto(g?.grupo, `grupo ${i + 1}`),
+      bloques: listaSegura<string>(g?.bloquesSinMaestro),
+    }))
+    .filter(g => g.bloques.length > 0)
+    .flatMap(g => g.bloques.map(b => ({ grupo: g.grupo, bloque: texto(b, 'bloque ?') })));
+  const gruposMostrados = verTodos ? grupos : grupos.slice(0, GRUPOS_VISIBLES);
+
+  return (
+    <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          <MdRule className="text-indigo-600" /> Viabilidad del reparto de maestros
+        </p>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          solo diagnóstico: no impide generar
+        </span>
+      </div>
+
+      {/* resumen: la respuesta corta a "¿esto cabe?" */}
+      {!resumen && (
+        <AvisoDatoAusente>
+          El análisis de viabilidad vino sin el bloque <code>resumen</code>: se muestran las listas,
+          pero los totales de la cabecera no están disponibles.
+        </AvisoDatoAusente>
+      )}
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className={`rounded-full px-2 py-1 ${maestrosEnDeficit > 0
+          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
+          {maestrosEnDeficit > 0
+            ? `⚠ ${maestrosEnDeficit} maestro(s) con más horas que huecos`
+            : '✓ ningún maestro pide más horas que huecos legales'}
+        </span>
+        {horasSinHueco > 0 && (
+          <span className={`rounded-full px-2 py-1 ${BADGE_SEVERIDAD.IMPOSIBLE}`}>
+            {horasSinHueco} h que no caben en ningún lado
+          </span>
+        )}
+        <span className={`rounded-full px-2 py-1 ${bloquesSinMaestroTotal > 0
+          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
+          {bloquesSinMaestroTotal > 0
+            ? `⚠ ${bloquesSinMaestroTotal} bloque(s) sin ningún maestro posible`
+            : '✓ todos los bloques de todos los grupos tienen algún maestro'}
+        </span>
+        <span className={`rounded-full px-2 py-1 ${gruposAjustados > 0
+          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
+          {gruposAjustados} grupo(s) ajustado(s)
+        </span>
+      </div>
+
+      {/* maestros en déficit: el imposible matemático */}
+      <div>
+        <p className="mb-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
+          Maestros en déficit ({enDeficit.length})
+        </p>
+        {enDeficit.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Ningún maestro tiene más horas asignadas que bloques legales: el motor no está peleando
+            contra un imposible de reparto.
+          </p>
+        ) : (
+          <>
+            <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+              Estos maestros no pueden dar todas sus horas aunque el motor acierte: no hay suficientes
+              bloques legales. Hay que mover alguna de sus horas a otro maestro.
+            </p>
+            <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Maestro</th>
+                    <th className="px-3 py-2 font-medium">Horas</th>
+                    <th className="px-3 py-2 font-medium">Huecos legales</th>
+                    <th className="px-3 py-2 font-medium">No caben</th>
+                    <th className="px-3 py-2 font-medium">Grupos</th>
+                    <th className="px-3 py-2 font-medium">Materias</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {enDeficit.map((m, i) => (
+                    <tr key={`${texto(m?.maestro, 'maestro')}-${i}`}
+                      className="bg-red-50/60 text-gray-800 dark:bg-red-900/10 dark:text-gray-200">
+                      <td className="px-3 py-2 font-medium">{texto(m?.maestro, 'maestro ?')}</td>
+                      <td className="px-3 py-2 tabular-nums">{numeroSeguro(m?.horasAsignadas)}</td>
+                      <td className="px-3 py-2 tabular-nums">{numeroSeguro(m?.ventanasLegales)}</td>
+                      <td className="px-3 py-2 font-semibold tabular-nums text-red-700 dark:text-red-400">
+                        {numeroSeguro(m?.deficit)} h
+                      </td>
+                      <td className="px-3 py-2 tabular-nums">{numeroSeguro(m?.grupos)}</td>
+                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                        {listaSegura<string>(m?.materias).map(x => texto(x, '?')).join(' · ') || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* bloques que no puede dar nadie */}
+      {sinMaestro.length > 0 && (
+        <div>
+          <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-red-700 dark:text-red-400">
+            <MdError /> Bloques sin ningún maestro posible ({sinMaestro.length})
+          </p>
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            Ese bloque está disponible para el grupo, pero ninguno de sus maestros puede dar clase en
+            él: esa hora se queda vacía sí o sí. Se arregla poniendo en ese bloque a un maestro que
+            pueda darlo.
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {sinMaestro.map((x, i) => (
+              <span key={i}
+                className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                <span className="font-semibold">{x.grupo}</span> · {x.bloque}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* tabla de grupos por holgura */}
+      <div>
+        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+            Grupos por holgura ({grupos.length})
+          </p>
+          <span className="text-[11px] text-gray-500 dark:text-gray-400">
+            índice = maestros disponibles por bloque + horas de sobra · más bajo = más justo
+          </span>
+        </div>
+        <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-700">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-gray-50 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+              <tr>
+                <th className="px-3 py-2 font-medium">Grupo</th>
+                <th className="px-3 py-2 font-medium">Horas</th>
+                <th className="px-3 py-2 font-medium">Bloques</th>
+                <th className="px-3 py-2 font-medium">Maestros/bloque</th>
+                <th className="px-3 py-2 font-medium">Sin maestro</th>
+                <th className="px-3 py-2 font-medium">Holgura</th>
+                <th className="px-3 py-2 font-medium">Estado</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {gruposMostrados.map((g, i) => (
+                <tr key={`${texto(g?.grupo, 'grupo')}-${i}`}
+                  className={g?.severidad === 'IMPOSIBLE' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}>
+                  <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{texto(g?.grupo, 'grupo ?')}</td>
+                  <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                    {numeroSeguro(g?.horasNecesarias)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                    {numeroSeguro(g?.bloquesDisponibles)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                    {numeroSeguro(g?.maestrosPromedio)} <span className="text-gray-400">({numeroSeguro(g?.maestros)})</span>
+                  </td>
+                  <td className={`px-3 py-2 tabular-nums ${numeroSeguro(g?.bloquesConCero) > 0
+                    ? 'font-semibold text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                    {numeroSeguro(g?.bloquesConCero)}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums text-gray-800 dark:text-gray-200">
+                    {numeroSeguro(g?.indiceHolgura)}
+                  </td>
+                  <td className="px-3 py-2"><EtiquetaSeveridad severidad={g?.severidad} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {grupos.length > GRUPOS_VISIBLES && (
+          <button
+            onClick={() => setVerTodos(v => !v)}
+            className="mt-2 inline-flex items-center gap-1 rounded-md border border-gray-400 px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            {verTodos ? <MdExpandLess /> : <MdExpandMore />}
+            {verTodos ? 'Ver solo los más ajustados' : `Ver los ${grupos.length} grupos`}
+          </button>
+        )}
+      </div>
+
+      {/* lista de desbalance: de más a menos ajustado */}
+      {desbalance.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
+            Desbalance entre grupos · de más a menos ajustado
+          </p>
+          <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+            Los de arriba son los que van más justos: entre ellos es donde conviene reacomodar
+            maestros.
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {desbalance.map((g, i) => (
+              <span key={`${texto(g?.grupo, 'grupo')}-${i}`}
+                className={`rounded-md px-2 py-1 text-[11px] text-gray-800 dark:text-gray-200 ${i === 0
+                  ? 'bg-amber-100 ring-1 ring-amber-400 dark:bg-amber-900/30'
+                  : 'bg-gray-100 dark:bg-gray-700'}`}>
+                <span className="font-semibold">{i + 1}. {texto(g?.grupo, 'grupo ?')}</span>{' '}
+                <span className="text-gray-500 dark:text-gray-400">
+                  {numeroSeguro(g?.horasNecesarias)} h · {numeroSeguro(g?.bloquesDisponibles)} bloques · holgura {numeroSeguro(g?.indiceHolgura)}
+                </span>{' '}
+                <EtiquetaSeveridad severidad={g?.severidad} />
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* las cinco revisiones finas: qué impide colocar cada hora */}
+      {revisiones
+        ? <RevisionesViabilidadIA revisiones={revisiones} />
+        : (
+          <AvisoDatoAusente>
+            El análisis de viabilidad vino sin las cinco revisiones finas (<code>revisiones</code>):
+            puede que el backend todavía no las mande o que las mande con otro nombre. Los totales de
+            arriba siguen siendo válidos.
+          </AvisoDatoAusente>
+        )}
+    </div>
+  );
+};
+
+/** Estilo de las tarjetas del bloque de revisiones, el mismo que usa el resto de la pantalla. */
+const CAJA_REVISION = 'px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg '
+  + 'bg-white dark:bg-gray-700';
+
+/** Título pequeño de una revisión dentro del diagnóstico. */
+const TituloRevision: React.FC<{ icono: React.ReactNode; children: React.ReactNode }> = ({ icono, children }) => (
+  <p className="mb-1 flex items-center gap-1 text-xs font-semibold text-gray-700 dark:text-gray-200">
+    {icono} {children}
+  </p>
+);
+
+/**
+ * LAS CINCO REVISIONES QUE BUSCAN QUÉ IMPIDE COLOCAR CADA HORA.
+ *
+ * La holgura de horas es CERO por diseño: los grupos tienen exactamente las mismas horas que bloques
+ * disponibles, así que un hueco equivale exactamente a una hora que no se colocó y no hay margen para
+ * compensar moviendo clases. Estas cinco listas dicen, hora a hora, QUÉ la bloquea:
+ *
+ *  1. cupo real de cada par (maestro, grupo): horas que debe dar contra bloques comunes;
+ *  2. bloques donde el grupo solo tiene 1 o 2 maestros posibles (con 1, punto único de fallo);
+ *  3. materias cuyas horas superan los días disponibles (no pueden repetir día);
+ *  4. materias con sesiones de 2+ h sin días suficientes con par de bloques contiguos;
+ *  5. desglose por grupo del horario vigente: arranques tarde, huecos y adyacencias.
+ *
+ * Es solo diagnóstico: nada de esto impide generar. Los contadores enseñan cuántos casos hay, no los
+ * colores (que son una pista, no un error).
+ */
+const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | null }> = ({ revisiones }) => {
+  const [verTodosCupo, setVerTodosCupo] = useState(false);
+
+  // Primer nivel: si el bloque de revisiones no llegó, se avisa y se sigue sin él.
+  if (!revisiones || typeof revisiones !== 'object') {
+    return (
+      <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+        <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          <MdScience className="text-indigo-600" /> Qué impide colocar cada hora
+        </p>
+        <AvisoDatoAusente>
+          El backend no devolvió las revisiones finas (<code>revisiones</code>), o las devolvió con
+          otro nombre o con un tipo inesperado. La viabilidad de arriba sigue siendo válida.
+        </AvisoDatoAusente>
+      </div>
+    );
+  }
+
+  // Ninguna de las cinco listas ni el resumen son obligatorios: lo que falte queda vacío.
+  const cupo = listaSegura<CupoMaestroGrupoIA>(revisiones.cupo);
+  const bloquesApretados = listaSegura<GrupoBloquesApretadosIA>(revisiones.bloquesApretados);
+  const materiasPorDias = listaSegura<MateriaPorDiasIA>(revisiones.materiasPorDias);
+  const sesionesLargas = listaSegura<SesionLargaSinParesIA>(revisiones.sesionesLargas);
+  const horarioVigente = listaSegura<GrupoHorarioVigenteIA>(revisiones.horarioVigente);
+  const resumen = objetoSeguro<ResumenRevisionesIA>(revisiones.resumen);
+
+  const paresConDeficit = numeroSeguro(resumen?.paresConDeficit);
+  const horasDeficit = numeroSeguro(resumen?.horasDeficit);
+  const bloquesConUnMaestro = numeroSeguro(resumen?.bloquesConUnMaestro);
+  const bloquesConDosMaestros = numeroSeguro(resumen?.bloquesConDosMaestros);
+  const materiasPorDiasTotal = numeroSeguro(resumen?.materiasPorDias);
+  const sesionesLargasCortas = numeroSeguro(resumen?.sesionesLargasCortas);
+  const gruposConArranqueTarde = numeroSeguro(resumen?.gruposConArranqueTarde);
+  const huecosHorarioVigente = numeroSeguro(resumen?.huecosHorarioVigente);
+  const adyacenciasHorarioVigente = numeroSeguro(resumen?.adyacenciasHorarioVigente);
+  const sinHorarioVigente = numeroSeguro(resumen?.sinHorarioVigente);
+
+  // Qué campos no llegaron (o no llegaron como lista / objeto): se enseña en un aviso y se sigue.
+  const faltantes: string[] = [];
+  if (!Array.isArray(revisiones.cupo)) faltantes.push('cupo');
+  if (!Array.isArray(revisiones.bloquesApretados)) faltantes.push('bloquesApretados');
+  if (!Array.isArray(revisiones.materiasPorDias)) faltantes.push('materiasPorDias');
+  if (!Array.isArray(revisiones.sesionesLargas)) faltantes.push('sesionesLargas');
+  if (!Array.isArray(revisiones.horarioVigente)) faltantes.push('horarioVigente');
+  if (!resumen) faltantes.push('resumen');
+
+  // Cupo: primero lo que de verdad no cabe (déficit) y luego lo que va justo (0 o 1 bloque de sobra).
+  const cupoImposible = cupo.filter(c => numeroSeguro(c?.deficit) > 0);
+  const cupoAjustado = cupo.filter(c => numeroSeguro(c?.deficit) === 0 && c?.severidad === 'AJUSTADO');
+  const cupoMostrado = verTodosCupo ? cupo : [...cupoImposible, ...cupoAjustado].slice(0, GRUPOS_VISIBLES);
+
+  // Bloques apretados: solo los grupos que tienen alguno con 1 o 2 maestros posibles.
+  const apretados = bloquesApretados.filter(g => numeroSeguro(g?.bloquesConUno) > 0 || numeroSeguro(g?.bloquesConDos) > 0);
+
+  const Vacio: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <p className="text-xs text-gray-500 dark:text-gray-400">{children}</p>
+  );
+
+  return (
+    <div className="space-y-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="flex items-center gap-2 text-sm font-semibold text-gray-800 dark:text-gray-100">
+          <MdScience className="text-indigo-600" /> Qué impide colocar cada hora
+        </p>
+        <span className="text-xs text-gray-500 dark:text-gray-400">
+          holgura de horas cero: un hueco es una hora perdida · solo diagnóstico
+        </span>
+      </div>
+
+      {faltantes.length > 0 && (
+        <AvisoDatoAusente>
+          El backend no devolvió {faltantes.length === 1 ? 'el campo' : 'los campos'}{' '}
+          <code>{faltantes.join(', ')}</code> de las revisiones (o los devolvió con otro tipo): esa
+          parte se muestra vacía y el resto sigue funcionando.
+        </AvisoDatoAusente>
+      )}
+
+      {/* totales de las cinco revisiones */}
+      <div className="flex flex-wrap gap-2 text-xs">
+        <span className={`rounded-full px-2 py-1 ${paresConDeficit > 0
+          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
+          {paresConDeficit > 0
+            ? `${paresConDeficit} par(es) maestro-grupo con déficit (${horasDeficit} h)`
+            : '✓ ningún par maestro-grupo debe más horas que bloques comunes'}
+        </span>
+        <span className={`rounded-full px-2 py-1 ${bloquesConUnMaestro > 0
+          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
+          {bloquesConUnMaestro > 0
+            ? `${bloquesConUnMaestro} bloque(s) con un solo maestro posible`
+            : '✓ ningún bloque depende de un único maestro'}
+        </span>
+        <span className={`rounded-full px-2 py-1 ${bloquesConDosMaestros > 0
+          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
+          {bloquesConDosMaestros} bloque(s) con solo 2 maestros posibles
+        </span>
+        <span className={`rounded-full px-2 py-1 ${materiasPorDiasTotal > 0
+          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
+          {materiasPorDiasTotal > 0
+            ? `${materiasPorDiasTotal} materia(s) no caben por la regla de un día`
+            : '✓ ninguna materia pide más horas que días tiene'}
+        </span>
+        <span className={`rounded-full px-2 py-1 ${sesionesLargasCortas > 0
+          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
+          {sesionesLargasCortas} materia(s) con sesiones largas sin pares
+        </span>
+        <span className={`rounded-full px-2 py-1 ${sinHorarioVigente > 0
+          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
+          horario vigente: {gruposConArranqueTarde} con arranque tarde ·{' '}
+          {huecosHorarioVigente} huecos · {adyacenciasHorarioVigente} adyacencias
+        </span>
+      </div>
+
+      {/* ── REVISIÓN 1 · cupo real por maestro y grupo ── */}
+      <div className={CAJA_REVISION}>
+        <TituloRevision icono={<MdPerson className="text-indigo-600" />}>
+          Cupo real por maestro y grupo ({cupoImposible.length} con déficit de {cupo.length} pares)
+        </TituloRevision>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          Horas que ese maestro debe dar en ese grupo contra los bloques en los que los dos están
+          disponibles a la vez. Comparar con los huecos GLOBALES del maestro engaña: un maestro que da
+          la misma materia en varios grupos puede tener huecos de sobra y no coincidir con uno de ellos.
+        </p>
+        {cupoMostrado.length === 0 ? (
+          <Vacio>Ningún par maestro-grupo va justo: todos tienen margen de bloques comunes.</Vacio>
+        ) : (
+          <>
+            <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-600">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-gray-50 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+                  <tr>
+                    <th className="px-3 py-2 font-medium">Maestro</th>
+                    <th className="px-3 py-2 font-medium">Grupo</th>
+                    <th className="px-3 py-2 font-medium">Horas</th>
+                    <th className="px-3 py-2 font-medium">Bloques comunes</th>
+                    <th className="px-3 py-2 font-medium">No caben</th>
+                    <th className="px-3 py-2 font-medium">Materias</th>
+                    <th className="px-3 py-2 font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
+                  {cupoMostrado.map((c, i) => (
+                    <tr key={`${texto(c?.maestro, 'maestro')}-${texto(c?.grupo, 'grupo')}-${i}`}
+                      className={numeroSeguro(c?.deficit) > 0 ? 'bg-red-50/60 dark:bg-red-900/10' : ''}>
+                      <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{texto(c?.maestro, 'maestro ?')}</td>
+                      <td className="px-3 py-2 text-gray-600 dark:text-gray-300">{texto(c?.grupo, 'grupo ?')}</td>
+                      <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                        {numeroSeguro(c?.horasEnGrupo)}
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                        {numeroSeguro(c?.bloquesComunes)}
+                      </td>
+                      <td className={`px-3 py-2 tabular-nums ${numeroSeguro(c?.deficit) > 0
+                        ? 'font-semibold text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                        {numeroSeguro(c?.deficit)} h
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 dark:text-gray-400">
+                        {listaSegura<string>(c?.materias).map(x => texto(x, '?')).join(' · ') || '—'}
+                      </td>
+                      <td className="px-3 py-2"><EtiquetaSeveridad severidad={c?.severidad} /></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {cupo.length > cupoMostrado.length && (
+              <button
+                onClick={() => setVerTodosCupo(v => !v)}
+                className="mt-2 inline-flex items-center gap-1 rounded-md border border-gray-400 px-4 py-2.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+              >
+                {verTodosCupo ? <MdExpandLess /> : <MdExpandMore />}
+                {verTodosCupo ? 'Ver solo los que van justos' : `Ver los ${cupo.length} pares`}
+              </button>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── REVISIÓN 2 · bloques con pocos maestros posibles ── */}
+      <div className={CAJA_REVISION}>
+        <TituloRevision icono={<MdError className="text-amber-600" />}>
+          Bloques con pocos maestros posibles ({bloquesConUnMaestro} con 1 ·{' '}
+          {bloquesConDosMaestros} con 2)
+        </TituloRevision>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          Con UN solo maestro posible el bloque es un punto único de fallo: si ese maestro se ocupa en
+          otro grupo, este bloque se queda libre garantizado. Y como la holgura de horas es cero, esa
+          hora no se recupera después. Con 2, un solo choque de disponibilidad lo convierte en el mismo
+          problema.
+        </p>
+        {apretados.length === 0 ? (
+          <Vacio>Ningún bloque baja de 3 maestros posibles: el grupo siempre tiene de dónde elegir.</Vacio>
+        ) : (
+          <div className="space-y-2">
+            {apretados.map((g, k) => {
+              const detalle = listaSegura<BloquePocosMaestrosIA>(g?.detalle);
+              const dos = detalle.filter(b => numeroSeguro(b?.maestrosPosibles) === 2);
+              const unicos = detalle.filter(b => numeroSeguro(b?.maestrosPosibles) === 1);
+              return (
+                <div key={`${texto(g?.grupo, 'grupo')}-${k}`} className="rounded-md border border-gray-200 p-2 dark:border-gray-600">
+                  <p className="text-xs font-semibold text-gray-800 dark:text-gray-100">
+                    {texto(g?.grupo, 'grupo ?')}{' '}
+                    <span className="font-normal text-gray-500 dark:text-gray-400">
+                      {numeroSeguro(g?.bloquesDisponibles)} bloques disponibles · mínimo {numeroSeguro(g?.maestrosMinimo)} maestro(s)
+                      por bloque
+                    </span>
+                  </p>
+                  {unicos.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {unicos.map((b, i) => (
+                        <span key={i}
+                          className="rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                          <span className="font-semibold">{texto(b?.bloque, 'bloque ?')}</span> · solo {texto(b?.unicoMaestro, 'sin nombre')}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {dos.length > 0 && (
+                    <div className="mt-1 flex flex-wrap gap-1">
+                      {dos.slice(0, BLOQUES_DOS_VISIBLES).map((b, i) => (
+                        <span key={i}
+                          className="rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                          {texto(b?.bloque, 'bloque ?')} · 2 maestros
+                        </span>
+                      ))}
+                      {dos.length > BLOQUES_DOS_VISIBLES && (
+                        <span className="px-2 py-1 text-[11px] text-gray-500 dark:text-gray-400">
+                          y {dos.length - BLOQUES_DOS_VISIBLES} bloque(s) más con 2
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── REVISIÓN 3 · materias que no caben con la regla de un día ── */}
+      <div className={CAJA_REVISION}>
+        <TituloRevision icono={<MdRule className="text-indigo-600" />}>
+          Materias que no caben con la regla de un día ({materiasPorDias.length})
+        </TituloRevision>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          El motor exige que una materia no repita día en el mismo grupo, así que su tope de horas son
+          los DÍAS con disponibilidad. Si pide más horas que días tiene, esa materia nunca entrará
+          completa: sobran justo las horas de la columna «faltan».
+        </p>
+        {materiasPorDias.length === 0 ? (
+          <Vacio>Ninguna materia supera los días disponibles de su grupo y su maestro.</Vacio>
+        ) : (
+          <div className="space-y-1">
+            {materiasPorDias.map((m, i) => (
+              <div key={`${texto(m?.grupo, 'grupo')}-${i}`}
+                className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                <span className="font-semibold">{texto(m?.materia, 'materia ?')}</span> · {texto(m?.grupo, 'grupo ?')} · {texto(m?.maestro, 'maestro ?')} ·{' '}
+                <span className="font-semibold">{numeroSeguro(m?.horas)} h</span> para{' '}
+                {numeroSeguro(m?.diasComunes)} día(s) con el maestro ({numeroSeguro(m?.diasGrupo)} del grupo) ·{' '}
+                <span className="font-semibold">faltan {numeroSeguro(m?.faltan)} h</span>
+                {/* REVISIÓN 3 es la única lista que no trae severidad: si no viene, no se pinta badge
+                    (antes esto era `severidad.toLowerCase()` y reventaba la pantalla entera). */}
+                {m?.severidad ? <EtiquetaSeveridad severidad={m.severidad} /> : null}
+                <div className="text-amber-800 dark:text-amber-300">{texto(m?.motivo, '')}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── REVISIÓN 4 · sesiones largas sin pares contiguos ── */}
+      <div className={CAJA_REVISION}>
+        <TituloRevision icono={<MdClass className="text-indigo-600" />}>
+          Sesiones largas sin pares contiguos suficientes ({sesionesLargas.length})
+        </TituloRevision>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          Una sesión de 2 o más horas ocupa bloques contiguos del mismo día y la materia tampoco puede
+          repetir día, así que cada día solo puede alojar UNA sesión larga. Hacen falta tantos días con
+          par contiguo libre (grupo y maestro a la vez) como sesiones largas pida el patrón.
+        </p>
+        {sesionesLargas.length === 0 ? (
+          <Vacio>
+            Todas las materias con sesiones de 2+ h tienen días suficientes con par de bloques contiguos
+            libres.
+          </Vacio>
+        ) : (
+          <div className="space-y-1">
+            {sesionesLargas.map((s, i) => (
+              <div key={`${texto(s?.grupo, 'grupo')}-${i}`}
+                className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
+                <span className="font-semibold">{texto(s?.materia, 'materia ?')}</span> · {texto(s?.grupo, 'grupo ?')} · {texto(s?.maestro, 'maestro ?')} ·{' '}
+                {numeroSeguro(s?.sesionesLargas)} sesión(es) de 2+ h ({numeroSeguro(s?.horasLargas)} h) · días con par{' '}
+                <span className="font-semibold">{numeroSeguro(s?.diasConPar)}</span> (pares contiguos: {numeroSeguro(s?.paresContiguos)})
+                {' '}· <span className="font-semibold">faltan {numeroSeguro(s?.faltan)}</span>
+                <EtiquetaSeveridad severidad={s?.severidad} />
+                <div className="text-amber-800 dark:text-amber-300">{texto(s?.motivo, '')}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ── REVISIÓN 5 · desglose por grupo del horario vigente ── */}
+      <div className={CAJA_REVISION}>
+        <TituloRevision icono={<MdTimer className="text-indigo-600" />}>
+          Horario vigente por grupo · de más a menos grave ({horarioVigente.length} grupos con clases)
+        </TituloRevision>
+        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
+          Los indicadores del resultado (arranques tarde, huecos, adyacencias) eran totales; aquí se
+          abren por grupo sobre el horario guardado (versión 1) para ver dónde se concentra el problema.
+          El arranque tarde son los bloques desde el inicio del turno hasta la primera clase del día; los
+          huecos, los bloques libres entre la primera y la última clase.
+        </p>
+        {horarioVigente.length === 0 ? (
+          <Vacio>
+            Ningún grupo del alcance tiene clases guardadas en la versión 1 del horario: genera uno y
+            regístralo para poder comparar.
+          </Vacio>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-600">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+                <tr>
+                  <th className="px-3 py-2 font-medium">#</th>
+                  <th className="px-3 py-2 font-medium">Grupo</th>
+                  <th className="px-3 py-2 font-medium">Clases</th>
+                  <th className="px-3 py-2 font-medium">Días</th>
+                  <th className="px-3 py-2 font-medium">Arranque tarde</th>
+                  <th className="px-3 py-2 font-medium">Huecos</th>
+                  <th className="px-3 py-2 font-medium">Adyacencias</th>
+                  <th className="px-3 py-2 font-medium">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
+                {horarioVigente.map((g, i) => (
+                  <tr key={`${texto(g?.grupo, 'grupo')}-${i}`} className={g?.severidad === 'IMPOSIBLE' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}>
+                    <td className="px-3 py-2 tabular-nums text-gray-400">{i + 1}</td>
+                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{texto(g?.grupo, 'grupo ?')}</td>
+                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                      {numeroSeguro(g?.clases)}/{numeroSeguro(g?.bloquesDelTurno)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                      {numeroSeguro(g?.diasConClase)}
+                    </td>
+                    <td className={`px-3 py-2 tabular-nums ${numeroSeguro(g?.arranquesTarde) > 0
+                      ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                      {numeroSeguro(g?.arranquesTarde)}
+                    </td>
+                    <td className={`px-3 py-2 tabular-nums ${numeroSeguro(g?.huecos) > 0
+                      ? 'font-semibold text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
+                      {numeroSeguro(g?.huecos)}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
+                      {numeroSeguro(g?.adyacencias)}
+                    </td>
+                    <td className="px-3 py-2"><EtiquetaSeveridad severidad={g?.severidad} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 };
 
 /** Mensaje del backend si lo trae; si no, uno genérico. */

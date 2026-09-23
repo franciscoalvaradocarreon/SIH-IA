@@ -38,6 +38,184 @@ export interface ValidacionIA {
   bloques: number;
   horasDemandadas: number;
   ventanasLegales: number;
+  /** Diagnóstico del reparto: qué maestros/grupos no caben y cuáles van justos. */
+  analisisViabilidad?: AnalisisViabilidadIA;
+}
+
+// ── análisis de viabilidad (diagnóstico, no bloquea la generación) ──
+
+export type SeveridadViabilidad = 'IMPOSIBLE' | 'AJUSTADO' | 'HOLGADO';
+
+/** Un maestro visto desde su capacidad real: horas asignadas contra huecos legales. */
+export interface MaestroViabilidadIA {
+  maestroId: number;
+  maestro: string;
+  horasAsignadas: number;
+  ventanasLegales: number;
+  /** Horas que no caben en ningún lado (0 si no hay problema). */
+  deficit: number;
+  materias: string[];
+  grupos: number;
+  severidad: SeveridadViabilidad;
+}
+
+/** Un grupo visto desde su capacidad real, con el índice que permite compararlo. */
+export interface GrupoViabilidadIA {
+  grupoId: number;
+  grupo: string;
+  horasNecesarias: number;
+  bloquesDisponibles: number;
+  /** Promedio de maestros disponibles por bloque disponible. */
+  maestrosPromedio: number;
+  maestros: number;
+  /** Bloques donde NINGÚN maestro del grupo está disponible. */
+  bloquesConCero: number;
+  bloquesSinMaestro: string[];
+  /** Menor = más justo: es el orden de la lista de desbalance. */
+  indiceHolgura: number;
+  severidad: SeveridadViabilidad;
+}
+
+export interface GrupoDesbalanceIA {
+  grupoId: number;
+  grupo: string;
+  horasNecesarias: number;
+  bloquesDisponibles: number;
+  indiceHolgura: number;
+  severidad: SeveridadViabilidad;
+}
+
+export interface ResumenViabilidadIA {
+  maestrosEnDeficit: number;
+  horasSinHueco: number;
+  gruposImposibles: number;
+  bloquesSinMaestro: number;
+  gruposAjustados: number;
+}
+
+export interface AnalisisViabilidadIA {
+  maestros: MaestroViabilidadIA[];
+  /** Grupos ordenados de más a menos ajustado. */
+  grupos: GrupoViabilidadIA[];
+  desbalance: GrupoDesbalanceIA[];
+  resumen: ResumenViabilidadIA;
+  /** Las cinco revisiones finas: cupo por par, bloques apretados, días, sesiones largas y horario vigente. */
+  revisiones?: RevisionesViabilidadIA;
+}
+
+// ── las cinco revisiones finas (diagnóstico, nunca bloquea) ──
+
+/**
+ * REVISIÓN 1 · Cupo real de un par (maestro, grupo): las horas que ese maestro debe dar en ese grupo
+ * contra los bloques en los que los dos están disponibles a la vez. Si debe más, es déficit real.
+ */
+export interface CupoMaestroGrupoIA {
+  maestroId: number;
+  maestro: string;
+  grupoId: number;
+  grupo: string;
+  horasEnGrupo: number;
+  bloquesComunes: number;
+  /** Horas que no caben en ese grupo con ese maestro (0 si no hay problema). */
+  deficit: number;
+  materias: string[];
+  severidad: SeveridadViabilidad;
+}
+
+/** REVISIÓN 2 · Un bloque con pocos maestros posibles dentro de un grupo. */
+export interface BloquePocosMaestrosIA {
+  bloque: string;
+  maestrosPosibles: number;
+  /** Nombre del único maestro posible (solo cuando `maestrosPosibles` es 1). */
+  unicoMaestro?: string | null;
+}
+
+/** REVISIÓN 2 · Bloques donde el grupo solo tiene 1 o 2 maestros posibles. */
+export interface GrupoBloquesApretadosIA {
+  grupoId: number;
+  grupo: string;
+  bloquesDisponibles: number;
+  /** Bloques con UN solo maestro posible: punto único de fallo. */
+  bloquesConUno: number;
+  bloquesConDos: number;
+  maestrosMinimo: number;
+  detalle: BloquePocosMaestrosIA[];
+}
+
+/** REVISIÓN 3 · Materia cuyas horas superan los días disponibles (regla de un día por materia). */
+export interface MateriaPorDiasIA {
+  grupoId: number;
+  grupo: string;
+  materia: string;
+  maestro: string;
+  horas: number;
+  /** Días distintos con disponibilidad del grupo (tope de la regla). */
+  diasGrupo: number;
+  /** Días en que además el maestro está disponible (tope real de esta combinación). */
+  diasComunes: number;
+  faltan: number;
+  motivo: string;
+  /**
+   * REVISIÓN 3 · el backend NO manda severidad en esta lista (las otras cuatro revisiones sí): llega
+   * `undefined`. Por eso es opcional y quien la pinte tiene que aguantar que falte.
+   */
+  severidad?: SeveridadViabilidad;
+}
+
+/** REVISIÓN 4 · Materia con sesiones de 2+ h sin días suficientes con par de bloques contiguos. */
+export interface SesionLargaSinParesIA {
+  grupoId: number;
+  grupo: string;
+  materia: string;
+  maestro: string;
+  horasLargas: number;
+  sesionesLargas: number;
+  paresContiguos: number;
+  diasConPar: number;
+  faltan: number;
+  motivo: string;
+  severidad: SeveridadViabilidad;
+}
+
+/** REVISIÓN 5 · Desglose por grupo del horario vigente (versión 1). */
+export interface GrupoHorarioVigenteIA {
+  grupoId: number;
+  grupo: string;
+  clases: number;
+  horas: number;
+  bloquesDelTurno: number;
+  diasConClase: number;
+  /** Bloques desde el inicio del turno hasta la primera clase (sumado por día). */
+  arranquesTarde: number;
+  /** Bloques libres entre la primera y la última clase del grupo. */
+  huecos: number;
+  /** Pares de bloques consecutivos del mismo día con materias distintas del mismo maestro. */
+  adyacencias: number;
+  severidad: SeveridadViabilidad;
+}
+
+/** Totales de las cinco revisiones finas. */
+export interface ResumenRevisionesIA {
+  paresConDeficit: number;
+  horasDeficit: number;
+  gruposConBloqueUnico: number;
+  bloquesConUnMaestro: number;
+  bloquesConDosMaestros: number;
+  materiasPorDias: number;
+  sesionesLargasCortas: number;
+  gruposConArranqueTarde: number;
+  huecosHorarioVigente: number;
+  adyacenciasHorarioVigente: number;
+  sinHorarioVigente: number;
+}
+
+export interface RevisionesViabilidadIA {
+  cupo: CupoMaestroGrupoIA[];
+  bloquesApretados: GrupoBloquesApretadosIA[];
+  materiasPorDias: MateriaPorDiasIA[];
+  sesionesLargas: SesionLargaSinParesIA[];
+  horarioVigente: GrupoHorarioVigenteIA[];
+  resumen: ResumenRevisionesIA;
 }
 
 /** Una sesión (trozo del patrón) que no se pudo colocar, con el motivo. */

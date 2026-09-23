@@ -7,6 +7,7 @@ import mx.sih.modelo.entidad.Grupo;
 import mx.sih.modelo.entidad.TurnoHorario;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,6 +38,18 @@ import java.util.function.Consumer;
  *   <li><b>Deduplicar y comprobar</b>: se rehace la ocupación desde cero y se verifican las reglas
  *       duras; el intento se publica con la lista de problemas (0 = válido).</li>
  * </ol>
+ *
+ * <p>EL REPARTO POR DÍAS (patrón {@code sih.asignacion.distribucion}) se arma con tres piezas que van
+ * juntas:
+ * <ul>
+ *   <li>las sesiones NACEN del patrón (ver {@link #duracionesDe}): "1,1,1,1,2" son cuatro sesiones de
+ *       1 h y una de 2 h, y el motor decide en qué día cae cada una y cuál lleva la doble;</li>
+ *   <li>la regla dura es una SESIÓN por materia y día (mapa {@code asigDia}), nunca una hora por día:
+ *       la sesión de 2 h ocupa dos bloques del MISMO día y eso no la viola;</li>
+ *   <li>el acercamiento al patrón se puntúa como regla blanda ({@link ReglasIA#PESO_DISTRIBUCION}),
+ *       así que si el patrón no cabe entero el motor prefiere desviarse antes que dejar horas
+ *       pendientes.</li>
+ * </ul>
  */
 public class GeneradorIA {
 
@@ -50,6 +63,11 @@ public class GeneradorIA {
         long inicio = System.currentTimeMillis();
         long limite = segundosMax > 0 ? inicio + segundosMax * 1000L : 0L;
         Corrida c = new Corrida(datos, semilla, limite);
+        // MODO STOCK: con el flag encendido el motor elige también el AULA de cada sesión -no solo el
+        // maestro- entre las del stock de su materia, y lo hace desde la construcción y en todas las
+        // fases (no solo como respaldo cuando la de la asignación está ocupada). Con el flag apagado el
+        // motor es exactamente el de siempre: cada sesión usa el aula de su asignación.
+        c.modoStock = asignarMaestros;
 
         // Todo lo que cuenta el motor va al log del servidor y a la bitácora del intento.
         List<String> bitacora = new ArrayList<>();
@@ -62,6 +80,7 @@ public class GeneradorIA {
                 + " grupos · demanda " + c.demanda + " h"
                 + (segundosMax > 0 ? " · tope " + segundosMax + " s" : ""));
         c.construir(asesor, registro);
+        c.logDistribucion(registro, "tras construir");
         registro.accept("  problemas duros tras construir: " + c.reconstruirMapas().size());
         c.buscarLocal(maxPasos);
         registro.accept("  problemas duros tras búsqueda local: " + c.reconstruirMapas().size());
@@ -82,7 +101,7 @@ public class GeneradorIA {
         // 5 ciclos sin mejora (antes 3): insiste más antes de rendirse y aprovecha más del tope de
         // segundos. Si no, con datos holgados el intento convergía en pocos segundos.
         while (sinMejora < MAX_CICLOS_SIN_MEJORA && !c.agotado()) {
-            List<int[]> snap = c.snapshot();
+            List<long[]> snap = c.snapshot();
             c.perturbar();
             c.buscarLocal(maxPasos);
             c.cicloReempaquetado(maxPasos, registro);
@@ -120,6 +139,17 @@ public class GeneradorIA {
         // Es la regla que el usuario pidió explícita: deben quedar separadas.
         c.separarAdyacencias(registro);
 
+        // Medición final del modo stock: la separación de adyacencias todavía puede mover una sesión a
+        // otro taller del stock, así que el recuento bueno es el de aquí, con el intento ya cerrado.
+        if (asignarMaestros) {
+            c.logAulas(registro, "final", true);
+        }
+
+        // MEDICIÓN DE LA REGLA DE DISTRIBUCIÓN sobre el horario ya cerrado (incluye lo que hayan
+        // podido mover la compactación y la separación de adyacencias): es la línea con la que se
+        // comprueba a mano si el motor respeta el patrón.
+        c.logDistribucion(registro, "final");
+
         IntentoIA intento = c.aIntento(numero);
         intento.setBitacora(bitacora);
         intento.setAsesor(asesor != null ? asesor.nombre() : "heuristica");
@@ -136,16 +166,28 @@ public class GeneradorIA {
 
     /**
      * Duraciones de las sesiones de una asignación según su patrón ("2,2,1" = dos sesiones de 2 h y
-     * una de 1 h). Si el patrón no cuadra con las horas, se reparte de una en una.
+     * una de 1 h).
+     *
+     * <p>El patrón es un CONJUNTO de tamaños de sesión, sin orden ni día: "1,1,1,1,2" son cuatro
+     * sesiones de 1 h y una de 2 h, y el motor decide en qué día cae cada una y cuál lleva la doble.
+     * Se generan TODAS las sesiones del patrón (aquí nacen las sesiones del motor, ver el constructor
+     * de {@link Corrida}), que es lo que después permite exigir una sesión por día sin exigir una hora
+     * por día.
+     *
+     * <p>DATO SUCIO: si la asignación no tiene patrón (nulo, vacío o con formato inválido, criterio de
+     * {@link ReglasIA#distribucionValida}) o si el patrón no cuadra con las horas de la asignación, se
+     * reparte de una en una y no se le exige distribución (mismo comportamiento que el solver, donde
+     * {@code distribucionValida} deja la asignación fuera de la regla). Con los datos del cliente
+     * (189/189 asignaciones) todos los patrones suman exactamente las horas, así que este respaldo no
+     * se usa.
      */
     public static List<Integer> duracionesDe(Asignacion a) {
         int horas = a.getHoras() == null ? 0 : a.getHoras();
         List<Integer> partes = new ArrayList<>();
         String patron = a.getDistribucion() == null ? "" : a.getDistribucion().trim();
-        if (patron.matches("\\d+(\\s*,\\s*\\d+)*")) {
+        if (ReglasIA.distribucionValida(patron)) {
             int suma = 0;
-            for (String trozo : patron.split(",")) {
-                int k = Integer.parseInt(trozo.trim());
+            for (int k : ReglasIA.parsearDistribucion(patron)) {
                 if (k > 0) {
                     partes.add(k);
                     suma += k;
@@ -163,8 +205,14 @@ public class GeneradorIA {
         return partes;
     }
 
-    /** Destino: día + ventana. */
-    private record Destino(int dia, Ventana ventana) {
+    /**
+     * Destino: día + ventana + AULA elegida.
+     *
+     * <p>El aula forma parte del destino porque en modo stock también la decide el motor: la elige
+     * entre las del stock de la materia (ver {@code Corrida.aulaElegida}). Sin modo stock, o sin stock,
+     * siempre es el aula de la asignación y el destino es el de antes.
+     */
+    private record Destino(int dia, Ventana ventana, long aula) {
     }
 
     /** Una sesión (trozo del patrón de una asignatura). */
@@ -202,6 +250,11 @@ public class GeneradorIA {
         boolean colocada() {
             return dia != null;
         }
+
+        /** Aula que la tabla le da a esta sesión (la de su asignación); 0 si su asignación no tiene. */
+        long aulaDeLaTabla() {
+            return asig.getAula() != null ? asig.getAula().getAulaId() : 0L;
+        }
     }
 
     /** Estado completo de una corrida. */
@@ -223,6 +276,29 @@ public class GeneradorIA {
         /** STOCK DE TALLERES POR MATERIA: las aulas que ya usa la materia en las asignaciones. */
         final Map<Long, Set<Long>> stockAulasPorMateria = new HashMap<>();
 
+        /**
+         * NOMBRE DE CADA MAESTRO (id → nombre), tomado de las asignaciones ya cargadas.
+         *
+         * <p>En modo stock el motor puede cambiar el maestro de una sesión, así que el nombre de una
+         * sesión NO se puede leer de su asignación: hay que resolverlo por el id que la sesión tiene
+         * ahora. Este mapa es esa fuente única y no consulta nada nuevo.
+         */
+        final Map<Long, String> nombreDeMaestroPorId = new HashMap<>();
+
+        /**
+         * NOMBRE DE CADA AULA (id → nombre), tomado de las asignaciones ya cargadas. Solo lo usa el
+         * resumen del modo stock en la bitácora; no consulta nada nuevo.
+         */
+        final Map<Long, String> nombreDeAulaPorId = new HashMap<>();
+
+        /**
+         * MODO STOCK (asignarMaestros == true): además del maestro, el motor elige libremente el AULA
+         * de cada sesión entre las del stock de su materia, en todas las fases y no solo como respaldo.
+         * Lo enciende {@code generarIntento} antes de construir. Apagado, el motor es el de siempre: la
+         * sesión solo puede usar el aula de su asignación.
+         */
+        boolean modoStock;
+
         final List<Integer> dias = new ArrayList<>();
         /**
          * Bloques de clase por TURNO y día, ordenados.
@@ -240,9 +316,28 @@ public class GeneradorIA {
         final Map<String, List<Ventana>> ventanas = new HashMap<>();
 
         final List<Sesion> sesiones = new ArrayList<>();
+        /**
+         * Sesiones de cada asignación (id → sus trozos del patrón). Se llena UNA vez en el
+         * constructor y no cambia nunca: la usa la regla de distribución, que necesita mirar sólo las
+         * sesiones de una asignación (horas que tiene colocadas cada día) sin recorrerlas todas.
+         */
+        final Map<Long, List<Sesion>> sesionesPorAsig = new LinkedHashMap<>();
+        /**
+         * Patrón de cada asignación ya parseado (id → tamaños de sesión; array VACÍO si la
+         * distribución es dato sucio, criterio {@link ReglasIA#distribucionValida}). Se parsea una
+         * sola vez en el constructor: la regla de distribución se evalúa en cada paso de la búsqueda y
+         * volver a partir el texto allí sería tirar el presupuesto de tiempo.
+         */
+        final Map<Long, int[]> patronPorAsig = new LinkedHashMap<>();
         final Map<Long, Sesion> ocupG = new HashMap<>();
         final Map<Long, Sesion> ocupM = new HashMap<>();
         final Map<Long, Sesion> ocupA = new HashMap<>();
+        /**
+         * REGLA DURA "una SESIÓN por día y materia": clave (asignación, día) → sesión colocada ese
+         * día. Se mide por SESIONES, no por horas: una sesión de 2 h ocupa dos bloques del mismo día
+         * (es lo que pide un patrón "1,1,1,1,2") y aquí deja UNA sola entrada. Es lo que impide dos
+         * sesiones del mismo patrón el mismo día, no dos bloques del mismo día.
+         */
         final Map<Long, Sesion> asigDia = new HashMap<>();
 
         final Random rnd;
@@ -319,6 +414,13 @@ public class GeneradorIA {
                 stockPorMateria.computeIfAbsent(a.getMateria().getMateriaId(), k -> new LinkedHashSet<>())
                         .add(a.getMaestro().getMaestroId());
             }
+            // Nombre de cada maestro por id: se lee de las asignaciones ya cargadas.
+            for (Asignacion a : asignaciones) {
+                if (a.getMaestro() != null) {
+                    nombreDeMaestroPorId.putIfAbsent(a.getMaestro().getMaestroId(),
+                            a.getMaestro().getTituloNombreCompleto());
+                }
+            }
             // Stock de talleres por materia: las aulas distintas que ya usa.
             for (Asignacion a : asignaciones) {
                 if (a.getMateria() == null || a.getAula() == null) {
@@ -326,6 +428,12 @@ public class GeneradorIA {
                 }
                 stockAulasPorMateria.computeIfAbsent(a.getMateria().getMateriaId(), k -> new LinkedHashSet<>())
                         .add(a.getAula().getAulaId());
+            }
+            // Nombre de cada aula por id: se lee de las asignaciones ya cargadas (solo para la bitácora).
+            for (Asignacion a : asignaciones) {
+                if (a.getAula() != null) {
+                    nombreDeAulaPorId.putIfAbsent(a.getAula().getAulaId(), a.getAula().getNombre());
+                }
             }
 
             Set<Long> idsTurno = new HashSet<>();
@@ -362,9 +470,12 @@ public class GeneradorIA {
                 boolean jovenes = a.getMateria() != null && a.getMateria().getClave() != null
                         && a.getMateria().getClave().contains("óvenes");
                 for (int dur : duracionesDe(a)) {
-                    sesiones.add(new Sesion(a, dur, stock, stockAulas, jovenes));
+                    Sesion sesion = new Sesion(a, dur, stock, stockAulas, jovenes);
+                    sesiones.add(sesion);
+                    sesionesPorAsig.computeIfAbsent(a.getAsignacionId(), k -> new ArrayList<>()).add(sesion);
                     total += dur;
                 }
+                patronPorAsig.put(a.getAsignacionId(), ReglasIA.parsearDistribucion(a.getDistribucion()));
             }
             this.demanda = total;
         }
@@ -399,7 +510,110 @@ public class GeneradorIA {
 
         // ───────── factibilidad y coste ─────────
 
-        /** Destinos posibles ahora mismo (día + ventana) respetando disponibilidad y ocupación. */
+        // ───────── elección del AULA al colocar (modo stock) ─────────
+
+        /**
+         * AULAS CANDIDATAS de una sesión: el STOCK de su materia, es decir, las aulas que esa materia
+         * ya usa en las asignaciones (el universo de candidatos). Si el stock está vacío -o el modo
+         * stock está apagado- el universo es solo el aula de la asignación, y todo queda como estaba.
+         */
+        List<Long> aulasCandidatas(Sesion s) {
+            if (!modoStock || s.stockAulas.isEmpty()) {
+                return List.of(s.aid);
+            }
+            return new ArrayList<>(s.stockAulas);
+        }
+
+        /** ¿Esa aula la ocupa OTRA sesión en alguno de esos bloques? (choque de aula: regla dura) */
+        boolean aulaOcupada(long aula, List<Long> ids, Sesion misma) {
+            if (aula == 0) {
+                return false;
+            }
+            for (long bid : ids) {
+                Sesion x = ocupA.get(clave(aula, bid));
+                if (x != null && x != misma) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /**
+         * CARGA de cada aula candidata: bloques que ya ocupa dentro del horario del turno de este
+         * grupo. Es el dato del desempate "mejor encaje"; se calcula una vez por colocación (no por
+         * ventana) y solo con las claves de {@code ocupA}, sin mantener ningún contador nuevo.
+         */
+        Map<Long, Integer> cargaDeAulas(List<Long> candidatas, Sesion s) {
+            Map<Long, Integer> out = new LinkedHashMap<>();
+            for (long al : candidatas) {
+                int n = 0;
+                if (al != 0) {
+                    for (int d : dias) {
+                        for (TurnoHorario b : dia(s.gid, d)) {
+                            if (ocupA.containsKey(clave(al, b.getId()))) {
+                                n++;
+                            }
+                        }
+                    }
+                }
+                out.put(al, n);
+            }
+            return out;
+        }
+
+        /**
+         * ELECCIÓN DEL AULA AL COLOCAR (modo stock): devuelve el aula elegida para esa sesión en esa
+         * ventana, o {@code null} si NINGUNA candidata está libre (entonces la ventana no sirve).
+         *
+         * <p>El aula ya no viene fijada por la asignación: se elige entre las candidatas cada vez que
+         * la sesión se coloca, no solo cuando el aula de la asignación falla.
+         *
+         * <p>CRITERIO Y DESEMPATES:
+         * <ol>
+         *   <li>Regla dura: el aula tiene que estar libre en TODOS los bloques de la ventana (el choque
+         *       de aula de siempre).</li>
+         *   <li>Desempate 1 (tabla): se prefiere el aula que la sesión ya traía -que al principio es la
+         *       de su asignación- y, si no, el aula de la asignación. Así no se cambia de taller sin
+         *       motivo y el horario se queda cerca de lo que dice la tabla.</li>
+         *   <li>Desempate 2 (encaje): entre las demás libres, la que menos bloques tiene ocupados en el
+         *       turno de este grupo, que es la que deja más hueco a las clases que faltan por colocar.</li>
+         *   <li>Desempate 3: id menor, para que la elección sea determinista y reproducible.</li>
+         * </ol>
+         */
+        Long aulaElegida(Sesion s, List<Long> candidatas, List<Long> ids, long aulaActual,
+                         Map<Long, Integer> carga) {
+            long tabla = s.aulaDeLaTabla();
+            Long mejor = null;
+            int mejorPref = 0;
+            int mejorCarga = 0;
+            for (long al : candidatas) {
+                if (aulaOcupada(al, ids, s)) {
+                    continue;
+                }
+                int pref = (al == aulaActual || al == tabla) ? 0 : 1;
+                int c = carga.getOrDefault(al, 0);
+                if (mejor == null || pref < mejorPref
+                        || (pref == mejorPref && (c < mejorCarga || (c == mejorCarga && al < mejor)))) {
+                    mejor = al;
+                    mejorPref = pref;
+                    mejorCarga = c;
+                }
+            }
+            return mejor;
+        }
+
+        /** Coloca la sesión en el destino elegido, con el aula que decidió el motor (no la que traía). */
+        void colocarDestino(Sesion s, Destino d) {
+            s.aid = d.aula();
+            colocar(s, d.dia(), d.ventana());
+        }
+
+        /**
+         * Destinos posibles ahora mismo (día + ventana + aula) respetando disponibilidad y ocupación.
+         *
+         * <p>En modo stock el aula se elige aquí, ventana a ventana; sin stock el destino lleva el aula
+         * de la asignación y la lista es exactamente la de antes.
+         */
         List<Destino> candidatas(Sesion s) {
             List<Destino> out = new ArrayList<>();
             Set<Long> g = dispG.get(s.gid);
@@ -407,6 +621,9 @@ public class GeneradorIA {
             if (g == null || m == null) {
                 return out;
             }
+            List<Long> cands = aulasCandidatas(s);
+            Map<Long, Integer> carga = cands.size() > 1 ? cargaDeAulas(cands, s) : Map.of();
+            long aulaActual = s.aid;
             for (int d : dias) {
                 if (asigDia.containsKey(claveDia(s.asigId, d))) {
                     continue;
@@ -415,14 +632,17 @@ public class GeneradorIA {
                     boolean ok = true;
                     for (long bid : v.ids()) {
                         if (!g.contains(bid) || !m.contains(bid)
-                                || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(s.mid, bid))
-                                || (s.aid != 0 && ocupA.containsKey(clave(s.aid, bid)))) {
+                                || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(s.mid, bid))) {
                             ok = false;
                             break;
                         }
                     }
-                    if (ok) {
-                        out.add(new Destino(d, v));
+                    if (!ok) {
+                        continue;
+                    }
+                    Long al = aulaElegida(s, cands, v.ids(), aulaActual, carga);
+                    if (al != null) {
+                        out.add(new Destino(d, v, al));
                     }
                 }
             }
@@ -486,12 +706,17 @@ public class GeneradorIA {
             asigDia.put(claveDia(s.asigId, dia), s);
         }
 
-        /** Quita la sesión y devuelve su colocación anterior (null si no estaba colocada). */
-        int[] quitar(Sesion s) {
+        /**
+         * Quita la sesión y devuelve su colocación anterior (null si no estaba colocada).
+         *
+         * <p>Guarda también el AULA: en modo stock el aula es una decisión del motor y forma parte del
+         * estado, así que deshacer una colocación tiene que devolverla a la de antes.
+         */
+        long[] quitar(Sesion s) {
             if (!s.colocada()) {
                 return null;
             }
-            int[] antes = {s.dia, s.pos};
+            long[] antes = {s.dia, s.pos, s.aid};
             for (long bid : s.ids) {
                 ocupG.remove(clave(s.gid, bid));
                 ocupM.remove(clave(s.mid, bid));
@@ -506,11 +731,12 @@ public class GeneradorIA {
             return antes;
         }
 
-        void restaurar(Sesion s, int[] antes) {
+        void restaurar(Sesion s, long[] antes) {
             if (antes == null) {
                 return;
             }
-            colocar(s, antes[0], new Ventana(antes[1], bloquesDe(s, antes[0], antes[1])));
+            s.aid = antes[2];
+            colocar(s, (int) antes[0], new Ventana((int) antes[1], bloquesDe(s, (int) antes[0], (int) antes[1])));
         }
 
         List<Long> bloquesDe(Sesion s, int dia, int pos) {
@@ -522,16 +748,17 @@ public class GeneradorIA {
             return List.copyOf(ids);
         }
 
-        List<int[]> snapshot() {
-            List<int[]> snap = new ArrayList<>(sesiones.size());
+        /** Colocación de cada sesión: {día, posición, aula}, o null si está pendiente. */
+        List<long[]> snapshot() {
+            List<long[]> snap = new ArrayList<>(sesiones.size());
             for (Sesion s : sesiones) {
-                snap.add(s.colocada() ? new int[]{s.dia, s.pos} : null);
+                snap.add(s.colocada() ? new long[]{s.dia, s.pos, s.aid} : null);
             }
             return snap;
         }
 
         /**
-         * Devuelve TODAS las sesiones al estado guardado en el snapshot.
+         * Devuelve TODAS las sesiones al estado guardado en el snapshot (día, posición y aula).
          *
          * <p>Se quitan todas primero y se colocan después. Hacerlo de una en una (quitar y colocar la
          * misma) dejaba ocupados los bloques de las sesiones que aún no se habían restaurado, así que
@@ -539,17 +766,18 @@ public class GeneradorIA {
          * "choque en el bloque N" y las materias con dos sesiones el mismo día que detectaba la
          * comprobación dura.
          */
-        void restaurarTodo(List<int[]> snap) {
+        void restaurarTodo(List<long[]> snap) {
             for (Sesion s : sesiones) {
                 if (s.colocada()) {
                     quitar(s);
                 }
             }
             for (int i = 0; i < sesiones.size(); i++) {
-                int[] w = snap.get(i);
+                long[] w = snap.get(i);
                 if (w != null) {
                     Sesion s = sesiones.get(i);
-                    colocar(s, w[0], new Ventana(w[1], bloquesDe(s, w[0], w[1])));
+                    s.aid = w[2];
+                    colocar(s, (int) w[0], new Ventana((int) w[1], bloquesDe(s, (int) w[0], (int) w[1])));
                 }
             }
         }
@@ -675,12 +903,128 @@ public class GeneradorIA {
                     total -= costeDia(g.getGrupoId(), d);
                 }
             }
+            // Regla blanda de distribución: se resta igual que el resto de castigos de forma. Es el
+            // mismo término que suma ReglasIA.medium, así que el "score" de la bitácora y el medium
+            // del intento cuentan siempre lo mismo.
+            total -= ReglasIA.PESO_DISTRIBUCION * desvioDistribucionTotal();
+            return total;
+        }
+
+        // ───────── regla blanda: respetar la distribución (patrón) ─────────
+
+        /**
+         * DESVÍO DEL PATRÓN de una asignación: cuántas horas habría que cambiar de día para que el
+         * reparto de lo que lleva colocado coincida con su {@code distribucion}.
+         *
+         * <p>Cuenta HORAS por día (la sesión de ese día, porque la regla dura sólo admite una sesión
+         * por materia y día) y las compara —como multiset ordenado— con el patrón recortado a las
+         * horas colocadas: ver {@link ReglasIA#desvioDistribucion}. Como el patrón no dice en qué día
+         * va cada sesión, colocar la doble en lunes o en jueves desvía lo mismo: el motor elige el día
+         * libremente.
+         *
+         * <p>Devuelve 0 si la asignación no tiene patrón (dato sucio, criterio
+         * {@link ReglasIA#distribucionValida}), si no tiene ninguna hora colocada (de las que faltan
+         * se encarga PESO_HORA) o si el reparto ya coincide.
+         */
+        int desvioPatron(long asigId) {
+            int[] patron = patronPorAsig.get(asigId);
+            if (patron == null || patron.length == 0) {
+                return 0;
+            }
+            List<Sesion> suyas = sesionesPorAsig.get(asigId);
+            if (suyas == null || suyas.isEmpty()) {
+                return 0;
+            }
+            int colocadas = 0;
+            for (Sesion s : suyas) {
+                if (s.colocada()) {
+                    colocadas++;
+                }
+            }
+            if (colocadas == 0) {
+                return 0;
+            }
+            // Horas colocadas en cada día. Como la regla dura sólo admite una sesión de la materia por
+            // día, normalmente son tantas entradas como sesiones colocadas; se agrupa por día igualmente
+            // porque en mitad de una prueba (o de una reversión) pueden coincidir dos.
+            int[] dias = new int[colocadas];
+            int[] horas = new int[colocadas];
+            int k = 0;
+            for (Sesion s : suyas) {
+                if (!s.colocada()) {
+                    continue;
+                }
+                int i = 0;
+                while (i < k && dias[i] != s.dia) {
+                    i++;
+                }
+                if (i == k) {
+                    dias[k] = s.dia;
+                    horas[k] = s.dur;
+                    k++;
+                } else {
+                    horas[i] += s.dur;
+                }
+            }
+            return ReglasIA.desvioDistribucion(patron, k == horas.length ? horas
+                    : Arrays.copyOf(horas, k));
+        }
+
+        /** Suma del desvío de todas las asignaciones (el término que entra en el score). */
+        int desvioDistribucionTotal() {
+            int total = 0;
+            for (long asigId : sesionesPorAsig.keySet()) {
+                total += desvioPatron(asigId);
+            }
             return total;
         }
 
         /**
+         * Línea de bitácora de la regla de distribución: cuántas asignaciones con patrón se desvían,
+         * cuánto suman y las peores (para poder verificar el efecto a mano).
+         */
+        void logDistribucion(Consumer<String> log, String momento) {
+            int conPatron = 0;
+            int desviadas = 0;
+            int total = 0;
+            List<Map.Entry<String, Integer>> peores = new ArrayList<>();
+            for (Map.Entry<Long, int[]> e : patronPorAsig.entrySet()) {
+                if (e.getValue() == null || e.getValue().length == 0) {
+                    continue;               // sin patrón (dato sucio): no se le exige nada
+                }
+                conPatron++;
+                int desvio = desvioPatron(e.getKey());
+                if (desvio > 0) {
+                    desviadas++;
+                    total += desvio;
+                    List<Sesion> suyas = sesionesPorAsig.get(e.getKey());
+                    Sesion cualquiera = suyas != null && !suyas.isEmpty() ? suyas.get(0) : null;
+                    String nombre = cualquiera == null ? ("asignación " + e.getKey())
+                            : etiqueta(cualquiera)
+                                    + (cualquiera.asig.getGrupo() != null
+                                            ? " (" + cualquiera.asig.getGrupo().getNombre() + ")" : "");
+                    peores.add(Map.entry(nombre, desvio));
+                }
+            }
+            log.accept("  distribución " + momento + ": " + desviadas + " de " + conPatron
+                    + " asignaciones con patrón se desvían · desvío total " + total);
+            if (!peores.isEmpty()) {
+                peores.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+                StringBuilder linea = new StringBuilder();
+                for (int i = 0; i < Math.min(3, peores.size()); i++) {
+                    if (i > 0) {
+                        linea.append(" · ");
+                    }
+                    linea.append(peores.get(i).getKey()).append(" desvía ").append(peores.get(i).getValue());
+                }
+                log.accept("    peores: " + linea);
+            }
+        }
+
+        /**
          * Mejor destino para una sesión SIN colocarla (no toca el estado salvo el temporal de la
-         * medición, que se deshace): mayor ganancia neta respecto al estado actual.
+         * medición, que se deshace): mayor ganancia neta respecto al estado actual. El destino incluye
+         * el AULA cuando el modo stock está encendido (ver {@link #aulaElegida}).
          */
         Destino mejorDestino(Sesion s, List<Long> excluir) {
             Map<Integer, Integer> antes = new HashMap<>();
@@ -692,8 +1036,14 @@ public class GeneradorIA {
             if (g == null || m == null) {
                 return null;
             }
+            List<Long> cands = aulasCandidatas(s);
+            Map<Long, Integer> carga = cands.size() > 1 ? cargaDeAulas(cands, s) : Map.of();
+            long aulaActual = s.aid;
             Destino mejor = null;
             int mejorGan = Integer.MIN_VALUE;
+            // Desvío del patrón de la asignación tal como está ahora (con s fuera): la ganancia de
+            // cada destino lleva también lo que ese destino acerca o aleja del patrón.
+            int patronAntes = desvioPatron(s.asigId);
             for (int d : dias) {
                 if (asigDia.containsKey(claveDia(s.asigId, d))) {
                     continue;
@@ -705,8 +1055,7 @@ public class GeneradorIA {
                     boolean ok = true;
                     for (long bid : v.ids()) {
                         if (!g.contains(bid) || !m.contains(bid)
-                                || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(s.mid, bid))
-                                || (s.aid != 0 && ocupA.containsKey(clave(s.aid, bid)))) {
+                                || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(s.mid, bid))) {
                             ok = false;
                             break;
                         }
@@ -714,13 +1063,24 @@ public class GeneradorIA {
                     if (!ok) {
                         continue;
                     }
+                    Long al = aulaElegida(s, cands, v.ids(), aulaActual, carga);
+                    if (al == null) {
+                        continue;
+                    }
+                    // La prueba se hace con el aula elegida (si no, se escribiría la ocupación del aula
+                    // de la asignación, que puede estar cogida por otra sesión) y se deshace entera: la
+                    // sesión queda SIN colocar y con el aula que traía; la fija el llamador al colocar.
+                    s.aid = al;
                     colocar(s, d, v);
                     int despues = costeDia(s.gid, d);
+                    int patron = desvioPatron(s.asigId);
                     quitar(s);                                  // se deja SIN colocar
-                    int gan = ganancia(s) - (despues - antes.get(d));
+                    s.aid = aulaActual;
+                    int gan = ganancia(s) - (despues - antes.get(d))
+                            - ReglasIA.PESO_DISTRIBUCION * (patron - patronAntes);
                     if (gan > mejorGan) {
                         mejorGan = gan;
-                        mejor = new Destino(d, v);
+                        mejor = new Destino(d, v, al);
                     }
                 }
             }
@@ -787,7 +1147,7 @@ public class GeneradorIA {
                         .thenComparingInt(s -> -s.dur)
                         .thenComparingLong(s -> s.asigId));
                 int delAsesor = construirEnOrden(conAsesor);
-                List<int[]> hechoAsesor = snapshot();
+                List<long[]> hechoAsesor = snapshot();
                 for (Sesion s : sesiones) {
                     if (s.colocada()) {
                         quitar(s);
@@ -817,7 +1177,7 @@ public class GeneradorIA {
             for (Sesion s : orden) {
                 Destino d = mejorDestino(s, List.of());
                 if (d != null) {
-                    colocar(s, d.dia(), d.ventana());
+                    colocarDestino(s, d);
                     colocadas++;
                 }
             }
@@ -849,11 +1209,15 @@ public class GeneradorIA {
                     if (d == null) {
                         continue;
                     }
+                    long aulaAntes = s.aid;
                     int antes = costeDia(s.gid, d.dia());
-                    colocar(s, d.dia(), d.ventana());
-                    int delta = ganancia(s) - (costeDia(s.gid, d.dia()) - antes);
+                    int patronAntes = desvioPatron(s.asigId);
+                    colocarDestino(s, d);
+                    int delta = ganancia(s) - (costeDia(s.gid, d.dia()) - antes)
+                            - ReglasIA.PESO_DISTRIBUCION * (desvioPatron(s.asigId) - patronAntes);
                     if (!(delta > 0 || (delta == 0 && rnd.nextBoolean()))) {
                         quitar(s);
+                        s.aid = aulaAntes;      // el aula elegida solo se queda si la colocación se acepta
                     }
                     continue;
                 }
@@ -861,8 +1225,10 @@ public class GeneradorIA {
                 if (rnd.nextInt(100) < 8) {                     // dejarla pendiente
                     int dia = s.dia;
                     int antes = costeDia(s.gid, dia);
-                    int[] orig = quitar(s);
-                    int delta = -ganancia(s) + (costeDia(s.gid, dia) - antes);
+                    int patronAntes = desvioPatron(s.asigId);
+                    long[] orig = quitar(s);
+                    int delta = -ganancia(s) + (costeDia(s.gid, dia) - antes)
+                            - ReglasIA.PESO_DISTRIBUCION * (desvioPatron(s.asigId) - patronAntes);
                     if (!(delta > 0 || (delta == 0 && rnd.nextBoolean()))) {
                         restaurar(s, orig);
                     }
@@ -872,7 +1238,8 @@ public class GeneradorIA {
                 int diaOrig = s.dia;
                 int posOrig = s.pos;
                 int antesA = costeDia(s.gid, diaOrig);
-                int[] orig = quitar(s);
+                int patronAntes = desvioPatron(s.asigId);
+                long[] orig = quitar(s);
                 List<Destino> cands = new ArrayList<>();
                 for (Destino d : candidatas(s)) {
                     if (!(d.dia() == diaOrig && d.ventana().pos() == posOrig)) {
@@ -885,9 +1252,10 @@ public class GeneradorIA {
                 }
                 Destino d = cands.get(rnd.nextInt(cands.size()));
                 int antesB = costeDia(s.gid, d.dia());
-                colocar(s, d.dia(), d.ventana());
+                colocarDestino(s, d);
                 int delta = ganancia(s)
-                        - ((costeDia(s.gid, d.dia()) - antesB) + (costeDia(s.gid, diaOrig) - antesA));
+                        - ((costeDia(s.gid, d.dia()) - antesB) + (costeDia(s.gid, diaOrig) - antesA))
+                        - ReglasIA.PESO_DISTRIBUCION * (desvioPatron(s.asigId) - patronAntes);
                 if (!(delta > 0 || (delta == 0 && rnd.nextBoolean()))) {
                     quitar(s);
                     restaurar(s, orig);
@@ -951,9 +1319,9 @@ public class GeneradorIA {
                 return false;
             }
             int antes = costeDia(gid, dia);
-            List<int[]> orig = new ArrayList<>();
+            List<long[]> orig = new ArrayList<>();
             for (Sesion s : suyas) {
-                orig.add(s.colocada() ? new int[]{s.dia, s.pos} : null);
+                orig.add(s.colocada() ? new long[]{s.dia, s.pos, s.aid} : null);
             }
             for (Sesion s : suyas) {
                 quitar(s);
@@ -1088,9 +1456,9 @@ public class GeneradorIA {
             for (long g : afectados) {
                 antes += costeDia(g, dia);
             }
-            List<int[]> orig = new ArrayList<>();
+            List<long[]> orig = new ArrayList<>();
             for (Sesion s : suyas) {
-                orig.add(s.colocada() ? new int[]{s.dia, s.pos} : null);
+                orig.add(s.colocada() ? new long[]{s.dia, s.pos, s.aid} : null);
             }
             for (Sesion s : suyas) {
                 quitar(s);
@@ -1191,7 +1559,7 @@ public class GeneradorIA {
                     if (!s.colocada()) {
                         Destino d = mejorDestino(s, List.of());
                         if (d != null) {
-                            colocar(s, d.dia(), d.ventana());
+                            colocarDestino(s, d);
                             puestas++;
                         }
                     }
@@ -1277,7 +1645,7 @@ public class GeneradorIA {
                         if (!disponiblePorDisponibilidad(s, v)) {
                             continue;
                         }
-                        List<int[]> snap = snapshot();
+                        List<long[]> snap = snapshot();
                         int antes = horasColocadas(sesiones);
 
                         Set<Sesion> ocupantes = new LinkedHashSet<>();
@@ -1305,7 +1673,7 @@ public class GeneradorIA {
                             if (!x.colocada()) {
                                 Destino destino = mejorDestino(x, v.ids());
                                 if (destino != null) {
-                                    colocar(x, destino.dia(), destino.ventana());
+                                    colocarDestino(x, destino);
                                 }
                             }
                         }
@@ -1387,9 +1755,9 @@ public class GeneradorIA {
         int reconstruirIncompletas() {
             int hechas = 0;
             for (List<Sesion> grupo : materiasIncompletas()) {
-                List<int[]> orig = new ArrayList<>();
+                List<long[]> orig = new ArrayList<>();
                 for (Sesion s : grupo) {
-                    orig.add(s.colocada() ? new int[]{s.dia, s.pos} : null);
+                    orig.add(s.colocada() ? new long[]{s.dia, s.pos, s.aid} : null);
                 }
                 for (Sesion s : grupo) {
                     quitar(s);
@@ -1401,7 +1769,7 @@ public class GeneradorIA {
                         ok = false;
                         break;
                     }
-                    colocar(s, d.dia(), d.ventana());
+                    colocarDestino(s, d);
                 }
                 boolean completa = true;
                 for (Sesion s : grupo) {
@@ -1440,7 +1808,7 @@ public class GeneradorIA {
                 if (!falta) {
                     continue;
                 }
-                List<int[]> orig = snapshot();
+                List<long[]> orig = snapshot();
                 int antes = 0;
                 for (Sesion s : suyas) {
                     if (s.colocada()) {
@@ -1458,7 +1826,7 @@ public class GeneradorIA {
                         ok = false;
                         break;
                     }
-                    colocar(s, d.dia(), d.ventana());
+                    colocarDestino(s, d);
                 }
                 int despues = 0;
                 for (Sesion s : suyas) {
@@ -1546,7 +1914,7 @@ public class GeneradorIA {
                     if (prof <= 0 || culpables.size() > 2) {
                         continue;
                     }
-                    List<int[]> snap = snapshot();
+                    List<long[]> snap = snapshot();
                     for (Sesion x : culpables) {
                         quitar(x);
                     }
@@ -1843,7 +2211,7 @@ public class GeneradorIA {
                             continue;
                         }
                             int antes = horasColocadas(universo);
-                            List<int[]> snap = snapshot();
+                            List<long[]> snap = snapshot();
 
                             // 1) Se libera el horario COMPLETO de esos grupos (y la sesión pendiente).
                             for (Sesion x : universo) {
@@ -1862,7 +2230,7 @@ public class GeneradorIA {
                             for (Sesion x : orden) {
                                 Destino destino = mejorDestino(x, List.of());
                                 if (destino != null) {
-                                    colocar(x, destino.dia(), destino.ventana());
+                                    colocarDestino(x, destino);
                                 }
                             }
                             // Si el rehacer a lo bruto dejó algo fuera, se insiste SOLO con lo que
@@ -1880,7 +2248,7 @@ public class GeneradorIA {
                                     if (!x.colocada()) {
                                         Destino destino = mejorDestino(x, List.of());
                                         if (destino != null) {
-                                            colocar(x, destino.dia(), destino.ventana());
+                                            colocarDestino(x, destino);
                                         }
                                     }
                                 }
@@ -1908,6 +2276,14 @@ public class GeneradorIA {
         }
 
         // ───────── 4d) MODO "ASIGNAR MAESTROS DESDE EL STOCK" ─────────
+        //
+        // MODELO NUEVO (sin Timefold): el stock de una materia es la LISTA DE MAESTROS HABILITADOS
+        // (los que la tienen asignada en algun grupo de sih.asignacion) y ese es el universo de
+        // candidatos; el maestro ya no viene fijado por la asignacion. El motor elige quien cubre cada
+        // (materia, grupo) -un LOTE- con una condicion dura: cada maestro debe cubrir EXACTAMENTE los
+        // grupos que la tabla le asigna. Como las horas de una materia son las mismas en todos los
+        // grupos (salen del catalogo), cambiar de maestro un grupo no mueve horas: solo decide quien da
+        // que. El Jovenes se resuelve DENTRO del reparto (sigue a la materia del grupo), no despues.
 
         void colocarCon(Sesion s, long mid, int dia, Ventana v) {
             s.mid = mid;
@@ -1949,180 +2325,892 @@ public class GeneradorIA {
             return false;
         }
 
-        /** Igual que {@link #mejorDestino}, pero probando la disponibilidad de un maestro concreto. */
-        Destino mejorDestinoConMaestro(Sesion s, long t, List<Long> excluir) {
-            Map<Integer, Integer> antes = new HashMap<>();
-            for (int d : dias) {
-                antes.put(d, costeDia(s.gid, d));
+        /**
+         * La mejor ventana de UN dia para colocar s con el maestro t, o null si no hay ninguna legal.
+         *
+         * <p>{@code antes} es el coste del dia antes de colocar (lo pasa el llamador, que lo midio con
+         * la sesion fuera del tablero): se recibe para no volver a medirlo en cada ventana probada.
+         */
+        Ventana mejorVentanaConMaestro(Sesion s, long t, int d, int antes) {
+            if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                return null;
             }
             Set<Long> g = dispG.get(s.gid);
             Set<Long> m = dispM.get(t);
             if (g == null || m == null) {
                 return null;
             }
-            Destino mejor = null;
+            Ventana mejor = null;
             int mejorGan = Integer.MIN_VALUE;
-            for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+            for (Ventana v : ventanasDe(s, d)) {
+                boolean ok = true;
+                for (long bid : v.ids()) {
+                    if (!g.contains(bid) || !m.contains(bid)
+                            || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(t, bid))
+                            || (s.aid != 0 && ocupA.containsKey(clave(s.aid, bid)))) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok) {
                     continue;
                 }
-                for (Ventana v : ventanasDe(s, d)) {
-                    if (!excluir.isEmpty() && v.ids().stream().anyMatch(excluir::contains)) {
-                        continue;
-                    }
-                    boolean ok = true;
-                    for (long bid : v.ids()) {
-                        if (!g.contains(bid) || !m.contains(bid)
-                                || ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(t, bid))
-                                || (s.aid != 0 && ocupA.containsKey(clave(s.aid, bid)))) {
-                            ok = false;
-                            break;
-                        }
-                    }
-                    if (!ok) {
-                        continue;
-                    }
-                    colocarCon(s, t, d, v);
-                    int despues = costeDia(s.gid, d);
-                    quitar(s);
-                    int gan = ganancia(s) - (despues - antes.get(d));
-                    if (gan > mejorGan) {
-                        mejorGan = gan;
-                        mejor = new Destino(d, v);
-                    }
+                colocarCon(s, t, d, v);
+                int gan = ganancia(s) - (costeDia(s.gid, d) - antes);
+                quitar(s);
+                if (gan > mejorGan) {
+                    mejorGan = gan;
+                    mejor = v;
                 }
             }
             return mejor;
         }
 
+        /** Maestro que la tabla le asigna a esa sesion: el punto de partida del reparto (0 si no tiene). */
+        long maestroDeLaTabla(Sesion s) {
+            return s.asig.getMaestro() != null ? s.asig.getMaestro().getMaestroId() : 0L;
+        }
+
+        /** El maestro tiene disponible y libre todos esos bloques (sin choque con otra clase). */
+        boolean bloqueado(long mid, List<Long> ids, Sesion misma) {
+            Set<Long> m = dispM.get(mid);
+            if (m == null) {
+                return true;
+            }
+            for (long bid : ids) {
+                if (!m.contains(bid)) {
+                    return true;
+                }
+                Sesion x = ocupM.get(clave(mid, bid));
+                if (x != null && x != misma) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        /** El maestro puede recibir esa sesion tal como esta colocada. */
+        boolean puedeCubrir(long t, Sesion s) {
+            return !bloqueado(t, s.ids, s);
+        }
+
+        /**
+         * Cambia el maestro de una sesion YA colocada, rehaciendo la ocupacion de sus bloques.
+         *
+         * <p>Si la sesion esta pendiente no hay nada que rehacer: tenia los bloques vacios
+         * ({@code ids == List.of()} y {@code dia == null}, ver {@link #quitar}), asi que el unico
+         * efecto de seguir seria cambiarle el maestro, que es justo lo que NO debe hacer un metodo
+         * que dice "mover una sesion colocada". Se devuelve sin tocar nada.
+         */
+        void moveCon(Sesion s, long de, long a) {
+            if (!s.colocada()) {
+                return;
+            }
+            for (long bid : s.ids) {
+                ocupM.remove(clave(de, bid));
+            }
+            s.mid = a;
+            for (long bid : s.ids) {
+                ocupM.put(clave(a, bid), s);
+            }
+        }
+
+        /**
+         * Coloca (o recoloca) la sesion con ese maestro en la mejor ventana legal del dia {@code dia}.
+         *
+         * <p>Se prueba ademas cada TALLER del stock de la materia. Si no hay destino, deja la sesion
+         * tal como estaba: el aula y el maestro anteriores se restauran, para no dejar estado a medias.
+         */
+        boolean colocarConMaestro(Sesion s, long t, List<Long> aulas, int dia) {
+            long prevAula = s.aid;
+            // El coste del dia no depende del aula (solo de la ocupacion del grupo), asi que se mide
+            // una vez y se reutiliza en cada taller candidato.
+            int antes = costeDia(s.gid, dia);
+            for (long al : aulas) {
+                s.aid = al;
+                Ventana v = mejorVentanaConMaestro(s, t, dia, antes);
+                if (v == null) {
+                    continue;
+                }
+                if (s.colocada()) {
+                    // Ya colocada: se libera antes de recolocarla, si no chocaria consigo misma.
+                    quitar(s);
+                }
+                colocarCon(s, t, dia, v);
+                return true;
+            }
+            s.aid = prevAula;
+            return false;
+        }
+
+        /**
+         * Intenta colocar la sesion con ese maestro en cualquiera de sus talleres del stock.
+         *
+         * <p>El orden de los talleres es el desempate de la elección de aula (ver {@link #aulaElegida}):
+         * primero el aula que la sesión ya traía -que al principio es la de su asignación-, después el
+         * resto del stock. Así el motor no cambia de taller sin motivo, pero ya no se queda clavado en
+         * el de la asignación: si está ocupado, prueba los demás del stock.
+         */
+        boolean intentarColocar(Sesion s, long t) {
+            List<Long> aulas = new ArrayList<>();
+            if (s.aid != 0) {
+                aulas.add(s.aid);
+            }
+            for (long al : aulasCandidatas(s)) {
+                if (!aulas.contains(al)) {
+                    aulas.add(al);
+                }
+            }
+            if (aulas.isEmpty()) {
+                aulas.add(0L);          // sin aula (stock vacío y asignación sin taller): como siempre
+            }
+            for (int d : dias) {
+                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                    continue;
+                }
+                if (colocarConMaestro(s, t, aulas, d)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ───────── 4d.1) LOTES, CUOTAS Y REPARTO EXACTO ─────────
+
+        /**
+         * LOTE: todas las sesiones de UNA materia en UN grupo que la tabla le asigna al mismo maestro.
+         *
+         * <p>Es la unidad del reparto. El tope se cuenta por GRUPOS: dos filas de la misma (materia,
+         * grupo, maestro) -los datos reales traen asignaciones partidas, DSAUPOO 9+4- son UN lote y por
+         * tanto UN grupo, aunque sus horas se sumen. Y como las horas de una materia son las mismas en
+         * todos los grupos, pasar el lote a otro grupo no cambia las horas de nadie: solo decide QUIEN
+         * da esa materia a ese grupo, que es justo lo que el motor elige.
+         *
+         * <p>Los lotes de Jovenes no entran en este reparto: su maestro se deduce del reparto de las
+         * OTRAS materias del grupo (ver {@link #repartirJovenes}).
+         */
+        private static final class Lote {
+            final long materiaId;
+            final long gid;
+            /** Maestro que la tabla le asigna a esta materia en este grupo. */
+            final long maestroOriginal;
+            final boolean jovenes;
+            final List<Sesion> sesiones = new ArrayList<>();
+            /** Maestro que cubre el lote AHORA MISMO. Es la decision que toma el motor. */
+            long mid;
+
+            Lote(long materiaId, long gid, long maestroOriginal, boolean jovenes) {
+                this.materiaId = materiaId;
+                this.gid = gid;
+                this.maestroOriginal = maestroOriginal;
+                this.jovenes = jovenes;
+                this.mid = maestroOriginal;
+            }
+
+            /** Universo de candidatos: el stock de la materia (los maestros habilitados en la tabla). */
+            Set<Long> stock() {
+                return sesiones.isEmpty() ? Set.of() : sesiones.get(0).stock;
+            }
+        }
+
+        /**
+         * Lotes del horario: (materia, grupo, maestro de la tabla). Las sesiones sin materia no tienen
+         * stock ni cuota con la que repartir, asi que se quedan como esten (igual que antes).
+         */
+        List<Lote> lotes() {
+            Map<String, Lote> porClave = new LinkedHashMap<>();
+            for (Sesion s : sesiones) {
+                if (s.asig.getMateria() == null) {
+                    continue;
+                }
+                long mid = maestroDeLaTabla(s);
+                String clave = s.asig.getMateria().getMateriaId() + "|" + s.gid + "|" + mid;
+                Lote l = porClave.computeIfAbsent(clave, k -> new Lote(
+                        s.asig.getMateria().getMateriaId(), s.gid, mid, s.jovenes));
+                l.sesiones.add(s);
+            }
+            return new ArrayList<>(porClave.values());
+        }
+
+        /** Lotes agrupados por materia: el reparto es por materia, porque el stock es por materia. */
+        Map<Long, List<Lote>> porMateria(List<Lote> lotes) {
+            Map<Long, List<Lote>> out = new LinkedHashMap<>();
+            for (Lote l : lotes) {
+                out.computeIfAbsent(l.materiaId, k -> new ArrayList<>()).add(l);
+            }
+            return out;
+        }
+
+        /** Lotes que NO son de Jovenes, agrupados por grupo: son los que dan la otra materia del grupo. */
+        Map<Long, List<Lote>> lotesPorGrupo(List<Lote> lotes) {
+            Map<Long, List<Lote>> out = new LinkedHashMap<>();
+            for (Lote l : lotes) {
+                if (!l.jovenes) {
+                    out.computeIfAbsent(l.gid, k -> new ArrayList<>()).add(l);
+                }
+            }
+            return out;
+        }
+
+        /**
+         * CUOTA EXACTA por (materia, maestro): grupos DISTINTOS que la tabla le asigna. Las filas
+         * repetidas de la misma (materia, grupo, maestro) cuentan UNA vez: sus horas se suman, pero el
+         * tope es de grupos.
+         *
+         * <p>La cuota sale de los LOTES que hay que repartir (que son los de la tabla menos las filas de
+         * 0 h, que no dan clase), y se contrasta con la tabla: si un par materia-maestro no cuadra, se
+         * avisa y manda el horario. Asi la suma de cuotas es exactamente el numero de lotes y el reparto
+         * exacto siempre es alcanzable partiendo del reparto de la tabla.
+         */
+        Map<Long, Map<Long, Integer>> cuotaExacta(List<Lote> lotes, Consumer<String> log) {
+            Map<Long, Map<Long, Set<Long>>> tabla = new LinkedHashMap<>();
+            for (Asignacion a : asignaciones) {
+                if (a.getMateria() == null || a.getMaestro() == null || a.getGrupo() == null) {
+                    continue;
+                }
+                tabla.computeIfAbsent(a.getMateria().getMateriaId(), k -> new LinkedHashMap<>())
+                        .computeIfAbsent(a.getMaestro().getMaestroId(), k -> new LinkedHashSet<>())
+                        .add(a.getGrupo().getGrupoId());
+            }
+            Map<Long, Map<Long, Integer>> lotesPorPar = new LinkedHashMap<>();
+            for (Lote l : lotes) {
+                lotesPorPar.computeIfAbsent(l.materiaId, k -> new LinkedHashMap<>())
+                        .merge(l.maestroOriginal, 1, Integer::sum);
+            }
+            Map<Long, Map<Long, Integer>> cuota = new LinkedHashMap<>();
+            int ajustadas = 0;
+            // La cuota se arma sobre los lotes que hay que repartir (nunca sobre las materias que no
+            // entran, como Jovenes): asi la suma de cuotas es el numero de lotes y el reparto exacto es
+            // alcanzable desde el reparto de la tabla.
+            for (Map.Entry<Long, Map<Long, Integer>> e : lotesPorPar.entrySet()) {
+                Map<Long, Set<Long>> enTabla = tabla.getOrDefault(e.getKey(), Map.of());
+                Map<Long, Integer> fila = new LinkedHashMap<>();
+                for (Map.Entry<Long, Integer> t : e.getValue().entrySet()) {
+                    if (enTabla.getOrDefault(t.getKey(), Set.of()).size() != t.getValue()) {
+                        ajustadas++;
+                    }
+                    fila.put(t.getKey(), t.getValue());
+                }
+                for (Map.Entry<Long, Set<Long>> t : enTabla.entrySet()) {
+                    // La tabla lista ese par pero sin sesiones que repartir (fila de 0 h): cuota 0.
+                    if (!fila.containsKey(t.getKey())) {
+                        fila.put(t.getKey(), 0);
+                        ajustadas++;
+                    }
+                }
+                cuota.put(e.getKey(), fila);
+            }
+            if (ajustadas > 0) {
+                log.accept("  cuota: " + ajustadas + " par(es) materia-maestro donde la tabla y el horario no "
+                        + "cuadran (una fila de 0 h no da clase): manda el horario, no la fila");
+            }
+            return cuota;
+        }
+
+        /**
+         * Lo bien que le cae el lote a un maestro del stock: primero que sus sesiones se queden donde
+         * estan (sin mover dia, ventana ni taller) y despues que las pendientes tengan hueco por
+         * disponibilidad. El desempate (+1) favorece al maestro de la tabla: si todo cabe igual, no se
+         * mueve nada.
+         */
+        int compatibilidad(Lote l, long t) {
+            int puntos = 1000 * sesionesEnSitio(l, t);
+            for (Sesion s : l.sesiones) {
+                if (!s.colocada()) {
+                    puntos += 10 * Math.min(20, ventanasConDisponibilidad(s, t));
+                }
+            }
+            return puntos + (t == l.maestroOriginal ? 1 : 0);
+        }
+
+        /** Sesiones del lote que seguirian tal cual con ese maestro (disponibilidad y sin choque). */
+        int sesionesEnSitio(Lote l, long t) {
+            int n = 0;
+            for (Sesion s : l.sesiones) {
+                if (s.colocada() && cubre(t, s.ids) && !chocaMaestro(t, s.ids, s)) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        /** Ventanas que le quedan a una sesion pendiente por disponibilidad (grupo y maestro). */
+        int ventanasConDisponibilidad(Sesion s, long t) {
+            Set<Long> g = dispG.get(s.gid);
+            if (g == null || dispM.get(t) == null) {
+                return 0;
+            }
+            int n = 0;
+            for (int d : dias) {
+                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                    continue;
+                }
+                for (Ventana v : ventanasDe(s, d)) {
+                    boolean ok = true;
+                    for (long bid : v.ids()) {
+                        if (!g.contains(bid)) {
+                            ok = false;
+                            break;
+                        }
+                    }
+                    if (ok && cubre(t, v.ids())) {
+                        n++;
+                    }
+                }
+            }
+            return n;
+        }
+
+        /**
+         * REPARTO LIBRE: decide que maestro del stock cubre cada lote de la materia.
+         *
+         * <p>Arranca del reparto de la tabla (que ya cumple la cuota exacta) y lo mejora con
+         * INTERCAMBIOS entre lotes de la misma materia: cada maestro sigue con el mismo numero de
+         * grupos, asi que la cuota exacta se mantiene por construccion y lo unico que cambia es QUIEN da
+         * que grupo. Solo se acepta el intercambio si mejora la compatibilidad, de modo que el reparto de
+         * la tabla se toca unicamente cuando de verdad ayuda (sobre todo a colocar pendientes).
+         */
+        void repartir(Map<Long, List<Lote>> porMateria) {
+            for (List<Lote> lotes : porMateria.values()) {
+                for (int pasada = 1; pasada <= 4; pasada++) {
+                    boolean cambio = false;
+                    for (int i = 0; i < lotes.size(); i++) {
+                        for (int j = i + 1; j < lotes.size(); j++) {
+                            Lote a = lotes.get(i);
+                            Lote b = lotes.get(j);
+                            if (a.mid == b.mid || !intercambioLegal(lotes, a, b)) {
+                                continue;
+                            }
+                            int antes = compatibilidad(a, a.mid) + compatibilidad(b, b.mid);
+                            int despues = compatibilidad(a, b.mid) + compatibilidad(b, a.mid);
+                            if (despues > antes) {
+                                long t = a.mid;
+                                a.mid = b.mid;
+                                b.mid = t;
+                                cambio = true;
+                            }
+                        }
+                    }
+                    if (!cambio) {
+                        break;
+                    }
+                }
+            }
+        }
+
+        /**
+         * Un intercambio de maestros entre dos lotes de la misma materia no puede dejar a un maestro con
+         * DOS lotes en el mismo grupo: entonces cubriria menos grupos distintos de los que le tocan y la
+         * cuota dejaria de ser exacta.
+         */
+        boolean intercambioLegal(List<Lote> lotes, Lote a, Lote b) {
+            if (a.gid == b.gid) {
+                // Mismo grupo: el juego de pares (grupo, maestro) no cambia, solo se dan la vuelta.
+                return true;
+            }
+            // Tras el intercambio, a queda con b.mid en a.gid y b con a.mid en b.gid.
+            for (Lote l : lotes) {
+                if (l == a || l == b) {
+                    continue;
+                }
+                if (l.mid == b.mid && l.gid == a.gid) {
+                    return false;
+                }
+                if (l.mid == a.mid && l.gid == b.gid) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /** Estado de TODAS las sesiones (maestro, dia, posicion y taller), para probar y deshacer. */
+        List<long[]> snapshotMaestros() {
+            List<long[]> est = new ArrayList<>(sesiones.size());
+            for (Sesion s : sesiones) {
+                est.add(new long[]{s.mid, s.colocada() ? s.dia : -1L, s.pos, s.aid});
+            }
+            return est;
+        }
+
+        /** Devuelve todas las sesiones (maestro y taller incluidos) al estado guardado. */
+        void restaurarMaestros(List<long[]> est) {
+            for (Sesion s : sesiones) {
+                if (s.colocada()) {
+                    quitar(s);
+                }
+            }
+            for (int i = 0; i < sesiones.size(); i++) {
+                long[] e = est.get(i);
+                Sesion s = sesiones.get(i);
+                s.mid = e[0];
+                s.aid = e[3];
+                if (e[1] >= 0) {
+                    colocar(s, (int) e[1], new Ventana((int) e[2], bloquesDe(s, (int) e[1], (int) e[2])));
+                }
+            }
+        }
+
+        /** Rehace la decision de cada lote a partir de sus sesiones (tras deshacer un intento). */
+        void releerPlan(List<Lote> lotes) {
+            for (Lote l : lotes) {
+                if (!l.sesiones.isEmpty()) {
+                    l.mid = l.sesiones.get(0).mid;
+                }
+            }
+        }
+
+        /**
+         * Pone el lote ENTERO con un maestro del stock, sin perder nada de lo ya colocado.
+         *
+         * <p>Cada sesion colocada se queda en su ventana y su taller si ese maestro la puede cubrir; si
+         * no, se recoloca con los talleres del stock. Las sesiones que ya venian PENDIENTES se intentan
+         * colocar, pero no bloquean el cambio: puede que el unico hueco sea para las demas.
+         *
+         * <p>Requisito duro: si alguna sesion que estaba colocada se quedaria pendiente, se deshace TODO
+         * (maestro incluido) y devuelve false. Es el invariante del modo stock: el reparto nunca puede
+         * costar cobertura.
+         */
+        boolean ponerLote(Lote l, long t) {
+            List<long[]> antes = snapshotMaestros();
+            for (Sesion s : l.sesiones) {
+                if (s.mid == t) {
+                    continue;
+                }
+                boolean estaba = s.colocada();
+                if (estaba && puedeCubrir(t, s)) {
+                    moveCon(s, s.mid, t);           // el maestro nuevo la cubre donde esta: no se mueve
+                    continue;
+                }
+                if (estaba) {
+                    quitar(s);
+                }
+                s.mid = t;
+                if (!intentarColocar(s, t) && estaba) {
+                    restaurarMaestros(antes);
+                    return false;
+                }
+            }
+            l.mid = t;
+            return true;
+        }
+
+        /** Grupos distintos que cada maestro cubre AHORA en esos lotes. */
+        Map<Long, Set<Long>> gruposCubiertos(List<Lote> lotes) {
+            Map<Long, Set<Long>> out = new LinkedHashMap<>();
+            for (Lote l : lotes) {
+                out.computeIfAbsent(l.mid, k -> new LinkedHashSet<>()).add(l.gid);
+            }
+            return out;
+        }
+
+        /** ¿El reparto de esa materia cubre exactamente la cuota de grupos de cada maestro? */
+        boolean repartoExacto(List<Lote> lotes, Map<Long, Integer> cuota) {
+            Map<Long, Set<Long>> cubre = gruposCubiertos(lotes);
+            for (Map.Entry<Long, Integer> e : cuota.entrySet()) {
+                if (cubre.getOrDefault(e.getKey(), Set.of()).size() != e.getValue()) {
+                    return false;
+                }
+            }
+            for (Long t : cubre.keySet()) {
+                if (!cuota.containsKey(t)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /**
+         * CUADRA LA CUOTA: si un lote no cupo con el maestro que le toco en el plan y se quedo con el de
+         * la tabla, ese maestro acaba con un grupo de mas y el otro con uno de menos. Aqui se le pasa el
+         * lote sobrante a un maestro al que le falten grupos (probando antes los que mejor le caen).
+         *
+         * <p>Cada movimiento es un {@link #ponerLote}: si no cabe, se deshace y se prueba el siguiente,
+         * asi que cuadrar la cuota tampoco puede costar cobertura. Devuelve cuantos lotes movio.
+         */
+        int cuadrarCuotas(List<Lote> lotes, Map<Long, Integer> cuota) {
+            int movidos = 0;
+            for (int vuelta = 0; vuelta < lotes.size() * 2 + 2; vuelta++) {
+                Map<Long, Set<Long>> cubre = gruposCubiertos(lotes);
+                boolean movido = false;
+                for (Lote l : lotes) {
+                    if (cubre.getOrDefault(l.mid, Set.of()).size() <= cuota.getOrDefault(l.mid, 0)) {
+                        continue;
+                    }
+                    long mejor = 0;
+                    int mejorPuntos = Integer.MIN_VALUE;
+                    for (Map.Entry<Long, Integer> e : cuota.entrySet()) {
+                        long t = e.getKey();
+                        if (t == l.mid) {
+                            continue;
+                        }
+                        Set<Long> suyos = cubre.getOrDefault(t, Set.of());
+                        if (suyos.size() >= e.getValue() || suyos.contains(l.gid)) {
+                            continue;
+                        }
+                        int puntos = compatibilidad(l, t);
+                        if (puntos > mejorPuntos) {
+                            mejorPuntos = puntos;
+                            mejor = t;
+                        }
+                    }
+                    if (mejor != 0 && ponerLote(l, mejor)) {
+                        movidos++;
+                        movido = true;
+                        break;
+                    }
+                }
+                if (!movido) {
+                    break;
+                }
+            }
+            return movidos;
+        }
+
+        /**
+         * RESCATE DE PENDIENTES con el reparto ya exacto: una sesion que no cupo con el maestro de su
+         * lote puede caber con otro del stock. Se prueban los candidatos de mejor a peor y, si el cambio
+         * deja el reparto exacto y coloca mas horas que antes, se queda; si no, se deshace ENTERO
+         * (reparto incluido).
+         *
+         * <p>Es el "intercambio" del modelo nuevo: mover al maestro de grupo para poder colocar. El
+         * Jovenes no estorba aqui porque se resuelve despues, ya con el reparto cerrado.
+         *
+         * <p>Devuelve cuantas sesiones nuevas se colocaron.
+         */
+        int rescatarPendientes(List<Lote> lotes, Map<Long, Integer> cuota) {
+            int rescatadas = 0;
+            for (Lote l : lotes) {
+                if (agotado()) {
+                    break;
+                }
+                boolean pendiente = false;
+                for (Sesion s : l.sesiones) {
+                    if (!s.colocada()) {
+                        pendiente = true;
+                        break;
+                    }
+                }
+                if (!pendiente) {
+                    continue;
+                }
+                List<Long> candidatos = new ArrayList<>(l.stock());
+                candidatos.remove(l.mid);
+                candidatos.sort(Comparator.comparingInt((Long t) -> -compatibilidad(l, t))
+                        .thenComparingLong(Long::longValue));
+                for (long t : candidatos) {
+                    if (agotado()) {
+                        break;
+                    }
+                    List<long[]> antes = snapshotMaestros();
+                    int horasAntes = horasColocadas(sesiones);
+                    int sesionesAntes = sesiones.size() - pendientesCount();
+                    if (!ponerLote(l, t)) {
+                        restaurarMaestros(antes);
+                        releerPlan(lotes);
+                        continue;
+                    }
+                    cuadrarCuotas(lotes, cuota);
+                    if (!repartoExacto(lotes, cuota) || horasColocadas(sesiones) <= horasAntes) {
+                        restaurarMaestros(antes);
+                        releerPlan(lotes);
+                        continue;
+                    }
+                    rescatadas += (sesiones.size() - pendientesCount()) - sesionesAntes;
+                    break;
+                }
+            }
+            return rescatadas;
+        }
+
+        /**
+         * REGLA DE JOVENES DENTRO DEL REPARTO (no despues).
+         *
+         * <p>Un maestro da Jovenes en UNA sola clase y en un grupo donde ademas da otra materia. En el
+         * modelo nuevo el Jovenes SIGUE A LA MATERIA DEL GRUPO: los candidatos de un grupo son los
+         * maestros que ya dan otra materia alli, y se elige uno que no tenga Jovenes en otro grupo. Como
+         * el Jovenes se decide al final, con el reparto de las demas materias ya cerrado, un intercambio
+         * nunca se bloquea por el ni deja la sesion huerfana: si su maestro se va del grupo, el Jovenes
+         * pasa al que entra.
+         *
+         * <p>Se atacan primero los grupos con menos candidatos (los mas apretados). Si un grupo se queda
+         * sin candidato libre, el Jovenes se queda con el maestro que traia -el horario base ya lo tenia
+         * colocado- y se avisa: la cobertura no se toca.
+         */
+        void repartirJovenes(List<Lote> lotesJovenes, Map<Long, List<Lote>> porGrupo,
+                             Map<Long, String> nombreGrupo, Map<Long, String> nombreMaestro,
+                             Consumer<String> log) {
+            List<Lote> orden = new ArrayList<>(lotesJovenes);
+            orden.sort(Comparator.comparingInt((Lote l) -> candidatosJovenes(l, porGrupo, Set.of()).size())
+                    .thenComparingLong(l -> l.gid));
+            Set<Long> conJovenes = new LinkedHashSet<>();
+            List<String> detalle = new ArrayList<>();
+            List<String> avisos = new ArrayList<>();
+            for (Lote l : orden) {
+                long elegido = 0;
+                for (long t : candidatosJovenes(l, porGrupo, conJovenes)) {
+                    if (ponerLote(l, t)) {
+                        elegido = t;
+                        break;
+                    }
+                }
+                if (elegido == 0 && l.mid != 0 && daOtraClaseEnElGrupo(l.mid, l.gid)
+                        && !conJovenes.contains(l.mid)) {
+                    elegido = l.mid;                    // se queda como estaba: ya cumplia la regla
+                }
+                if (elegido == 0) {
+                    avisos.add(nombreGrupo.getOrDefault(l.gid, "grupo " + l.gid));
+                    continue;
+                }
+                conJovenes.add(elegido);
+                detalle.add(nombreGrupo.getOrDefault(l.gid, "grupo " + l.gid) + " → "
+                        + nombreMaestro.getOrDefault(elegido, "#" + elegido));
+            }
+            log.accept("  jóvenes: " + detalle.size() + " de " + lotesJovenes.size()
+                    + " grupo(s) con un maestro que también da otra materia allí (uno por maestro)");
+            if (!detalle.isEmpty()) {
+                log.accept("    jóvenes: " + String.join(" · ", detalle));
+            }
+            for (String a : avisos) {
+                log.accept("    jóvenes sin candidato libre: " + a + " (se deja el maestro que traía)");
+            }
+        }
+
+        /**
+         * Maestros que pueden dar el Jovenes de ese grupo: los que ya dan OTRA materia (colocada) alli y
+         * no tienen Jovenes en otro grupo. Primero el de la tabla, que es el que traia el horario base.
+         */
+        List<Long> candidatosJovenes(Lote l, Map<Long, List<Lote>> porGrupo, Set<Long> conJovenes) {
+            LinkedHashSet<Long> out = new LinkedHashSet<>();
+            if (l.maestroOriginal != 0 && daOtraClaseEnElGrupo(l.maestroOriginal, l.gid)) {
+                out.add(l.maestroOriginal);
+            }
+            for (Lote otro : porGrupo.getOrDefault(l.gid, List.of())) {
+                if (otro.mid != 0 && daOtraClaseEnElGrupo(otro.mid, l.gid)) {
+                    out.add(otro.mid);
+                }
+            }
+            out.removeAll(conJovenes);
+            return new ArrayList<>(out);
+        }
+
+        /**
+         * BITACORA DEL REPARTO: por materia, que grupos cubre cada maestro contra la cuota de la tabla.
+         * Es la linea que permite comprobar a mano que el reparto es exacto sin abrir la base de datos.
+         */
+        void logReparto(List<Lote> lotes, Map<Long, Map<Long, Integer>> cuota,
+                        Map<Long, String> nombreGrupo, Map<Long, String> nombreMaestro,
+                        Map<Long, String> claveMateria, Consumer<String> log) {
+            Map<Long, List<Lote>> porMateria = porMateria(lotes);
+            int materias = 0;
+            int exactas = 0;
+            for (Map.Entry<Long, List<Lote>> e : porMateria.entrySet()) {
+                Map<Long, Set<Long>> cubre = gruposCubiertos(e.getValue());
+                Map<Long, Integer> tope = cuota.getOrDefault(e.getKey(), Map.of());
+                boolean exacto = repartoExacto(e.getValue(), tope);
+                materias++;
+                if (exacto) {
+                    exactas++;
+                }
+                List<Long> maestros = new ArrayList<>(cubre.keySet());
+                maestros.sort(Comparator.comparingInt((Long t) -> -cubre.get(t).size())
+                        .thenComparingLong(Long::longValue));
+                List<String> trozos = new ArrayList<>();
+                for (Long t : maestros) {
+                    Set<Long> gs = cubre.get(t);
+                    trozos.add(nombreMaestro.getOrDefault(t, "#" + t) + " → " + gs.size() + "/"
+                            + tope.getOrDefault(t, 0) + " grupos ["
+                            + nombresDeGrupos(gs, nombreGrupo) + "]");
+                }
+                log.accept("    " + claveMateria.getOrDefault(e.getKey(), "materia " + e.getKey())
+                        + (exacto ? "" : " (!)") + ": " + String.join(" · ", trozos));
+            }
+            log.accept("  reparto exacto de grupos: " + exactas + " de " + materias
+                    + " materia(s) cumplen la cuota de la tabla (maestro → grupos cubiertos/cuota)");
+        }
+
+        /** Nombres de grupo de un conjunto, acotados para que la bitacora se pueda leer. */
+        private String nombresDeGrupos(Set<Long> gids, Map<Long, String> nombreGrupo) {
+            List<String> out = new ArrayList<>();
+            for (Long g : gids) {
+                if (out.size() == 6) {
+                    out.add("...");
+                    break;
+                }
+                out.add(nombreGrupo.getOrDefault(g, "#" + g));
+            }
+            return String.join(", ", out);
+        }
+
         /**
          * ASIGNAR MAESTROS DESDE EL STOCK (modo opcional, sin tablas nuevas).
          *
-         * <p>El stock de una materia son los maestros que ya la imparten en las asignaciones. Esta
-         * fase, que corre al final y solo en este modo:
+         * <p>EL MODELO: el stock de una materia es la lista de maestros HABILITADOS (los que la tienen
+         * asignada en algun grupo de la tabla) y es el universo de candidatos. El motor elige quien
+         * cubre cada (materia, grupo) -un LOTE- con una condicion dura: cada maestro debe cubrir
+         * EXACTAMENTE los grupos que la tabla le asigna (si tiene Biologia en 2 grupos, da Biologia en 2
+         * grupos, los que el motor quiera; varias filas de la misma (materia, grupo) suman horas pero
+         * cuentan UN grupo). Como las horas de una materia son las mismas en todos los grupos, cambiar de
+         * maestro un grupo no mueve horas: solo decide quien da que.
+         *
+         * <p>ORIGEN: la fase corre al final y parte del horario ya generado, asi que su invariante es no
+         * perder cobertura. Cada movimiento se prueba entero y, si alguna sesion colocada se quedaria
+         * pendiente, se deshace: el horario solo puede mejorar.
          *
          * <ol>
-         *   <li>Re-asigna las sesiones colocadas al maestro del stock que cubre sus bloques con MENOS
-         *       carga (así se balancea y se liberan franjas de los saturados).</li>
-         *   <li>Intenta colocar cada pendiente probando cada maestro del stock con su disponibilidad
-         *       (la misma medición de ventanas, pero por maestro).</li>
+         *   <li>Lotes y cuota exacta de grupos por (materia, maestro).</li>
+         *   <li>Reparto libre por materia: intercambios entre lotes de la misma materia (mantienen la
+         *       cuota por construccion) que mejoran la compatibilidad, sobre todo la de las pendientes.</li>
+         *   <li>Aplicacion del reparto lote a lote y cuadre de cuotas; si una materia no queda exacta, se
+         *       devuelve al reparto de la tabla, que ya era exacto.</li>
+         *   <li>Rescate de pendientes probando otros maestros del stock, re-cuadrando o deshaciendo.</li>
+         *   <li>Jovenes desde el reparto ya cerrado de cada grupo.</li>
          * </ol>
          *
-         * <p>REGLAS DURAS del modo: el maestro debe estar en el stock de la materia y disponible en
-         * los bloques (y sin choque). Y la regla de Jóvenes: el maestro de Jóvenes debe dar OTRA
-         * clase en ese grupo (en este plan) y solo se le asigna UN grupo de Jóvenes por maestro.
-         *
-         * <p>Si un maestro del stock no tiene fila de disponibilidad cargada, simplemente no puede
-         * tomar clases (se refleja en la pre-validación del módulo como aviso).
+         * <p>La bitacora imprime, por materia, cuantos grupos cubre cada maestro contra su cuota: es lo
+         * que permite verificar el reparto exacto a mano.
          */
         void asignarMaestros(Consumer<String> log) {
-            Map<Long, Integer> carga = new HashMap<>();
-            for (Sesion s : sesiones) {
-                if (s.colocada()) {
-                    carga.merge(s.mid, s.dur, Integer::sum);
-                }
+            Map<Long, String> nombreGrupo = new LinkedHashMap<>();
+            for (Grupo g : grupos) {
+                nombreGrupo.put(g.getGrupoId(), g.getNombre());
             }
-            Set<Long> maestrosConJovenes = new LinkedHashSet<>();
-            for (Sesion s : sesiones) {
-                if (s.colocada() && s.jovenes) {
-                    maestrosConJovenes.add(s.mid);
+            Map<Long, String> nombreMaestro = new LinkedHashMap<>();
+            Map<Long, String> claveMateria = new LinkedHashMap<>();
+            for (Asignacion a : asignaciones) {
+                if (a.getMateria() != null) {
+                    claveMateria.putIfAbsent(a.getMateria().getMateriaId(), a.getMateria().getClave());
+                }
+                if (a.getMaestro() != null) {
+                    nombreMaestro.putIfAbsent(a.getMaestro().getMaestroId(),
+                            a.getMaestro().getTituloNombreCompleto());
                 }
             }
 
-            // 1) Re-asignar las colocadas al maestro del stock con menor carga (si le cubre y no choca).
-            int reasignadas = 0;
+            List<long[]> estadoInicial = snapshotMaestros();
+            int horasAntes = horasColocadas(sesiones);
+            int pendientesAntes = pendientesCount();
+
+            // 1) LOTES Y CUOTAS.
+            List<Lote> lotes = new ArrayList<>();
+            List<Lote> lotesJovenes = new ArrayList<>();
+            for (Lote l : lotes()) {
+                (l.jovenes ? lotesJovenes : lotes).add(l);
+            }
+            Map<Long, List<Lote>> porMateria = porMateria(lotes);
+            Map<Long, Map<Long, Integer>> cuota = cuotaExacta(lotes, log);
+            Map<Long, List<Lote>> porGrupo = lotesPorGrupo(lotes);
+
+            // 2) EL MOTOR REPARTE: libre, pero con la cuota exacta de grupos de la tabla.
+            repartir(porMateria);
+
+            // 3) APLICAR EL REPARTO Y CUADRAR LAS CUOTAS.
+            int aplicados = 0;
+            int devueltas = 0;
+            for (Map.Entry<Long, List<Lote>> e : porMateria.entrySet()) {
+                List<Lote> suyos = e.getValue();
+                Map<Long, Integer> tope = cuota.getOrDefault(e.getKey(), Map.of());
+                List<long[]> antes = snapshotMaestros();
+                for (Lote l : suyos) {
+                    if (l.mid == l.maestroOriginal) {
+                        continue;                       // el reparto de la tabla se respeta: no se toca
+                    }
+                    if (ponerLote(l, l.mid)) {
+                        aplicados++;
+                    } else {
+                        l.mid = l.maestroOriginal;      // no cabe entero: se queda con el de la tabla
+                    }
+                }
+                cuadrarCuotas(suyos, tope);
+                if (!repartoExacto(suyos, tope)) {
+                    // La exactitud manda: se devuelve ESA materia al reparto de la tabla, que el
+                    // snapshot guarda tal cual y que ya cumplia la cuota.
+                    restaurarMaestros(antes);
+                    releerPlan(suyos);
+                    devueltas++;
+                }
+            }
+
+            // 4) RESCATE DE PENDIENTES.
+            int rescatadas = 0;
+            for (Map.Entry<Long, List<Lote>> e : porMateria.entrySet()) {
+                rescatadas += rescatarPendientes(e.getValue(), cuota.getOrDefault(e.getKey(), Map.of()));
+            }
+
+            // 5) JOVENES: sigue a la materia del grupo, ya con el reparto cerrado.
+            repartirJovenes(lotesJovenes, porGrupo, nombreGrupo, nombreMaestro, log);
+
+            // 6) INVARIANTE DEL MODO: nunca menos horas colocadas que al entrar.
+            if (horasColocadas(sesiones) < horasAntes) {
+                restaurarMaestros(estadoInicial);
+                log.accept("  asignación de maestros: se deshace el reparto (habría bajado la cobertura)");
+            }
+
+            logReparto(lotes, cuota, nombreGrupo, nombreMaestro, claveMateria, log);
+            logAulas(log, "tras el reparto de maestros", false);
+            log.accept("  asignación de maestros (stock): " + aplicados + " lote(s) con maestro nuevo · "
+                    + devueltas + " materia(s) devuelta(s) al reparto de la tabla · rescate de pendientes: "
+                    + rescatadas + " sesión(es) · cobertura " + horasAntes + " → "
+                    + horasColocadas(sesiones) + " h (" + pendientesAntes + " → " + pendientesCount()
+                    + " pendiente(s))");
+        }
+
+        /**
+         * MEDICIÓN DEL EFECTO DE ELEGIR EL AULA LIBREMENTE (modo stock).
+         *
+         * <p>Cuenta las sesiones colocadas que acabaron en un taller DISTINTO al de su asignación -que
+         * es justo lo que puede cambiar este modo- y, si se pide detalle, resume por materia qué
+         * talleres se usan y cuántas sesiones van a cada uno. Con eso el efecto del cambio se puede
+         * atribuir desde la bitácora, sin abrir la base de datos.
+         */
+        void logAulas(Consumer<String> log, String etiqueta, boolean detalle) {
+            int colocadas = 0;
+            int distintas = 0;
+            Map<Long, Map<Long, Integer>> porMateria = new LinkedHashMap<>();
             for (Sesion s : sesiones) {
                 if (!s.colocada()) {
                     continue;
                 }
-                long mejor = s.mid;
-                int mejorCarga = carga.getOrDefault(s.mid, Integer.MAX_VALUE);
-                for (long t : s.stock) {
-                    if (t == s.mid) {
-                        continue;
-                    }
-                    if (s.jovenes && maestrosConJovenes.contains(t)) {
-                        continue;                       // un Jóvenes por maestro
-                    }
-                    if (s.jovenes && !daOtraClaseEnElGrupo(t, s.gid)) {
-                        continue;                       // debe dar otra clase en el grupo
-                    }
-                    if (!cubre(t, s.ids) || chocaMaestro(t, s.ids, s)) {
-                        continue;
-                    }
-                    if (creaAdyacencia(s, t, s.dia, s.pos)) {
-                        continue;                       // no crear materias pegadas al reasignar
-                    }
-                    int c = carga.getOrDefault(t, 0);
-                    if (c < mejorCarga) {
-                        mejor = t;
-                        mejorCarga = c;
-                    }
+                colocadas++;
+                if (s.aid != s.aulaDeLaTabla()) {
+                    distintas++;
                 }
-                if (mejor != s.mid) {
-                    for (long bid : s.ids) {
-                        ocupM.remove(clave(s.mid, bid));
-                    }
-                    carga.merge(s.mid, -s.dur, Integer::sum);
-                    s.mid = mejor;
-                    for (long bid : s.ids) {
-                        ocupM.put(clave(s.mid, bid), s);
-                    }
-                    carga.merge(s.mid, s.dur, Integer::sum);
-                    reasignadas++;
-                }
+                long materiaId = s.asig.getMateria() != null ? s.asig.getMateria().getMateriaId() : 0L;
+                porMateria.computeIfAbsent(materiaId, k -> new LinkedHashMap<>())
+                        .merge(s.aid, 1, Integer::sum);
             }
+            log.accept("  aulas (stock, " + etiqueta + "): " + distintas + " de " + colocadas
+                    + " sesión(es) colocadas en un taller distinto al de su asignación");
+            if (!detalle) {
+                return;
+            }
+            List<Long> materias = new ArrayList<>(porMateria.keySet());
+            materias.sort(Long::compareTo);
+            for (Long materiaId : materias) {
+                List<String> trozos = new ArrayList<>();
+                for (Map.Entry<Long, Integer> a : porMateria.get(materiaId).entrySet()) {
+                    trozos.add(nombreDeAula(a.getKey()) + " → " + a.getValue());
+                }
+                log.accept("    aulas " + claveDeMateria(materiaId) + ": " + String.join(" · ", trozos));
+            }
+        }
 
-            // 2) Colocar pendientes probando cada maestro del stock.
-            int rescatadas = 0;
-            List<Sesion> pendientes = new ArrayList<>();
-            for (Sesion s : sesiones) {
-                if (!s.colocada()) {
-                    pendientes.add(s);
+        /** Clave legible de una materia para la bitácora ("materia N" cuando no se conoce). */
+        private String claveDeMateria(long materiaId) {
+            for (Asignacion a : asignaciones) {
+                if (a.getMateria() != null && a.getMateria().getMateriaId() == materiaId) {
+                    return a.getMateria().getClave() != null ? a.getMateria().getClave() : "materia " + materiaId;
                 }
             }
-            pendientes.sort(Comparator.comparingInt((Sesion s) -> -s.dur)
-                    .thenComparingLong(s -> s.asigId));
-            for (Sesion s : pendientes) {
-                if (agotado()) {
-                    break;
-                }
-                boolean puesto = false;
-                for (long t : s.stock) {
-                    if (s.jovenes && maestrosConJovenes.contains(t)) {
-                        continue;
-                    }
-                    if (s.jovenes && !daOtraClaseEnElGrupo(t, s.gid)) {
-                        continue;
-                    }
-                    // Además del maestro, se prueba cada TALLER del stock de la materia.
-                    for (long al : s.stockAulas) {
-                        long prev = s.aid;
-                        s.aid = al;
-                        Destino d = mejorDestinoConMaestro(s, t, List.of());
-                        if (d == null) {
-                            s.aid = prev;
-                            continue;
-                        }
-                        // No se veta la colocación por crear una adyacencia: primero se coloca (la
-                        // cobertura manda) y la fase separarAdyacencias, que corre después, la separa
-                        // moviendo una de las dos clases a otro día. Veto hubo y dejó horas fuera.
-                        colocarCon(s, t, d.dia(), d.ventana());
-                        if (s.jovenes) {
-                            maestrosConJovenes.add(t);
-                        }
-                        carga.merge(t, s.dur, Integer::sum);
-                        rescatadas++;
-                        puesto = true;
-                        break;
-                    }
-                    if (puesto) {
-                        break;
-                    }
-                }
+            return "materia " + materiaId;
+        }
+
+        /** Nombre del aula de un id para la bitácora ("sin aula" para el 0). */
+        private String nombreDeAula(long aid) {
+            if (aid == 0) {
+                return "sin aula";
             }
-            log.accept("  asignación de maestros y talleres: " + reasignadas + " reasignada(s) · "
-                    + rescatadas + " pendiente(s) rescatada(s)");
+            String nombre = nombreDeAulaPorId.get(aid);
+            return nombre != null ? nombre : "aula " + aid;
         }
 
         /**
@@ -2267,8 +3355,8 @@ public class GeneradorIA {
          * revierte y devuelve false.
          */
         boolean separarPar(Sesion s1, Sesion s2) {
-            List<int[]> snap = snapshot();
-            int[] orig = quitar(s1);
+            List<long[]> snap = snapshot();
+            long[] orig = quitar(s1);
             long aulaOrig = s1.aid;
             for (int d : dias) {
                 if (asigDia.containsKey(claveDia(s1.asigId, d))) {
@@ -2440,7 +3528,10 @@ public class GeneradorIA {
             it.setArranquesTarde(arranques);
             it.setCastigoHuecos(castigoHuecos);
             it.setAdyacencias(ady);
-            it.setMedium(ReglasIA.medium(horas, demanda, largasPend, arranques, castigoHuecos, ady));
+            // Regla blanda del patrón: el desvío de todas las asignaciones entra en el medium igual
+            // que en el solver, para que el intento que se elige sea también el que mejor reparte.
+            int desvio = desvioDistribucionTotal();
+            it.setMedium(ReglasIA.medium(horas, demanda, largasPend, arranques, castigoHuecos, ady, desvio));
             it.setMateriasTotales(todas.size());
             it.setMateriasCompletas(todas.size() - incompletas.size());
 
@@ -2457,6 +3548,15 @@ public class GeneradorIA {
             return it;
         }
 
+        /** Nombre del maestro de un id, con "?" cuando no hay maestro (id 0 o desconocido). */
+        private String nombreMaestro(long mid) {
+            if (mid == 0) {
+                return "?";
+            }
+            String nombre = nombreDeMaestroPorId.get(mid);
+            return nombre != null ? nombre : "?";
+        }
+
         /** Sesión pendiente con el motivo y sus ventanas legales, diciendo quién las ocupa. */
         private IntentoIA.Pendiente pendiente(Sesion s) {
             IntentoIA.Pendiente p = new IntentoIA.Pendiente();
@@ -2466,8 +3566,9 @@ public class GeneradorIA {
             p.setMateriaClave(s.asig.getMateria() != null ? s.asig.getMateria().getClave() : "?");
             p.setMateriaNombre(s.asig.getMateria() != null ? s.asig.getMateria().getNombre() : "?");
             p.setMaestroId(s.mid);
-            p.setMaestroNombre(s.asig.getMaestro() != null
-                    ? s.asig.getMaestro().getTituloNombreCompleto() : "?");
+            // El nombre TIENE que ser el del maestro de ESTA sesión (s.mid), no el de la asignación:
+            // en modo stock el motor puede haberle dado otro maestro al grupo.
+            p.setMaestroNombre(nombreMaestro(s.mid));
             p.setDuracion(s.dur);
 
             Set<Long> g = dispG.getOrDefault(s.gid, Set.of());
