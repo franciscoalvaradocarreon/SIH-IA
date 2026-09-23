@@ -4,7 +4,6 @@ import java.nio.file.Path;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.MountableFile;
 
@@ -36,7 +35,18 @@ public abstract class BasePruebas {
      */
     private static final Path DIR_BD = Path.of(System.getProperty("sih.db.dir", "../db"));
 
-    @Container
+    /**
+     * Sin {@code @Container} a proposito.
+     *
+     * <p>Con {@code @Container} en un campo estatico, Testcontainers arranca el
+     * contenedor al empezar la PRIMERA clase de prueba y lo PARA al terminarla:
+     * las clases siguientes heredan el mismo objeto apuntando a un contenedor
+     * muerto y fallan con "Connection refused". Paso en el CI: ExclusionesTest
+     * y SeguridadTest pasaban (eran las primeras) y ContextoTest fallaba.
+     *
+     * <p>Arrancandolo una sola vez en el bloque estatico de abajo, el contenedor
+     * vive lo que vive la JVM. Lo recoge Ryuk al terminar.
+     */
     @ServiceConnection
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:17-alpine")
             .withCopyFileToContainer(
@@ -45,4 +55,8 @@ public abstract class BasePruebas {
             .withCopyFileToContainer(
                     MountableFile.forHostPath(DIR_BD.resolve("02_solape.sql")),
                     "/docker-entrypoint-initdb.d/02_solape.sql");
+
+    static {
+        POSTGRES.start();
+    }
 }
