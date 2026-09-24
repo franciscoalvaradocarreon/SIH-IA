@@ -130,7 +130,7 @@ const HorarioIA: React.FC = () => {
   // Mensajes de estas acciones, pintados junto al botón que las lanza. El aviso global vive arriba
   // del todo y, con la página larga, quedaba fuera de la vista (ver MensajeAccion).
   const [mensajeGuardado, setMensajeGuardado] =
-    useState<{ numero: number; tipo: 'error' | 'ok'; texto: string } | null>(null);
+    useState<{ trabajoId: string; numero: number; tipo: 'error' | 'ok'; texto: string } | null>(null);
   const [mensajeLista, setMensajeLista] = useState<MensajeAccion | null>(null);
 
   const [error, setError] = useState('');
@@ -338,6 +338,7 @@ const HorarioIA: React.FC = () => {
     try {
       const res = await horarioIAService.guardarCorrida(trabajo.id, numero, nombre);
       setMensajeGuardado({
+        trabajoId: trabajo.id,
         numero,
         tipo: 'ok',
         texto: `Corrida "${res.data.nombre}" guardada como opción. El horario actual NO se ha tocado.`,
@@ -346,6 +347,7 @@ const HorarioIA: React.FC = () => {
       return true;
     } catch (e) {
       setMensajeGuardado({
+        trabajoId: trabajo.id,
         numero,
         tipo: 'error',
         texto: mensajeError(e, 'No se pudo guardar la corrida'),
@@ -402,6 +404,19 @@ const HorarioIA: React.FC = () => {
       setBorrandoCorrida(null);
     }
   };
+
+  /**
+   * Mensaje de la última acción sobre un intento, SOLO si es del trabajo que se está viendo.
+   *
+   * <p>La comprobación del trabajo no es un adorno: los números de intento se repiten en cada
+   * generación (1..6), así que sin ella el aviso "Corrida guardada" del intento 1 de la generación
+   * anterior aparecía pegado en el intento 1 de la siguiente.
+   */
+  const mensajeDeIntento = (numero: number): MensajeAccion | null =>
+    mensajeGuardado && trabajo && mensajeGuardado.trabajoId === trabajo.id
+      && mensajeGuardado.numero === numero
+      ? { tipo: mensajeGuardado.tipo, texto: mensajeGuardado.texto }
+      : null;
 
   if (!semestreActivo) {
     return (
@@ -825,7 +840,7 @@ const HorarioIA: React.FC = () => {
             <div className="mt-3 space-y-2">
               {trabajo.intentos.map(it => (
                 <FichaIntento
-                  key={it.numero}
+                  key={`${trabajo.id}-${it.numero}`}
                   intento={it}
                   esMejor={trabajo.mejorNumero === it.numero}
                   registrado={trabajo.registrado === it.numero}
@@ -836,9 +851,7 @@ const HorarioIA: React.FC = () => {
                   puedeRegistrar={!enCurso && trabajo.registrado == null}
                   onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
                   guardandoCorrida={guardandoCorrida === it.numero}
-                  mensaje={mensajeGuardado?.numero === it.numero
-                    ? { tipo: mensajeGuardado.tipo, texto: mensajeGuardado.texto }
-                    : null}
+                  mensaje={mensajeDeIntento(it.numero)}
                 />
               ))}
             </div>
