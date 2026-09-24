@@ -70,6 +70,16 @@ function objetoSeguro<T extends object>(valor: unknown): T | undefined {
   return valor && typeof valor === 'object' ? (valor as T) : undefined;
 }
 
+/**
+ * Mensaje de una acción (guardar, aplicar o borrar una corrida), para pintarlo JUNTO al botón que la
+ * lanzó.
+ *
+ * <p>Por qué no vale el aviso global de arriba: la página es larga y el botón de guardar queda muy por
+ * debajo del encabezado, así que el aviso se pintaba fuera de la vista. El usuario veía que "no pasaba
+ * nada" cuando el backend sí estaba respondiendo con un mensaje (por ejemplo, el nombre repetido).
+ */
+type MensajeAccion = { tipo: 'error' | 'ok'; texto: string };
+
 const HorarioIA: React.FC = () => {
   const { semestreActivo } = useAuth();
 
@@ -116,6 +126,12 @@ const HorarioIA: React.FC = () => {
   const [guardandoCorrida, setGuardandoCorrida] = useState<number | null>(null);
   const [aplicandoCorrida, setAplicandoCorrida] = useState<number | null>(null);
   const [borrandoCorrida, setBorrandoCorrida] = useState<number | null>(null);
+
+  // Mensajes de estas acciones, pintados junto al botón que las lanza. El aviso global vive arriba
+  // del todo y, con la página larga, quedaba fuera de la vista (ver MensajeAccion).
+  const [mensajeGuardado, setMensajeGuardado] =
+    useState<{ numero: number; tipo: 'error' | 'ok'; texto: string } | null>(null);
+  const [mensajeLista, setMensajeLista] = useState<MensajeAccion | null>(null);
 
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -313,17 +329,28 @@ const HorarioIA: React.FC = () => {
   }, [semestreActivo?.id]);
 
   /** Aparta ese intento con un nombre. NO escribe en el horario: eso es el botón "Usar este". */
-  const guardarCorrida = async (numero: number, nombre: string) => {
-    if (!trabajo) return;
+  const guardarCorrida = async (numero: number, nombre: string): Promise<boolean> => {
+    if (!trabajo) return false;
     setGuardandoCorrida(numero);
-    setError('');
-    setAviso('');
+    // El mensaje se pinta DENTRO de la ficha del intento: es donde está el botón que se acaba de
+    // pulsar. El aviso global de arriba quedaba fuera de la vista.
+    setMensajeGuardado(null);
     try {
       const res = await horarioIAService.guardarCorrida(trabajo.id, numero, nombre);
-      setAviso(`Corrida "${res.data.nombre}" guardada como opción. El horario actual NO se ha tocado.`);
+      setMensajeGuardado({
+        numero,
+        tipo: 'ok',
+        texto: `Corrida "${res.data.nombre}" guardada como opción. El horario actual NO se ha tocado.`,
+      });
       await cargarCorridas();
+      return true;
     } catch (e) {
-      setError(mensajeError(e, 'No se pudo guardar la corrida'));
+      setMensajeGuardado({
+        numero,
+        tipo: 'error',
+        texto: mensajeError(e, 'No se pudo guardar la corrida'),
+      });
+      return false;
     } finally {
       setGuardandoCorrida(null);
     }
@@ -338,16 +365,16 @@ const HorarioIA: React.FC = () => {
     );
     if (!seguro) return;
     setAplicandoCorrida(corrida.id);
-    setError('');
-    setAviso('');
+    setMensajeLista(null);
     try {
       const res = await horarioIAService.aplicarCorrida(corrida.id);
-      setAviso(
-        `Corrida "${corrida.nombre}" aplicada al horario: ${res.data.horas} h en ` +
-        `${res.data.filas} bloques de ${res.data.grupos} grupo(s).`
-      );
+      setMensajeLista({
+        tipo: 'ok',
+        texto: `Corrida "${corrida.nombre}" aplicada al horario: ${res.data.horas} h en ` +
+          `${res.data.filas} bloques de ${res.data.grupos} grupo(s).`,
+      });
     } catch (e) {
-      setError(mensajeError(e, 'No se pudo aplicar la corrida'));
+      setMensajeLista({ tipo: 'error', texto: mensajeError(e, 'No se pudo aplicar la corrida') });
     } finally {
       setAplicandoCorrida(null);
     }
@@ -361,14 +388,16 @@ const HorarioIA: React.FC = () => {
     );
     if (!seguro) return;
     setBorrandoCorrida(corrida.id);
-    setError('');
-    setAviso('');
+    setMensajeLista(null);
     try {
       await horarioIAService.borrarCorrida(corrida.id);
-      setAviso(`Corrida "${corrida.nombre}" borrada de la lista. El horario no se ha tocado.`);
+      setMensajeLista({
+        tipo: 'ok',
+        texto: `Corrida "${corrida.nombre}" borrada de la lista. El horario no se ha tocado.`,
+      });
       await cargarCorridas();
     } catch (e) {
-      setError(mensajeError(e, 'No se pudo borrar la corrida'));
+      setMensajeLista({ tipo: 'error', texto: mensajeError(e, 'No se pudo borrar la corrida') });
     } finally {
       setBorrandoCorrida(null);
     }
@@ -807,6 +836,9 @@ const HorarioIA: React.FC = () => {
                   puedeRegistrar={!enCurso && trabajo.registrado == null}
                   onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
                   guardandoCorrida={guardandoCorrida === it.numero}
+                  mensaje={mensajeGuardado?.numero === it.numero
+                    ? { tipo: mensajeGuardado.tipo, texto: mensajeGuardado.texto }
+                    : null}
                 />
               ))}
             </div>
@@ -849,11 +881,28 @@ const HorarioIA: React.FC = () => {
         cargando={cargandoCorridas}
         aplicando={aplicandoCorrida}
         borrando={borrandoCorrida}
+        mensaje={mensajeLista}
         turnos={turnos}
         onAplicar={aplicarCorridaGuardada}
         onBorrar={borrarCorridaGuardada}
         onRefrescar={cargarCorridas}
       />
+    </div>
+  );
+};
+
+/** Pinta el mensaje de una acción donde ocurrió. No pinta nada si no hay mensaje. */
+const AvisoAccion: React.FC<{ mensaje: MensajeAccion | null }> = ({ mensaje }) => {
+  if (!mensaje) return null;
+  const esError = mensaje.tipo === 'error';
+  return (
+    <div className={`mt-2 flex items-start gap-2 rounded-md border p-2 text-xs ${esError
+      ? 'border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-900/20 dark:text-red-300'
+      : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-900/20 dark:text-emerald-300'}`}>
+      {esError
+        ? <MdError className="mt-0.5 shrink-0" />
+        : <MdCheckCircle className="mt-0.5 shrink-0" />}
+      <span className="whitespace-pre-line">{mensaje.texto}</span>
     </div>
   );
 };
@@ -867,11 +916,14 @@ const FichaIntento: React.FC<{
   registrando: boolean;
   puedeRegistrar: boolean;
   guardandoCorrida: boolean;
+  /** Mensaje de la última acción sobre ESTE intento (guardar). Va aquí, junto al botón. */
+  mensaje: MensajeAccion | null;
   onAlternar: () => void;
   onRegistrar: () => void;
-  onGuardarCorrida: (nombre: string) => void;
+  /** Devuelve true si se guardó. Si no, la ficha deja el campo abierto para corregir el nombre. */
+  onGuardarCorrida: (nombre: string) => Promise<boolean>;
 }> = ({ intento, esMejor, registrado, abierto, registrando, puedeRegistrar, guardandoCorrida,
-       onAlternar, onRegistrar, onGuardarCorrida }) => {
+       mensaje, onAlternar, onRegistrar, onGuardarCorrida }) => {
   const completo = intento.pendientes.length === 0;
 
   // El nombre se pide EN LINEA y no con window.prompt: prompt bloquea el navegador y tapa el intento
@@ -942,10 +994,11 @@ const FichaIntento: React.FC<{
             value={nombreCorrida}
             maxLength={120}
             onChange={e => setNombreCorrida(e.target.value)}
-            onKeyDown={e => {
+            onKeyDown={async e => {
               if (e.key === 'Enter' && nombreCorrida.trim()) {
-                onGuardarCorrida(nombreCorrida.trim());
-                setPidiendoNombre(false);
+                // Solo se cierra si de verdad se guardó: si el nombre estaba repetido, el campo se
+                // queda abierto con lo que escribiste, para corregirlo sin volver a teclearlo.
+                if (await onGuardarCorrida(nombreCorrida.trim())) setPidiendoNombre(false);
               }
               if (e.key === 'Escape') setPidiendoNombre(false);
             }}
@@ -953,9 +1006,8 @@ const FichaIntento: React.FC<{
             className="min-w-[15rem] flex-1 rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
           <button
-            onClick={() => {
-              onGuardarCorrida(nombreCorrida.trim());
-              setPidiendoNombre(false);
+            onClick={async () => {
+              if (await onGuardarCorrida(nombreCorrida.trim())) setPidiendoNombre(false);
             }}
             disabled={!nombreCorrida.trim() || guardandoCorrida}
             className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
@@ -971,6 +1023,10 @@ const FichaIntento: React.FC<{
           <span className="text-xs text-gray-500 dark:text-gray-400">No toca el horario actual.</span>
         </div>
       )}
+
+      {/* El mensaje va FUERA del bloque de arriba para que siga viéndose cuando el campo de nombre se
+          cierra al guardar: si no, el aviso de "nombre repetido" desaparecería con él. */}
+      <AvisoAccion mensaje={mensaje} />
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
         <span className="flex items-center gap-1">
@@ -1594,11 +1650,13 @@ const ListaCorridas: React.FC<{
   cargando: boolean;
   aplicando: number | null;
   borrando: number | null;
+  /** Mensaje de la última acción sobre la lista (aplicar o borrar). Va aquí, junto a los botones. */
+  mensaje: MensajeAccion | null;
   turnos: Turno[];
   onAplicar: (corrida: CorridaIA) => void;
   onBorrar: (corrida: CorridaIA) => void;
   onRefrescar: () => void;
-}> = ({ corridas, cargando, aplicando, borrando, turnos, onAplicar, onBorrar, onRefrescar }) => {
+}> = ({ corridas, cargando, aplicando, borrando, mensaje, turnos, onAplicar, onBorrar, onRefrescar }) => {
 
   /** El turno se resuelve con la lista que ya tiene la pantalla: una consulta menos. */
   const nombreTurno = (turnoId: number | null): string => {
@@ -1632,6 +1690,8 @@ const ListaCorridas: React.FC<{
         la corrida sin problemas, con más horas colocadas, con menos pendientes y, a igualdad, mejor
         score (medium).
       </p>
+
+      <AvisoAccion mensaje={mensaje} />
 
       {corridas.length === 0 ? (
         <p className="mt-3 rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
