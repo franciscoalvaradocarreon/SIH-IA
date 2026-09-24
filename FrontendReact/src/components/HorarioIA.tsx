@@ -17,6 +17,7 @@ import {
   MdStop, MdSave, MdExpandMore, MdExpandLess, MdPerson, MdClass,
   MdTimer, MdRule, MdHourglassEmpty, MdScience,
 } from 'react-icons/md';
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 /**
  * GENERADOR DE HORARIOS IA (sin Timefold).
@@ -380,15 +381,16 @@ const HorarioIA: React.FC = () => {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+            <SwitchToggle
               checked={asignarMaestros}
-              onChange={e => setAsignarMaestros(e.target.checked)}
+              onChange={setAsignarMaestros}
+              label="Asignar maestros desde el stock"
+              color="blue"
+              size="md"
               disabled={enCurso || !turnoListo}
             />
-            Asignar maestros desde el stock
-          </label>
+          </div>
           <span className="text-xs text-gray-500 dark:text-gray-400">
             el motor elige el maestro de cada materia y el taller (aula) entre los que ya usa la
             materia (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo de Jóvenes por

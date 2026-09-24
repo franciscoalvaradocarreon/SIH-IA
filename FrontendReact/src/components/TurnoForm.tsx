@@ -4,6 +4,7 @@ import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
 import type { TurnoForm as TurnoFormType } from '../types';
 import { MdSave, MdCancel, MdSchedule } from 'react-icons/md';
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 const TurnoForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -140,18 +141,13 @@ const TurnoForm: React.FC = () => {
             />
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="activo"
-              checked={form.activo !== false}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
-            />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Turno activo
-            </label>
-          </div>
+          <SwitchToggle
+            checked={form.activo !== false}
+            onChange={(checked) => setForm({ ...form, activo: checked })}
+            label="Turno activo"
+            color="blue"
+            size="md"
+          />
 
           <div className="flex gap-3 pt-4">
             <button

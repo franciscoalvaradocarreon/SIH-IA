@@ -10,9 +10,10 @@ import { useAuth } from '../context/AuthContext';
 import type { AsignacionForm as AsignacionFormType } from '../types';
 import {
   MdSave, MdCancel, MdClass, MdBook, MdPerson, MdMeetingRoom,
-  MdAccessTime, MdSchedule, MdWarning
+  MdAccessTime, MdSchedule
 } from 'react-icons/md';
-import { generarColorAleatorio, CirculoColor, COLORES_SUGERIDOS } from '../utils/colores';
+import { generarColorAleatorio } from '../utils/colores';
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 const AsignacionForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -320,13 +321,13 @@ const AsignacionForm: React.FC = () => {
   const grupoSeleccionado = grupos.find(g => g.id === form.grupoId);
   const turnoNombre = grupoSeleccionado?.turno || '';
 
-  const materiasFiltradas = form.turnoId > 0
+  const materiasFiltradas = (form.turnoId ?? 0) > 0
     ? materias.filter(m => m.turnoId === form.turnoId)
     : materias;
-  const maestrosFiltrados = form.turnoId > 0
+  const maestrosFiltrados = (form.turnoId ?? 0) > 0
     ? maestros.filter(m => m.turnoId === form.turnoId)
     : maestros;
-  const aulasFiltradas = form.turnoId > 0
+  const aulasFiltradas = (form.turnoId ?? 0) > 0
     ? aulas.filter(a => a.turnoId === form.turnoId)
     : aulas;
 
@@ -422,7 +423,7 @@ const AsignacionForm: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
-                    {form.turnoId > 0
+                    {(form.turnoId ?? 0) > 0
                       ? materiasFiltradas.length === 0
                         ? 'Sin materias en este turno'
                         : 'Seleccionar materia'
@@ -454,7 +455,7 @@ const AsignacionForm: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
-                    {form.turnoId > 0
+                    {(form.turnoId ?? 0) > 0
                       ? maestrosFiltrados.length === 0
                         ? 'Sin maestros en este turno'
                         : 'Seleccionar maestro'
@@ -489,7 +490,7 @@ const AsignacionForm: React.FC = () => {
                   className="w-full pl-10 pr-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                 >
                   <option value={0}>
-                    {form.turnoId > 0
+                    {(form.turnoId ?? 0) > 0
                       ? aulasFiltradas.length === 0
                         ? 'Sin aulas en este turno'
                         : 'Seleccionar aula'
@@ -608,18 +609,13 @@ const AsignacionForm: React.FC = () => {
           </div>
 
           {/* Activo */}
-          <div className="flex items-center gap-2 pt-2">
-            <input
-              type="checkbox"
-              name="activo"
-              checked={form.activo !== false}
-              onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
-            />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Asignación activa
-            </label>
-          </div>
+          <SwitchToggle
+            checked={form.activo !== false}
+            onChange={(checked) => setForm({ ...form, activo: checked })}
+            label="Asignación activa"
+            color="blue"
+            size="md"
+          />
 
           {/* Botones */}
           <div className="flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">

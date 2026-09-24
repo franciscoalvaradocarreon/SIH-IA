@@ -4,13 +4,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { semestreService } from '../api/semestreService';
 import type { SemestreForm as SemestreFormType } from '../types';
 import { MdSave, MdCancel } from 'react-icons/md';
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 const SemestreForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
     const isEdit = Boolean(id && id !== 'undefined' && id !== 'null' && !isNaN(Number(id)));
-  const semestreId = isEdit ? Number(id) : 0;
 
   const [form, setForm] = useState<SemestreFormType>({
     nombre: '',
@@ -127,18 +127,13 @@ const SemestreForm: React.FC = () => {
           </div>
 
           {/* Activo */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="activo"
-              checked={form.activo !== false}
-              onChange={handleChange}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
-            />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Semestre activo
-            </label>
-          </div>
+          <SwitchToggle
+            checked={form.activo !== false}
+            onChange={(checked) => setForm({ ...form, activo: checked })}
+            label="Semestre activo"
+            color="blue"
+            size="md"
+          />
 
           {/* Botones */}
           <div className="flex gap-3 pt-4 border-t border-gray-400 dark:border-gray-700">

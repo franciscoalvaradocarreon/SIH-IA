@@ -4,6 +4,7 @@ import { menuCrudService } from '../api/menuCrudService';
 import type { MenuCrear } from '../types';
 import { MdSave, MdCancel, MdMenu, MdLink, MdLabel, MdArrowRight, MdSearch } from 'react-icons/md';
 import { ICONOS_DISPONIBLES, IconPreview } from '../utils/iconos'; 
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 const MenuCrudForm: React.FC = () => {
     const { id } = useParams<{ id: string }>();
@@ -288,18 +289,13 @@ const MenuCrudForm: React.FC = () => {
                     </div>
 
                     {/* Checkbox Activo */}
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            name="activo"
-                            checked={form.activo !== false}
-                            onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-                            className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
-                        />
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Menú activo
-                        </label>
-                    </div>
+                    <SwitchToggle
+                        checked={form.activo !== false}
+                        onChange={(checked) => setForm({ ...form, activo: checked })}
+                        label="Menú activo"
+                        color="blue"
+                        size="md"
+                    />
 
                     {/* Botones */}
                     <div className="flex gap-3 pt-4">

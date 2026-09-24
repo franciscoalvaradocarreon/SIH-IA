@@ -8,6 +8,7 @@ import {
   MdSave, MdCancel, MdMeetingRoom, MdHome, MdElevator,
   MdDescription, MdClass, MdWarning, MdSchedule
 } from 'react-icons/md';
+import { SwitchToggle } from '../utils/SwitchToggle';
 
 const AulaForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -330,32 +331,26 @@ const AulaForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Taller */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="taller"
+          {/* Los dos switches en la MISMA linea, para poder leerlos en par. El 'flex-wrap' los
+              apila solos si la pantalla es estrecha, en vez de apretarlos. */}
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+            {/* Taller */}
+            <SwitchToggle
               checked={form.taller === true}
-              onChange={(e) => setForm({ ...form, taller: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
+              onChange={(checked) => setForm({ ...form, taller: checked })}
+              label="Es taller (aula de practica)"
+              color="blue"
+              size="md"
             />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Es taller (aula de practica)
-            </label>
-          </div>
 
-          {/* Activo */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="activo"
+            {/* Activo */}
+            <SwitchToggle
               checked={form.activo !== false}
-              onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
+              onChange={(checked) => setForm({ ...form, activo: checked })}
+              label="Aula activa"
+              color="blue"
+              size="md"
             />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Aula activa
-            </label>
           </div>
 
           {/* Botones */}

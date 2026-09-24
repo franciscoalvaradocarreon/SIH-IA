@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { disponibilidadGrupoService } from '../api/disponibilidadGrupoService';
 import { grupoService } from '../api/grupoService';
+import { horarioService } from '../api/horarioService';
 import { turnoHorarioService } from '../api/turnoHorarioService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
-import type { Grupo, Turno, TurnoHorario } from '../types';
+import type { Grupo, Horario, Turno, TurnoHorario } from '../types';
 import {
-  MdAdd, MdEdit, MdRefresh, MdClass, MdSchedule,
+  MdEdit, MdRefresh, MdClass, MdSchedule,
   MdCheck, MdClose, MdChevronLeft, MdChevronRight,
   MdWarning
 } from 'react-icons/md';
@@ -38,6 +39,10 @@ const DisponibilidadGrupo: React.FC = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<number>(0);
   const [horarios, setHorarios] = useState<TurnoHorario[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Map<number, boolean>>(new Map());
+  // Bloques (TurnoHorario.id) que el grupo YA tiene ocupados por una clase colocada en el horario
+  // vigente. Se usa para pintar la cajita en naranja, igual que en disponibilidad de maestros.
+  // `null` significa "aun no cargado / error": en ese caso ninguna cajita se pinta naranja.
+  const [bloquesOcupados, setBloquesOcupados] = useState<Set<number> | null>(null);
   const [loading, setLoading] = useState(true);
   const [cargandoGrupos, setCargandoGrupos] = useState(false);
   const [error, setError] = useState('');
@@ -80,6 +85,51 @@ const DisponibilidadGrupo: React.FC = () => {
       setDisponibilidades(new Map());
     }
   }, [grupoSeleccionado, horarios, semestreActivo]);
+
+  // EFECTO 4b: Cargar los BLOQUES YA OCUPADOS del grupo en el horario vigente.
+  // Se reutiliza el MISMO endpoint que la pantalla "Horario de Grupos":
+  // GET /api/horarios/grupo/{grupoId}?semestreId=...
+  // Cada fila devuelta es un bloque ocupado por el grupo; se guarda su `turnoHorarioId`
+  // (campo del HorarioDTO del backend = TurnoHorario.id) para poder preguntar
+  // "¿este bloque ya tiene clase?" al pintar cada cajita.
+  // Mismo patron de cancelacion que los demas efectos: evita carreras al cambiar de
+  // grupo rapido (la respuesta obsoleta se descarta).
+  useEffect(() => {
+    const semestreId = semestreActivo?.id;
+
+    if (grupoSeleccionado <= 0 || !semestreId) {
+      setBloquesOcupados(null);
+      return;
+    }
+
+    let cancelado = false;
+    setBloquesOcupados(null);
+
+    const cargarBloquesOcupados = async () => {
+      try {
+        const res = await horarioService.obtenerPorGrupo(grupoSeleccionado, semestreId);
+        const filas: Horario[] = Array.isArray(res.data) ? res.data : [];
+        const bloques = new Set<number>();
+        filas.forEach((fila) => {
+          // El bloque se identifica por TurnoHorario.id; se ignora cualquier fila sin ese
+          // dato para no marcar cajitas al azar.
+          if (typeof fila.turnoHorarioId === 'number') {
+            bloques.add(fila.turnoHorarioId);
+          }
+        });
+        if (!cancelado) setBloquesOcupados(bloques);
+      } catch (error) {
+        console.error('Error al cargar los bloques ocupados del grupo:', error);
+        if (!cancelado) setBloquesOcupados(null);
+      }
+    };
+
+    cargarBloquesOcupados();
+
+    return () => {
+      cancelado = true;
+    };
+  }, [grupoSeleccionado, semestreActivo?.id]);
 
   // 🔥 EFECTO 5: Sincronizar URL (con guards para no pisar la URL durante la carga)
   useEffect(() => {
@@ -484,19 +534,38 @@ const DisponibilidadGrupo: React.FC = () => {
                         const h = getHorarioPorDiaYOrden(dia.value, orden);
                         const disponible = h ? disponibilidades.get(h.id) || false : false;
                         const existe = h !== undefined;
+                        // Prioridad visual: si el bloque ya tiene una clase colocada en el horario
+                        // vigente, gana sobre el verde. Mientras el horario no se haya cargado
+                        // (bloquesOcupados === null) no se pinta nada naranja.
+                        const ocupado =
+                          existe &&
+                          bloquesOcupados !== null &&
+                          bloquesOcupados.has(h.id);
 
                         return (
                           <td key={dia.value} className="px-3 py-2 text-center">
                             {existe ? (
                               <div
                                 className={`w-9 h-9 rounded-lg flex items-center justify-center mx-auto transition-all ${
-                                  disponible
+                                  ocupado
+                                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200 dark:shadow-none'
+                                    : disponible
                                     ? 'bg-green-500 text-white shadow-md shadow-green-200 dark:shadow-none'
                                     : 'bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400'
                                 }`}
-                                title={disponible ? 'Disponible' : 'No disponible'}
+                                title={
+                                  ocupado
+                                    ? 'Con clase en el horario'
+                                    : disponible
+                                    ? 'Disponible'
+                                    : 'No disponible'
+                                }
                               >
-                                {disponible ? <MdCheck className="text-lg" /> : <MdClose className="text-lg" />}
+                                {ocupado || disponible ? (
+                                  <MdCheck className="text-lg" />
+                                ) : (
+                                  <MdClose className="text-lg" />
+                                )}
                               </div>
                             ) : (
                               <span className="text-gray-300 dark:text-gray-600">-</span>
@@ -515,6 +584,10 @@ const DisponibilidadGrupo: React.FC = () => {
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-green-500 rounded"></span>
               Habilitado
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <span className="w-4 h-4 bg-orange-500 rounded"></span>
+              Con clase en el horario
             </span>
             <span className="inline-flex items-center gap-2">
               <span className="w-4 h-4 bg-gray-300 dark:bg-gray-600 rounded"></span>

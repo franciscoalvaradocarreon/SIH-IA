@@ -679,7 +679,7 @@ const HorarioManual: React.FC = () => {
    */
   const recortarMateria = (texto: string | null | undefined) => {
     const t = (texto ?? '').trim();
-    return t.slice(0, 2);
+    return t.slice(0, 7);
   };
 
   const tituloPin = (h: FilaPin) =>
@@ -936,14 +936,21 @@ const HorarioManual: React.FC = () => {
         onDragOver={(e) => { if (arrastrando?.origen === 'tablero') e.preventDefault(); }}
         onDrop={soltarEnCaja}
         className={`mb-4 rounded-xl border-2 border-dashed p-2 transition ${
-          // Con pines pendientes la caja se queda PEGADA arriba mientras la tabla pasa por debajo
-          // (sticky). Sin pendientes no se pega: así el tablero usa todo el alto.
+          // La caja se queda PEGADA arriba SIEMPRE, tenga pines o no.
+          //
+          // Antes solo se pegaba cuando habia pines pendientes, y eso obligaba a subir hasta
+          // arriba para soltar algo en ella: trabajando en los ultimos renglones, la caja se
+          // quedaba fuera de la pantalla y no habia donde soltar. La caja es ORIGEN y DESTINO de
+          // los arrastres, no solo un aviso, asi que tiene que estar siempre a mano.
+          //
+          // El precio es que ocupa su franja mientras se recorre el tablero, tambien vacia; si
+          // molesta, el boton de plegar la deja en una sola linea.
           //
           // Dos detalles que hacen falta para que se vea bien al quedar encima:
           //  - los fondos son OPACOS: translúcidos dejarían ver las casillas por detrás;
           //  - z-[45] queda por encima del encabezado de la tabla (z-40) y por debajo de los
           //    modales (z-50).
-          pinesCaja.length > 0 ? 'sticky top-0 z-[45] shadow-lg' : 'relative'
+          'sticky top-0 z-[45] shadow-lg'
         } ${
           arrastrando?.origen === 'tablero'
             ? 'border-red-400 bg-red-50 dark:border-red-600 dark:bg-red-950'

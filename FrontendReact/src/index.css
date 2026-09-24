@@ -2,3 +2,85 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ============================================================================
+   BARRAS DE SCROLL MAS GRUESAS Y VISIBLES
+   ============================================================================
+   Al recorrer una pantalla larga (la vista de grupo, por ejemplo) la barra que
+   se usa es la del DOCUMENTO, no la de un componente. Por eso esto va global y
+   se aplica a toda la aplicacion: no hay manera de engordar solo la de una
+   vista sin darle scroll propio a esa vista, que es justo lo que se descarto
+   para no meter una segunda barra dentro de la pagina.
+
+   Se dan las DOS sintaxis porque ningun navegador entiende las dos:
+     - ::-webkit-scrollbar  -> Chrome, Edge y Safari
+     - scrollbar-width / scrollbar-color -> Firefox
+
+   En la del documento el selector tiene que ser sobre 'html' (que es el elemento
+   al que pertenece esa barra); en las internas (el menu, cualquier contenedor
+   con overflow) basta el descendiente de '.dark', porque la clase 'dark' se pone
+   en 'document.documentElement'. De ahi que cada regla del tema oscuro lleve los
+   dos selectores.
+   ============================================================================ */
+
+/* 18px en vez de los ~15px que trae el navegador: se nota y se agarra mejor. */
+::-webkit-scrollbar {
+  width: 18px;
+  height: 18px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e5e7eb;            /* gray-200 */
+}
+
+/* El borde transparente con 'background-clip: padding-box' deja aire alrededor
+   del pulgar, para que se vea separado de la pista y no pegado a los bordes. */
+::-webkit-scrollbar-thumb {
+  background: #9ca3af;            /* gray-400 */
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 9px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;            /* gray-500 */
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: #e5e7eb;
+}
+
+html.dark::-webkit-scrollbar-track,
+.dark ::-webkit-scrollbar-track {
+  background: #1f2937;            /* gray-800 */
+}
+
+html.dark::-webkit-scrollbar-thumb,
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;            /* gray-600 */
+  background-clip: padding-box;
+}
+
+html.dark::-webkit-scrollbar-thumb:hover,
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;            /* gray-500 */
+  background-clip: padding-box;
+}
+
+html.dark::-webkit-scrollbar-corner,
+.dark ::-webkit-scrollbar-corner {
+  background: #1f2937;
+}
+
+/* Firefox: 'auto' ya es mas ancha que 'thin', asi que basta con darle color;
+   sin esto la pinta con el gris del sistema y en modo oscuro desentona.
+   'scrollbar-color' se hereda, de modo que ponerlo en 'html' cubre todo. */
+html {
+  scrollbar-width: auto;
+  scrollbar-color: #9ca3af #e5e7eb;
+}
+
+html.dark {
+  scrollbar-color: #4b5563 #1f2937;
+}

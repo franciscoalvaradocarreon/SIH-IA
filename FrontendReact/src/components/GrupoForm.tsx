@@ -5,6 +5,7 @@ import { turnoService } from '../api/turnoService';
 import { especialidadService } from '../api/especialidadService';
 import type { GrupoForm as GrupoFormType } from '../types';
 import { MdSave, MdCancel, MdGroup, MdSchool, MdSchedule, MdClass } from 'react-icons/md';
+import { SwitchToggle } from '../utils/SwitchToggle';
 import { useAuth } from '../context/AuthContext';
 
 const GrupoForm: React.FC = () => {
@@ -364,18 +365,13 @@ const GrupoForm: React.FC = () => {
           </div>
 
           {/* Activo */}
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              name="activo"
-              checked={form.activo !== false}
-              onChange={(e) => setForm({ ...form, activo: e.target.checked })}
-              className="w-4 h-4 text-blue-600 border-gray-400 rounded focus:ring-blue-500"
-            />
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Grupo activo
-            </label>
-          </div>
+          <SwitchToggle
+            checked={form.activo !== false}
+            onChange={(checked) => setForm({ ...form, activo: checked })}
+            label="Grupo activo"
+            color="blue"
+            size="md"
+          />
 
           {/* Botones */}
           <div className="flex gap-3 pt-4">
