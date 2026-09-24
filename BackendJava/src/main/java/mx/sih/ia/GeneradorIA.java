@@ -3376,10 +3376,14 @@ public class GeneradorIA {
                     // Además del bloque, se prueban los TALLERES del stock de la materia: en grupos
                     // amarrados a un aula compartida (p. ej. G1), el aula es justo lo que bloquea el
                     // movimiento aunque el maestro tenga toda la disponibilidad del mundo.
-                    // OJO: esto solo vale si el aula la decide el motor (modo aulas). Con el aula fija
-                    // esta fase prueba SOLO el aula de la asignación, que es lo que hace que "stock de
-                    // aulas apagado" signifique de verdad que ninguna fase mueve el aula.
-                    for (long al : (modoAulas ? s1.stockAulas : List.of(s1.aid))) {
+                    //
+                    // Se prueban los del stock AUNQUE la bandera de talleres esté apagada, y es
+                    // deliberado: esto es un rescate de ultimo recurso para despegar dos clases
+                    // pegadas del mismo maestro, no la eleccion normal del aula. La bandera gobierna
+                    // la eleccion normal (aulasCandidatas); si aqui se respetara, el par se quedaria
+                    // pegado y la metrica de adyacencias subiria sin que el usuario hubiera pedido
+                    // nada parecido.
+                    for (long al : s1.stockAulas) {
                         s1.aid = al;
                         boolean ok = true;
                         for (long bid : v.ids()) {

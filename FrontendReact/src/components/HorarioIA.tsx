@@ -133,6 +133,11 @@ const HorarioIA: React.FC = () => {
     useState<{ trabajoId: string; numero: number; tipo: 'error' | 'ok'; texto: string } | null>(null);
   const [mensajeLista, setMensajeLista] = useState<MensajeAccion | null>(null);
 
+  // Confirmación en modal, no window.confirm: el resto de la app usa modales con su estilo y el
+  // diálogo nativo del navegador rompía la estética (y no respeta el modo oscuro).
+  const [confirmacion, setConfirmacion] =
+    useState<{ accion: 'aplicar' | 'borrar'; corrida: CorridaIA } | null>(null);
+
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
 
@@ -360,12 +365,6 @@ const HorarioIA: React.FC = () => {
 
   /** Aplica una corrida guardada al horario vigente. Es lo único destructivo de esta pantalla. */
   const aplicarCorridaGuardada = async (corrida: CorridaIA) => {
-    const seguro = window.confirm(
-      `Vas a aplicar "${corrida.nombre}" al horario vigente.\n\n` +
-      `Se REEMPLAZA el horario actual de los grupos de ese turno y semestre (${corrida.horas} h).\n\n` +
-      '¿Continuar?'
-    );
-    if (!seguro) return;
     setAplicandoCorrida(corrida.id);
     setMensajeLista(null);
     try {
@@ -384,11 +383,6 @@ const HorarioIA: React.FC = () => {
 
   /** Quita una corrida de la lista. NO deshace lo aplicado: solo borra la opcion guardada. */
   const borrarCorridaGuardada = async (corrida: CorridaIA) => {
-    const seguro = window.confirm(
-      `¿Borrar la corrida "${corrida.nombre}" de la lista de opciones?\n\n` +
-      'El horario actual NO se toca: si ya la aplicaste, seguira como esta.'
-    );
-    if (!seguro) return;
     setBorrandoCorrida(corrida.id);
     setMensajeLista(null);
     try {
@@ -402,6 +396,18 @@ const HorarioIA: React.FC = () => {
       setMensajeLista({ tipo: 'error', texto: mensajeError(e, 'No se pudo borrar la corrida') });
     } finally {
       setBorrandoCorrida(null);
+    }
+  };
+
+  /** Ejecuta la acción que el modal estaba confirmando. */
+  const confirmarAccion = () => {
+    if (!confirmacion) return;
+    const { accion, corrida } = confirmacion;
+    setConfirmacion(null);
+    if (accion === 'aplicar') {
+      aplicarCorridaGuardada(corrida);
+    } else {
+      borrarCorridaGuardada(corrida);
     }
   };
 
@@ -896,10 +902,24 @@ const HorarioIA: React.FC = () => {
         borrando={borrandoCorrida}
         mensaje={mensajeLista}
         turnos={turnos}
-        onAplicar={aplicarCorridaGuardada}
-        onBorrar={borrarCorridaGuardada}
+        onAplicar={(corrida) => setConfirmacion({ accion: 'aplicar', corrida })}
+        onBorrar={(corrida) => setConfirmacion({ accion: 'borrar', corrida })}
         onRefrescar={cargarCorridas}
       />
+
+      {/* Confirmación en modal, con el estilo del resto de la app (no window.confirm). */}
+      {confirmacion && (
+        <ModalConfirmarCorrida
+          corrida={confirmacion.corrida}
+          accion={confirmacion.accion}
+          ocupado={confirmacion.accion === 'aplicar'
+            ? aplicandoCorrida !== null
+            : borrandoCorrida !== null}
+          turnos={turnos}
+          onConfirmar={confirmarAccion}
+          onCancelar={() => setConfirmacion(null)}
+        />
+      )}
     </div>
   );
 };
@@ -1647,6 +1667,106 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
   );
 };
 
+/** El turno se resuelve con la lista que ya tiene la pantalla: una consulta menos. */
+const nombreDeTurno = (turnos: Turno[], turnoId: number | null): string => {
+  if (!turnoId) return '—';
+  const t = turnos.find(x => x.id === turnoId);
+  return t ? t.nombre : `turno ${turnoId}`;
+};
+
+/**
+ * Confirmación en modal para aplicar o borrar una corrida.
+ *
+ * <p>Antes era un window.confirm: el diálogo nativo del navegador rompía la estética (y no respeta el
+ * modo oscuro), mientras el resto de la aplicación usa modales como este. Mismo estilo que el de
+ * Especialidades/Aulas/Maestros, que es el patrón que sigue toda la app.
+ */
+const ModalConfirmarCorrida: React.FC<{
+  corrida: CorridaIA;
+  accion: 'aplicar' | 'borrar';
+  ocupado: boolean;
+  turnos: Turno[];
+  onConfirmar: () => void;
+  onCancelar: () => void;
+}> = ({ corrida, accion, ocupado, turnos, onConfirmar, onCancelar }) => {
+  const esAplicar = accion === 'aplicar';
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/50 backdrop-blur-sm p-4 pt-24">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-2 bg-red-100 dark:bg-red-900/40 rounded-lg text-red-600 dark:text-red-400">
+            <MdWarning className="text-2xl" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+            {esAplicar ? 'Aplicar al horario vigente' : 'Confirmar eliminación'}
+          </h3>
+        </div>
+
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          {esAplicar
+            ? 'Se REEMPLAZA el horario actual de los grupos de ese turno y semestre por esta corrida.'
+            : '¿Estás seguro de que quieres borrar esta corrida de la lista de opciones?'}
+        </p>
+
+        <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-3 mb-4 text-sm">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+              <MdBookmarkAdd className="text-lg" />
+            </div>
+            <div>
+              <div className="font-medium text-gray-800 dark:text-white">{corrida.nombre}</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                {numeroSeguro(corrida.horas)} h · {numeroSeguro(corrida.filasGuardadas)} bloques
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-between mt-2">
+            <span className="text-gray-500 dark:text-gray-400">Turno:</span>
+            <span className="font-medium text-gray-800 dark:text-white">
+              {nombreDeTurno(turnos, corrida.turnoId)}
+            </span>
+          </div>
+        </div>
+
+        <p className="text-xs text-red-600 dark:text-red-400 mb-4">
+          {esAplicar
+            ? '⚠️ El horario que hay ahora en esos grupos se pierde.'
+            : '⚠️ Esta acción no se puede deshacer. El horario vigente no se toca.'}
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onCancelar}
+            disabled={ocupado}
+            className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            disabled={ocupado}
+            className={`flex-1 px-4 py-2.5 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2 ${esAplicar
+              ? 'bg-emerald-600 hover:bg-emerald-700'
+              : 'bg-red-600 hover:bg-red-700'}`}
+          >
+            {ocupado ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                {esAplicar ? 'Aplicando...' : 'Borrando...'}
+              </>
+            ) : (
+              <>
+                {esAplicar ? <MdDoneAll className="text-lg" /> : <MdDelete className="text-lg" />}
+                {esAplicar ? 'Aplicar' : 'Eliminar'}
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /**
  * CORRIDAS GUARDADAS: las opciones apartadas, con sus métricas, para poder compararlas.
  *
@@ -1670,13 +1790,6 @@ const ListaCorridas: React.FC<{
   onBorrar: (corrida: CorridaIA) => void;
   onRefrescar: () => void;
 }> = ({ corridas, cargando, aplicando, borrando, mensaje, turnos, onAplicar, onBorrar, onRefrescar }) => {
-
-  /** El turno se resuelve con la lista que ya tiene la pantalla: una consulta menos. */
-  const nombreTurno = (turnoId: number | null): string => {
-    if (!turnoId) return '—';
-    const t = turnos.find(x => x.id === turnoId);
-    return t ? t.nombre : `turno ${turnoId}`;
-  };
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
@@ -1740,7 +1853,7 @@ const ListaCorridas: React.FC<{
                       <span className="block text-[11px] text-gray-500 dark:text-gray-400">{c.notas}</span>
                     )}
                   </td>
-                  <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreTurno(c.turnoId)}</td>
+                  <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreDeTurno(turnos, c.turnoId)}</td>
                   <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
                     {numeroSeguro(c.horas)}/{numeroSeguro(c.horasDemandadas)}
                   </td>
