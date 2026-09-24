@@ -166,6 +166,11 @@ const Menu: React.FC = () => {
   );
   const [collapsed, setCollapsed] = useState(false);
 
+  /** Identidad del build: versión, commit y fecha. Null mientras no haya respondido el servidor. */
+  const [version, setVersion] = useState<
+    { aplicacion: string; version: string; commit: string; construido: string } | null
+  >(null);
+
   // 🔥 rolesEscuelaActiva: roles del usuario EN LA ESCUELA ACTIVA (del endpoint
   // /api/usuarios/mis-roles). Se usa para el banner y el fallback.
   // roles (del JWT) NO se usa aquí porque contiene la suma de roles de todas
@@ -193,6 +198,15 @@ const Menu: React.FC = () => {
     };
     fetchMenu();
   }, [escuelaActivaId, location.pathname]);
+
+  // Versión desplegada (GET /api/version, que es público). Sirve para saber de un vistazo sobre qué
+  // código estás trabajando: en local responde "dev" y en producción "v1.1.5 · 99c9226".
+  // Si falla no se pinta nada: no es información crítica y no debe ensuciar la pantalla.
+  useEffect(() => {
+    api.get('/version')
+      .then(res => setVersion(res.data))
+      .catch(() => { /* sin versión visible */ });
+  }, []);
 
   // Si el backend no devolvió menús, usar el fallback por roles DE LA ESCUELA ACTIVA
   const usandoFallback = !loading && menuItems.length === 0 && !!escuelaActivaId;
@@ -376,6 +390,24 @@ const Menu: React.FC = () => {
           <IconsMd.MdLogout className="w-5 h-5 flex-shrink-0" />
           {!collapsed && <span className="text-sm font-medium">Cerrar sesión</span>}
         </button>
+
+        {/*
+          Versión sobre la que se está trabajando, al final del menú.
+          En producción sale "v1.1.5 · 99c9226"; en local, "dev" (y ahí no se añade el commit, porque
+          vale "desconocido" y no aporta nada). El title lleva la fecha del build.
+        */}
+        {version && (
+          <p
+            className="truncate text-center text-[11px] text-gray-400 dark:text-gray-500"
+            title={`${version.aplicacion} ${version.version}
+commit: ${version.commit}
+construido: ${version.construido}`}
+          >
+            {collapsed || !version.commit || version.commit === 'desconocido'
+              ? version.version
+              : `${version.version} · ${version.commit}`}
+          </p>
+        )}
       </div>
     </nav>
   );
