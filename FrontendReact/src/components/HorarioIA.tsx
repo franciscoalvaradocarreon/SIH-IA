@@ -94,8 +94,8 @@ const HorarioIA: React.FC = () => {
   const [urlIA, setUrlIA] = useState('');
   const [verClave, setVerClave] = useState(false);
   // Dos modos INDEPENDIENTES: repartir los maestros desde el stock y/o elegir el taller desde el
-  // stock de aulas de la materia. Antes eran una sola bandera, así que no se podía probar una sin la
-  // otra.
+  // stock de talleres de la materia (las aulas que ESA materia ya usa). Antes eran una sola bandera,
+  // así que no se podía probar una sin la otra.
   const [asignarMaestros, setAsignarMaestros] = useState(false);
   const [asignarAulas, setAsignarAulas] = useState(false);
 
@@ -490,7 +490,7 @@ const HorarioIA: React.FC = () => {
             <SwitchToggle
               checked={asignarAulas}
               onChange={setAsignarAulas}
-              label="Asignar aulas desde el stock"
+              label="Asignar talleres desde el stock"
               color="blue"
               size="md"
               disabled={enCurso || !turnoListo}
@@ -499,9 +499,10 @@ const HorarioIA: React.FC = () => {
           <span className="text-xs text-gray-500 dark:text-gray-400">
             son dos decisiones independientes: <strong>maestros</strong> reparte quién da cada materia
             entre los que ya la imparten (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo
-            de Jóvenes por maestro) y <strong>aulas</strong> deja que el motor busque taller entre los
-            que ya usa la materia, en vez de respetar siempre el de la asignación. Con las dos
-            apagadas el horario sale como siempre
+            de Jóvenes por maestro) y <strong>talleres</strong> deja que el motor cambie el aula de una
+            sesión por otra de las que <strong>ya usa esa materia</strong> —no entre todas las aulas del
+            plantel—, en vez de respetar siempre la de la asignación. Con las dos apagadas el horario
+            sale como siempre
           </span>
         </div>
 

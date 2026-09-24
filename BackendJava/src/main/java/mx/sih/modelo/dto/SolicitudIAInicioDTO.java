@@ -39,18 +39,23 @@ public class SolicitudIAInicioDTO {
     private Boolean asignarMaestros;
 
     /**
-     * MODO "ASIGNAR AULAS DESDE EL STOCK": si true, el motor elige el TALLER (aula) de cada sesión
-     * entre los que ya usa su materia en las asignaciones, en vez de quedarse siempre con el aula de
-     * la asignación.
+     * MODO "ASIGNAR TALLERES DESDE EL STOCK": si true, el motor elige el TALLER (aula) de cada sesión
+     * entre los que YA USA ESA MATERIA en las asignaciones, en vez de quedarse siempre con el aula de
+     * la asignación. OJO: no elige entre todas las aulas del plantel, solo entre las de esa materia.
      *
-     * <p>Antes iba pegado a {@link #asignarMaestros} (una sola bandera encendía las dos cosas), asi
-     * que no se podia probar una sin la otra. Ahora son dos decisiones separadas:
+     * <p>Antes iba pegado a {@link #asignarMaestros} (una sola bandera encendía las dos cosas), así
+     * que no se podía probar una sin la otra. Ahora son dos decisiones separadas:
      * <ul>
-     *   <li>maestros ON + aulas OFF: el motor reparte los maestros y cada sesion respeta el aula de su
-     *       asignacion.</li>
-     *   <li>maestros OFF + aulas ON: cada sesion conserva su maestro, pero el motor busca taller.</li>
+     *   <li>maestros ON + talleres OFF: el motor reparte los maestros y cada sesión respeta el aula de
+     *       su asignación.</li>
+     *   <li>maestros OFF + talleres ON: cada sesión conserva su maestro, pero el motor busca taller
+     *       entre los de su materia.</li>
      *   <li>las dos OFF: el motor de siempre.</li>
      * </ul>
+     *
+     * <p>El campo se llama asignarAulas porque lo que acaba escribiendo es un aula_id en la tabla
+     * horario, y Aula es el nombre de la entidad; en la pantalla se le dice "talleres", que es como lo
+     * llama el propio motor por dentro.
      */
     private Boolean asignarAulas;
 

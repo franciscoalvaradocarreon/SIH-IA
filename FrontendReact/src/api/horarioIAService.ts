@@ -306,8 +306,14 @@ export interface SolicitudIA {
    */
   asignarMaestros?: boolean;
   /**
-   * MODO "ASIGNAR AULAS DESDE EL STOCK": el motor elige el taller (aula) de cada sesión entre los que
-   * ya usa su materia, en vez de quedarse siempre con el de la asignación.
+   * MODO "ASIGNAR TALLERES DESDE EL STOCK": el motor elige el taller (aula) de cada sesión entre los
+   * que YA USA ESA MATERIA -no entre todas las aulas del plantel-, en vez de quedarse siempre con el
+   * de la asignación.
+   *
+   * OJO con el nombre del campo: se llama asignarAulas porque lo que acaba escribiendo es un
+   * aula_id en la tabla horario, y Aula es el nombre de la entidad. En la pantalla se le dice
+   * "talleres", que es como lo llama el propio motor por dentro (ver el stock de talleres en
+   * GeneradorIA).
    *
    * Es INDEPENDIENTE de `asignarMaestros`: las dos banderas se combinan libremente.
    */

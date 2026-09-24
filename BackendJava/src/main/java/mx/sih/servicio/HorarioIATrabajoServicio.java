@@ -88,7 +88,7 @@ public class HorarioIATrabajoServicio {
         private final int maxPasos;
         /** Modo "asignar maestros desde el stock" (el motor elige el maestro por disponibilidad). */
         private final boolean asignarMaestros;
-        /** Modo "asignar aulas desde el stock" (el motor elige el taller de la materia). Es independiente. */
+        /** Modo "asignar talleres desde el stock" (el motor elige el taller de la materia). Independiente. */
         private final boolean asignarAulas;
         private final String solicitadoPor;
         private final LocalDateTime encoladoEn = LocalDateTime.now();
