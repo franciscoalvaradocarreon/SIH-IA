@@ -5,9 +5,18 @@ import Menu from './Menu';
 
 const Layout: React.FC = () => {
   return (
-        <div className="min-h-screen flex relative overflow-x-clip bg-gradient-to-br from-blue-100 via-indigo-50 to-white dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
+        <div className="min-h-screen flex relative bg-gradient-to-br from-blue-100 via-indigo-50 to-white dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
       
-      <div className="absolute inset-0 pointer-events-none">
+      {/*
+        OJO: los círculos decorativos se recortan AQUÍ, en su propia capa, y NUNCA con un 'overflow'
+        en el contenedor de arriba. Un overflow distinto de 'visible' en un ancestro del menú hace
+        que su 'position: sticky' se resuelva contra ese contenedor en vez de contra la ventana, y el
+        menú acaba desplazándose con la página.
+        Medido en el navegador: el <nav> tenía pos=sticky, pero el contenedor del layout tenía
+        ovx=clip y el menú se movía 33 px con el scroll (los márgenes de <main>). Si algún día hace
+        falta recortar algo más, se recorta en la capa que lo contiene, no aquí.
+      */}
+      <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Círculo 1: Arriba derecha - Tamaño grande */}
         <div className="absolute -top-20 -right-20 w-96 h-96 
                         bg-blue-200/40 dark:bg-blue-900/30 
