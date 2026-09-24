@@ -10,8 +10,7 @@ import {
 } from 'react-icons/md';
 import { useAuth } from '../context/AuthContext';
 import ErrorScreen from '../utils/ErrorScreen';
-
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8080';
+import { urlFoto } from '../utils/imagenes';
 
 const Maestros: React.FC = () => {
   const navigate = useNavigate();
@@ -34,7 +33,10 @@ const Maestros: React.FC = () => {
   const [turnoId, setTurnoId] = useState<number>(turnoInicial);     // 🔥 NUEVO
   const [turnos, setTurnos] = useState<Turno[]>([]);                // 🔥 NUEVO
   const [loading, setLoading] = useState(true);
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  // ReturnType<typeof setTimeout> en vez de NodeJS.Timeout: el proyecto no incluye
+  // los tipos de Node en el tsconfig de la app, asi que el espacio de nombres NodeJS
+  // no existe y TypeScript daba error TS2503.
+  const [timeoutId, setTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const [modalEliminar, setModalEliminar] = useState<{
     abierto: boolean;
@@ -290,17 +292,6 @@ const Maestros: React.FC = () => {
     return (partes[0].charAt(0) + partes[partes.length - 1].charAt(0)).toUpperCase();
   };
 
-  const getFotoUrl = (fotoUrl: string | null | undefined): string | null => {
-    if (!fotoUrl) return null;
-    if (fotoUrl.startsWith('http://') || fotoUrl.startsWith('https://')) {
-      return fotoUrl;
-    }
-    if (fotoUrl.startsWith('/')) {
-      return `${BASE_URL}${fotoUrl}`;
-    }
-    return `${BASE_URL}/${fotoUrl}`;
-  };
-
   if (errorPantalla) {
     return (
       <ErrorScreen
@@ -528,7 +519,7 @@ const Maestros: React.FC = () => {
                           <div className="flex items-center gap-2">
                             {maestro.fotoUrl ? (
                               <img
-                                src={getFotoUrl(maestro.fotoUrl) || undefined}
+                                src={urlFoto(maestro.fotoUrl) || undefined}
                                 alt={maestro.nombreCompleto}
                                 className="w-7 h-10 rounded-full object-cover border border-gray-400 dark:border-gray-600 flex-shrink-0"
                                 onError={(e) => {
@@ -698,7 +689,7 @@ const Maestros: React.FC = () => {
               <div className="flex items-center gap-3 mb-2">
                 {modalEliminar.maestro.fotoUrl ? (
                   <img
-                    src={getFotoUrl(modalEliminar.maestro.fotoUrl) || undefined}
+                    src={urlFoto(modalEliminar.maestro.fotoUrl) || undefined}
                     alt={modalEliminar.maestro.nombreCompleto}
                     className="w-12 h-12 rounded-full object-cover border-2 border-gray-400 dark:border-gray-600"
                     onError={(e) => {

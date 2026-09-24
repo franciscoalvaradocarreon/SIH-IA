@@ -9,8 +9,7 @@ import {
   MdPhoto, MdClass, MdWarning, MdSchedule, MdBadge
 } from 'react-icons/md';
 import { useAuth } from '../context/AuthContext';
-
-const BASE_URL = import.meta.env.VITE_BACKEND_URL ?? 'http://localhost:8080';
+import { urlFoto } from '../utils/imagenes';
 
 const MaestroForm: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -70,17 +69,6 @@ const MaestroForm: React.FC = () => {
     }
   };
 
-  const getFotoUrl = (fotoUrl: string | null) => {
-    if (!fotoUrl) return null;
-    if (fotoUrl.startsWith('http://') || fotoUrl.startsWith('https://')) {
-      return fotoUrl;
-    }
-    if (fotoUrl.startsWith('/')) {
-      return `${BASE_URL}${fotoUrl}`;
-    }
-    return `${BASE_URL}/${fotoUrl}`;
-  };
-
   const cargarMaestro = async () => {
     setLoading(true);
     try {
@@ -101,7 +89,7 @@ const MaestroForm: React.FC = () => {
         turnoId: data.turnoId || 0,
       });
       if (data.fotoUrl) {
-        setPreviewUrl(getFotoUrl(data.fotoUrl) || '');
+        setPreviewUrl(urlFoto(data.fotoUrl) || '');
       }
     } catch (err) {
       console.error('❌ Error al cargar maestro:', err);

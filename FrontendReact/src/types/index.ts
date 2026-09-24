@@ -104,9 +104,15 @@ export interface MaestroForm {
     email: string;
     telefono: string;
     fotoUrl?: string;
+    // El formulario guarda aqui el archivo elegido en el input de tipo file,
+    // ademas del estado propio `fotoArchivo` que ya existia en el componente.
+    fotoArchivo?: File | null;
     titulo?: string;
     apodo?: string;
-    activo: boolean;
+    // Opcional a proposito: este formulario no edita el estado activo/inactivo.
+    // Eso se cambia con maestroService.cambiarEstado(), un endpoint aparte, asi
+    // que el objeto de estado del formulario nunca incluye este campo.
+    activo?: boolean;
     semestreId: number;
     turnoId: number;
 }
