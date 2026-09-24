@@ -78,6 +78,7 @@ jobs:
           set -e
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/esquema.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/02_solape.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/05_corridas_ia.sql
       - name: Compilar y correr pruebas
         run: mvn -B clean verify
       - name: Empaquetar el programa (WAR ejecutable)
@@ -114,6 +115,7 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/esquema.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/02_solape.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/03_semilla.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/05_corridas_ia.sql
 
       - name: QA del esquema (el veredicto es un gate)
         run: |

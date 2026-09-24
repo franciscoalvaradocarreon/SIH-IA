@@ -29,7 +29,11 @@ SELECT '1. TABLA FALTANTE', 'sih.' || e.n
                ('grupos'),('aulas'),('materias'),('maestros'),('asignacion'),
                ('disponibilidad_grupo'),('disponibilidad_maestro'),('horario'),
                ('menu'),('roles'),('rol_menu'),('usuarios'),('usuario_escuela_rol'),
-               ('password_reset_token')) e(n)
+               ('password_reset_token'),
+               -- Corridas guardadas del generador IA (db/05_corridas_ia.sql).
+               -- Estan aqui a proposito: si la migracion no se aplico en esta
+               -- base, el QA tiene que decirlo en vez de dar el visto bueno.
+               ('corrida_ia'),('corrida_ia_detalle')) e(n)
  WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables t
                     WHERE t.table_schema = 'sih' AND t.table_name = e.n);
 

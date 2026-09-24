@@ -44,6 +44,10 @@ services:
       # OJO: son alternativos entre si, nunca los dos a la vez (ambos insertan
       # roles, menu, rol_menu y escuelas: chocarian las PRIMARY KEY).
       - "./db/${SCRIPT_DATOS:-03_semilla.sql}:/docker-entrypoint-initdb.d/03_datos.sql:ro"
+      # Cambios de esquema posteriores al volcado. Va DESPUES de los datos
+      # (05 > 03 en orden alfabetico, que es el que sigue Postgres) y es
+      # idempotente, asi que da igual si ya estaba aplicado a mano.
+      - ./db/05_corridas_ia.sql:/docker-entrypoint-initdb.d/05_corridas_ia.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]
