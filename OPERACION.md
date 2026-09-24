@@ -235,7 +235,44 @@ ssh sih "df -h / && du -sh ~/SIH-IA ~/respaldos"
 
 # Memoria
 ssh sih "free -h"
+
+# Recursos de la aplicacion en vivo (CPU y memoria)
+ssh -n sih 'docker stats --no-stream sih-ia-app-1'
 ```
+
+### Cómo leer `docker stats`
+
+- **`CPU %` se mide POR NÚCLEO**: 100% = un núcleo entero ocupado. El servidor tiene 4.
+- **`IMAGE` distingue el servidor de tu PC**: `ghcr.io/franciscoalvaradocarreon/sih-ia:latest` es
+  el servidor; `sih-ia:local` es tu PC. Ojo, porque el contenedor se llama `sih-ia-app-1` **en los
+  dos sitios** (el nombre sale del `name: sih-ia` del compose), así que el nombre no distingue nada:
+  lo único que separa a los dos es el `ssh`.
+- **`MEM USAGE` es una marca alta, no un valor fijo**: el recolector de la JVM devuelve memoria al
+  sistema y la cifra baja sola. Hay que mirar varias muestras para ver la tendencia.
+- **La app en reposo cuesta ~1,4 GiB.** Si ves eso y `CPU %` a 0, no hay nada generando.
+
+### El motor de horarios y la CPU
+
+Una generación de **una sola escuela** debe mostrar **`CPU %` cerca de 300%**: son los 3 hilos de
+`app.ia.hilos` trabajando en paralelo.
+
+| Qué ves | Qué significa |
+|---|---|
+| ~300% con una escuela generando | Correcto: 3 intentos a la vez |
+| ~100% con una escuela generando | `app.ia.hilos=1`, o el pool no se está usando |
+| ~0% y 1,4 GiB | No hay nada generando |
+
+Cuánto tarda: una generación de 6 intentos de 200 s tarda **~400 s** con 3 hilos (2 tandas de 3) en
+vez de ~1200 s. Con tres escuelas a la vez, se reparten los 3 hilos y las tres terminan en torno a
+1200 s, en lugar de 1200 / 2400 / 3600.
+
+Los mandos están en `BackendJava/src/main/resources/application.properties`: `app.ia.hilos`
+(intentos en paralelo, 3 por defecto) y `app.ia.intentos` (cuántos intentos). El tope de memoria del
+contenedor está en `docker-compose.yml` (`app.mem_limit: 8g`), y es lo que impide que la JVM calcule
+su heap sobre los 24 GB de la máquina en vez de sobre un límite decidido.
+
+**Generar un horario no escribe en la base de datos**: el horario real solo se toca al pulsar
+**Registrar**, que es una acción aparte. Por eso varias escuelas pueden generar a la vez.
 
 ### Si el servidor no responde en absoluto
 

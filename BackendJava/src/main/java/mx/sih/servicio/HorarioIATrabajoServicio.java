@@ -24,19 +24,44 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Ejecuta el GENERADOR IA en segundo plano: varios intentos, uno detrás de otro.
+ * Ejecuta el GENERADOR IA en segundo plano: varios intentos, y el mejor se queda.
  *
  * <p>Cada intento es independiente y parte de cero (no hereda el anterior): así se exploran
- * soluciones distintas y el mejor se queda. El usuario puede ver cómo avanza cada intento con sus
- * horas pendientes, y puede terminar cuando alguno le sirva.
+ * soluciones distintas. El usuario puede ver cómo avanza cada intento con sus horas pendientes, y
+ * puede terminar cuando alguno le sirva.
  *
- * <p>Igual que la generación con Timefold, se usa UN solo hilo: dos generaciones a la vez competirían
- * por la CPU y escribirían en las mismas tablas. Si hay un trabajo en curso con el mismo alcance, se
- * devuelve ese.
+ * <h2>Concurrencia: hay dos pools, y la diferencia importa</h2>
+ *
+ * <ul>
+ *   <li><b>{@code cocineros}</b>: un pool COMPARTIDO por todo el servidor, con {@code app.ia.hilos}
+ *       hilos (3 por defecto). Es el recurso escaso —los núcleos— y por eso es uno solo: así tres
+ *       escuelas generando a la vez no crean tres pools de tres hilos cada uno (nueve intentos en
+ *       memoria), sino que comparten los mismos tres. La memoria queda acotada por el tamaño del
+ *       pool, no por el número de usuarios.</li>
+ *   <li><b>{@code coordinadores}</b>: un hilo barato por trabajo, que solo carga los datos, suelta
+ *       intentos y los recoge. Es lo que permite que varios trabajos estén EN_PROCESO a la vez en
+ *       lugar de hacer fila.</li>
+ * </ul>
+ *
+ * <p>Los intentos se sueltan en TANDAS y el tamaño de la tanda se reparte entre los trabajos que
+ * están compitiendo en ese momento: una escuela sola se lleva los 3 hilos (6 intentos = 2 tandas
+ * ≈ 400 s en vez de ~1200 s), y tres escuelas usan una tanda de 1 cada una, de modo que las tres
+ * avanzan y terminan más o menos juntas en vez de que la última espere una hora.
+ *
+ * <p>GENERAR NO ESCRIBE EN LA BASE. El motor calcula y guarda los intentos en memoria; el horario
+ * real solo se toca al REGISTRAR un intento, que es una acción aparte del usuario. Por eso varios
+ * trabajos pueden generar a la vez sin pisarse.
+ *
+ * <p>Si ya hay un trabajo EN_COLA o EN_PROCESO con el mismo alcance (escuela, semestre, turno), se
+ * devuelve ese en vez de encolar otro.
  */
 @Service
 public class HorarioIATrabajoServicio {
@@ -112,28 +137,50 @@ public class HorarioIATrabajoServicio {
         }
     }
 
+    /** Cuántos trabajos de escuelas distintas pueden estar generando a la vez. */
+    private static final int TRABAJOS_A_LA_VEZ = 4;
+
     private final Map<String, Trabajo> trabajos = new ConcurrentHashMap<>();
-    private final ExecutorService ejecutor;
     private final HorarioIAServicio servicio;
+
+    /** Pool COMPARTIDO de intentos: aquí está el recurso escaso, los núcleos. */
+    private final ExecutorService cocineros;
+
+    /** Un hilo barato por trabajo: carga datos, suelta intentos y los recoge. */
+    private final ExecutorService coordinadores;
 
     /** Valores por defecto, configurables. */
     private final int intentosPorDefecto;
     private final int segundosPorIntentoDefecto;
     private final int maxPasosDefecto;
+    private final int hilos;
 
     public HorarioIATrabajoServicio(HorarioIAServicio servicio,
                                     @Value("${app.ia.intentos:6}") int intentosPorDefecto,
                                     @Value("${app.ia.segundos-por-intento:60}") int segundosPorIntentoDefecto,
-                                    @Value("${app.ia.max-pasos:60000}") int maxPasosDefecto) {
+                                    @Value("${app.ia.max-pasos:60000}") int maxPasosDefecto,
+                                    @Value("${app.ia.hilos:3}") int hilos) {
         this.servicio = servicio;
         this.intentosPorDefecto = intentosPorDefecto <= 0 ? 6 : intentosPorDefecto;
         this.segundosPorIntentoDefecto = segundosPorIntentoDefecto <= 0 ? 60 : segundosPorIntentoDefecto;
         this.maxPasosDefecto = maxPasosDefecto <= 0 ? 60000 : maxPasosDefecto;
-        this.ejecutor = Executors.newSingleThreadExecutor(tarea -> {
-            Thread hilo = new Thread(tarea, "generacion-horarios-ia");
+        // Tope de 16 por si alguien escribe un número absurdo en la configuración: más hilos que
+        // núcleos no acelera nada, solo reparte el mismo tiempo entre más intentos a medias.
+        this.hilos = hilos <= 0 ? 3 : Math.min(hilos, 16);
+        this.cocineros = Executors.newFixedThreadPool(this.hilos, daemon("ia-intento"));
+        this.coordinadores = Executors.newFixedThreadPool(TRABAJOS_A_LA_VEZ, daemon("ia-trabajo"));
+        logger.info("Generador IA listo: {} hilo(s) de intentos, hasta {} trabajo(s) a la vez",
+                this.hilos, TRABAJOS_A_LA_VEZ);
+    }
+
+    /** Hilos daemon y con nombre: se distinguen en un volcado y no frenan el apagado. */
+    private static ThreadFactory daemon(String prefijo) {
+        AtomicInteger contador = new AtomicInteger();
+        return tarea -> {
+            Thread hilo = new Thread(tarea, prefijo + "-" + contador.incrementAndGet());
             hilo.setDaemon(true);
             return hilo;
-        });
+        };
     }
 
     public int getIntentosPorDefecto() {
@@ -146,6 +193,17 @@ public class HorarioIATrabajoServicio {
 
     public int getMaxPasosDefecto() {
         return maxPasosDefecto;
+    }
+
+    /**
+     * Cuántos intentos se calculan en paralelo ({@code app.ia.hilos}).
+     *
+     * <p>Lo necesita la interfaz para estimar el tiempo: con N intentos a la vez, el trabajo dura
+     * ceil(intentos / hilos) tandas, no 'intentos' veces. Sin este dato la barra de progreso se
+     * quedaría en un tercio al terminar.
+     */
+    public int getHilos() {
+        return hilos;
     }
 
     public boolean llmConfigurado() {
@@ -193,7 +251,7 @@ public class HorarioIATrabajoServicio {
                 trabajo.id, semestreId, turnoId, trabajo.modo, trabajo.intentosPlaneados,
                 trabajo.segundosPorIntento);
 
-        ejecutor.submit(() -> ejecutar(trabajo));
+        coordinadores.submit(() -> ejecutar(trabajo));
         return aDTO(trabajo);
     }
 
@@ -299,34 +357,60 @@ public class HorarioIATrabajoServicio {
             AsesorIA asesor = trabajo.asesor != null ? trabajo.asesor : servicio.asesor(trabajo.modo);
 
             List<IntentoIA> hechos = new ArrayList<>();
-            for (int i = 1; i <= trabajo.intentosPlaneados; i++) {
+            int lanzados = 0;
+            while (lanzados < trabajo.intentosPlaneados) {
                 if (trabajo.cancelado) {
-                    logger.info("Trabajo IA {}: terminado por el usuario antes del intento {}", trabajo.id, i);
+                    logger.info("Trabajo IA {}: terminado por el usuario tras {} intento(s)",
+                            trabajo.id, lanzados);
                     break;
                 }
-                trabajo.intentoActual = i;
-                trabajo.mensaje = "Intento " + i + " de " + trabajo.intentosPlaneados;
 
-                IntentoIA intento = servicio.intento(datos, i, System.nanoTime(), 
-                        trabajo.segundosPorIntento, trabajo.maxPasos, trabajo.asignarMaestros, asesor,
-                        linea -> logger.debug("IA[{}] {}", trabajo.id, linea));
+                // Tamaño de esta tanda: los hilos del pool repartidos entre los trabajos que están
+                // compitiendo AHORA MISMO. Una escuela sola se lleva los 3 hilos; tres escuelas, uno
+                // cada una. Así todas avanzan, en vez de que la última espere a que las otras acaben.
+                int tanda = Math.max(1, hilos / trabajosEnProceso());
+                int hasta = Math.min(lanzados + tanda, trabajo.intentosPlaneados);
 
-                trabajo.intentos.put(i, intento);
-                hechos.add(intento);
+                List<Future<IntentoIA>> futuros = new ArrayList<>();
+                for (int n = lanzados + 1; n <= hasta; n++) {
+                    final int numero = n;
+                    futuros.add(cocineros.submit(() -> intentoDe(trabajo, datos, numero, asesor)));
+                }
+                trabajo.intentoActual = hasta;
+                trabajo.mensaje = tanda == 1
+                        ? "Intento " + hasta + " de " + trabajo.intentosPlaneados + " en marcha"
+                        : "Intentos " + (lanzados + 1) + "-" + hasta + " de "
+                                + trabajo.intentosPlaneados + " en marcha";
 
-                IntentoIA mejor = servicio.mejor(hechos);
-                trabajo.mejorNumero = mejor != null ? mejor.getNumero() : null;
+                boolean perfecto = false;
+                for (Future<IntentoIA> futuro : futuros) {
+                    IntentoIA intento = recoger(futuro, trabajo);
+                    if (intento == null) {
+                        continue;   // cancelado o falló: los demás de la tanda siguen valiendo
+                    }
+                    trabajo.intentos.put(intento.getNumero(), intento);
+                    hechos.add(intento);
 
-                trabajo.mensaje = "Intento " + i + " listo: " + intento.getHoras() + "/"
-                        + intento.getHorasDemandadas() + " h";
-                logger.info("Trabajo IA {} intento {}: {}/{} h, {} pendientes, {} problemas",
-                        trabajo.id, i, intento.getHoras(), intento.getHorasDemandadas(),
-                        intento.getPendientes().size(), intento.getProblemas().size());
+                    IntentoIA mejor = servicio.mejor(hechos);
+                    trabajo.mejorNumero = mejor != null ? mejor.getNumero() : null;
 
-                // Si un intento coloca todo y sin problemas, no hay nada mejor que buscar.
-                if (intento.getProblemas().isEmpty()
-                        && intento.getHoras() >= intento.getHorasDemandadas()) {
-                    trabajo.mensaje = "Intento " + i + " colocó todas las horas";
+                    trabajo.mensaje = "Intento " + intento.getNumero() + " listo: "
+                            + intento.getHoras() + "/" + intento.getHorasDemandadas() + " h";
+                    logger.info("Trabajo IA {} intento {}: {}/{} h, {} pendientes, {} problemas",
+                            trabajo.id, intento.getNumero(), intento.getHoras(),
+                            intento.getHorasDemandadas(), intento.getPendientes().size(),
+                            intento.getProblemas().size());
+
+                    // Basta con que UNO de la tanda coloque todo para no lanzar la siguiente.
+                    if (intento.getProblemas().isEmpty()
+                            && intento.getHoras() >= intento.getHorasDemandadas()) {
+                        perfecto = true;
+                    }
+                }
+
+                lanzados = hasta;
+                if (perfecto) {
+                    trabajo.mensaje = "Intento " + trabajo.mejorNumero + " colocó todas las horas";
                     break;
                 }
             }
@@ -366,6 +450,59 @@ public class HorarioIATrabajoServicio {
             trabajo.asesor = null;
             trabajo.finalizadoEn = LocalDateTime.now();
         }
+    }
+
+    /**
+     * Un intento, ya dentro de un hilo del pool de {@code cocineros}.
+     *
+     * <p>Un hilo del pool NO hereda el {@code ThreadLocal} del hilo HTTP ni el del coordinador, así
+     * que hay que fijar aquí la escuela a mano; y se limpia al salir para no dejar el dato pegado a
+     * un hilo que después atenderá a otra escuela.
+     */
+    private IntentoIA intentoDe(Trabajo trabajo, DatosIA datos, int numero, AsesorIA asesor) {
+        EscuelaContexto.setEscuelaId(trabajo.escuelaId);
+        try {
+            if (trabajo.cancelado) {
+                return null;
+            }
+            return servicio.intento(datos, numero, System.nanoTime(), trabajo.segundosPorIntento,
+                    trabajo.maxPasos, trabajo.asignarMaestros, asesor,
+                    linea -> logger.debug("IA[{}] {}", trabajo.id, linea));
+        } finally {
+            EscuelaContexto.limpiar();
+        }
+    }
+
+    /**
+     * Recoge el resultado de un intento sin que un fallo suelto tumbe el trabajo entero: si uno de
+     * los seis falla, los otros cinco siguen valiendo. Si fallan todos, el trabajo termina en ERROR
+     * por la comprobación de {@code trabajo.intentos.isEmpty()}, así que nada se pierde en silencio.
+     */
+    private IntentoIA recoger(Future<IntentoIA> futuro, Trabajo trabajo) {
+        try {
+            return futuro.get();
+        } catch (InterruptedException e) {
+            // Están apagando la aplicación: se recupera la marca y se deja de lanzar trabajo.
+            Thread.currentThread().interrupt();
+            trabajo.cancelado = true;
+            return null;
+        } catch (ExecutionException e) {
+            Throwable causa = e.getCause() != null ? e.getCause() : e;
+            logger.warn("Trabajo IA {}: un intento falló y se descarta: {}",
+                    trabajo.id, causa.toString());
+            return null;
+        }
+    }
+
+    /** Cuántos trabajos están consumiendo CPU ahora mismo (incluido el que pregunta). */
+    private int trabajosEnProceso() {
+        int n = 0;
+        for (Trabajo t : trabajos.values()) {
+            if (EN_PROCESO.equals(t.estado)) {
+                n++;
+            }
+        }
+        return Math.max(1, n);
     }
 
     private void limpiarAntiguos() {
@@ -422,7 +559,8 @@ public class HorarioIATrabajoServicio {
 
     @PreDestroy
     public void cerrar() {
-        ejecutor.shutdownNow();
-        logger.info("Ejecutor del generador IA detenido");
+        coordinadores.shutdownNow();
+        cocineros.shutdownNow();
+        logger.info("Generador IA detenido");
     }
 }

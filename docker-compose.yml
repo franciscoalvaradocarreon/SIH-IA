@@ -75,6 +75,17 @@ services:
         GIT_COMMIT:  "${GIT_COMMIT:-desconocido}"
         FECHA_BUILD: "${FECHA_BUILD:-desconocido}"
     restart: unless-stopped
+
+    # Limite de memoria del contenedor. Importa por dos motivos:
+    #   1. La JVM calcula su heap con -XX:MaxRAMPercentage=75 (ver Dockerfile).
+    #      SIN este limite veria los 24 GB de la VM y podria crecer hasta ~18 GB,
+    #      dejando a PostgreSQL, Caddy y al sistema peleando por las sobras.
+    #   2. Si la aplicacion se desmadra, el 'OOM killer' mata ESTE contenedor y
+    #      no el de la base de datos, que es quien guarda los datos.
+    # Con 8g el heap maximo de la JVM queda en ~6 GB, de sobra para el motor de
+    # IA (mide el consumo real con: docker stats sih-ia-app-1).
+    mem_limit: 8g
+
     depends_on:
       db:
         condition: service_healthy

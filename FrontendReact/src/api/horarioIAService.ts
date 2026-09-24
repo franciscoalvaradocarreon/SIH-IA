@@ -99,11 +99,11 @@ export interface AnalisisViabilidadIA {
   grupos: GrupoViabilidadIA[];
   desbalance: GrupoDesbalanceIA[];
   resumen: ResumenViabilidadIA;
-  /** Las cinco revisiones finas: cupo por par, bloques apretados, días, sesiones largas y horario vigente. */
+  /** Las dos revisiones finas: cupo por par y bloques apretados. */
   revisiones?: RevisionesViabilidadIA;
 }
 
-// ── las cinco revisiones finas (diagnóstico, nunca bloquea) ──
+// ── las dos revisiones finas (diagnóstico, nunca bloquea) ──
 
 /**
  * REVISIÓN 1 · Cupo real de un par (maestro, grupo): las horas que ese maestro debe dar en ese grupo
@@ -142,79 +142,18 @@ export interface GrupoBloquesApretadosIA {
   detalle: BloquePocosMaestrosIA[];
 }
 
-/** REVISIÓN 3 · Materia cuyas horas superan los días disponibles (regla de un día por materia). */
-export interface MateriaPorDiasIA {
-  grupoId: number;
-  grupo: string;
-  materia: string;
-  maestro: string;
-  horas: number;
-  /** Días distintos con disponibilidad del grupo (tope de la regla). */
-  diasGrupo: number;
-  /** Días en que además el maestro está disponible (tope real de esta combinación). */
-  diasComunes: number;
-  faltan: number;
-  motivo: string;
-  /**
-   * REVISIÓN 3 · el backend NO manda severidad en esta lista (las otras cuatro revisiones sí): llega
-   * `undefined`. Por eso es opcional y quien la pinte tiene que aguantar que falte.
-   */
-  severidad?: SeveridadViabilidad;
-}
-
-/** REVISIÓN 4 · Materia con sesiones de 2+ h sin días suficientes con par de bloques contiguos. */
-export interface SesionLargaSinParesIA {
-  grupoId: number;
-  grupo: string;
-  materia: string;
-  maestro: string;
-  horasLargas: number;
-  sesionesLargas: number;
-  paresContiguos: number;
-  diasConPar: number;
-  faltan: number;
-  motivo: string;
-  severidad: SeveridadViabilidad;
-}
-
-/** REVISIÓN 5 · Desglose por grupo del horario vigente (versión 1). */
-export interface GrupoHorarioVigenteIA {
-  grupoId: number;
-  grupo: string;
-  clases: number;
-  horas: number;
-  bloquesDelTurno: number;
-  diasConClase: number;
-  /** Bloques desde el inicio del turno hasta la primera clase (sumado por día). */
-  arranquesTarde: number;
-  /** Bloques libres entre la primera y la última clase del grupo. */
-  huecos: number;
-  /** Pares de bloques consecutivos del mismo día con materias distintas del mismo maestro. */
-  adyacencias: number;
-  severidad: SeveridadViabilidad;
-}
-
-/** Totales de las cinco revisiones finas. */
+/** Totales de las dos revisiones finas. */
 export interface ResumenRevisionesIA {
   paresConDeficit: number;
   horasDeficit: number;
   gruposConBloqueUnico: number;
   bloquesConUnMaestro: number;
   bloquesConDosMaestros: number;
-  materiasPorDias: number;
-  sesionesLargasCortas: number;
-  gruposConArranqueTarde: number;
-  huecosHorarioVigente: number;
-  adyacenciasHorarioVigente: number;
-  sinHorarioVigente: number;
 }
 
 export interface RevisionesViabilidadIA {
   cupo: CupoMaestroGrupoIA[];
   bloquesApretados: GrupoBloquesApretadosIA[];
-  materiasPorDias: MateriaPorDiasIA[];
-  sesionesLargas: SesionLargaSinParesIA[];
-  horarioVigente: GrupoHorarioVigenteIA[];
   resumen: ResumenRevisionesIA;
 }
 
@@ -289,6 +228,14 @@ export interface ConfigIA {
   llmConfigurado: boolean;
   /** Modelo configurado en el servidor, para proponerlo en el diálogo de la clave. */
   modeloPorDefecto: string;
+  /**
+   * Cuántos intentos calcula el servidor EN PARALELO (app.ia.hilos).
+   *
+   * <p>Lo necesita la interfaz para estimar el tiempo REAL: con N a la vez, los intentos van en
+   * tandas de N, así que el trabajo dura ceil(intentos / hilos) tandas y no 'intentos' veces.
+   * Sin esto, la barra de progreso se quedaría en un tercio al terminar.
+   */
+  hilos: number;
 }
 
 export interface SolicitudIA {

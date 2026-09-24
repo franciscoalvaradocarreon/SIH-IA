@@ -393,9 +393,12 @@ const HorarioAula: React.FC = () => {
           <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
         </div>
       ) : bloquesFilas.length > 0 && aulaActual ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
-          {/* Header con info + navegación + total */}
-          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-400 dark:border-gray-700">
+          {/* Header con info + navegación + total. Se queda PEGADO arriba mientras la tabla pasa
+              por debajo (patrón de la caja de pines). Dos detalles que NO son opcionales:
+              'overflow-hidden' fuera de la tarjeta —si no, el 'sticky' se pega a ella, que crece
+              con el contenido, y no a la ventana— y fondo OPACO. */}
+          <div className="sticky top-0 z-30 rounded-t-xl px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
             {/* Info del aula */}
             <div className="flex items-center gap-3 md:flex-1 md:justify-start">
               <div className="w-12 h-12 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-lg">

@@ -45,8 +45,13 @@ public class AsesorLLM implements AsesorIA {
     private final String modelo;
     private final long tiempoLimiteSegundos;
 
-    private String nota = "Asesor LLM listo.";
-    private String ultimoError;
+    // volatile porque en modo LLM este asesor lo COMPARTEN los intentos que corren en paralelo.
+    // Solo alimentan a nota(), que es texto para la bitácora: la decisión del LLM se devuelve por el
+    // 'return' de ordenSugerido(), así que esta carrera no puede alterar el horario. Con volatile,
+    // la nota que se registra al terminar un intento es al menos una nota completa y reciente,
+    // aunque puede describir a un intento hermano.
+    private volatile String nota = "Asesor LLM listo.";
+    private volatile String ultimoError;
 
     public AsesorLLM(String apiKey, String url, String modelo, long tiempoLimiteSegundos) {
         this.apiKey = apiKey == null ? "" : apiKey.trim();

@@ -88,4 +88,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=5 \
 
 # MaxRAMPercentage: la JVM respeta el limite de memoria del contenedor en vez de
 # calcular sobre la RAM de la maquina anfitriona (que en Oracle son 24 GB).
+# OJO: ese limite NO se declara aqui, sino en docker-compose.yml (app.mem_limit).
+# Si se quita de alli, la JVM vuelve a ver los 24 GB del anfitrion y su heap
+# maximo pasa a ser de ~18 GB. Las dos lineas van juntas.
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/sih.war"]

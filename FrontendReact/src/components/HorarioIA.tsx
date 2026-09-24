@@ -5,8 +5,8 @@ import type {
   ConfigIA, IntentoIA, PendienteIA, TrabajoIA, ValidacionIA, ChequeoIA, MateriaImposible,
   AnalisisViabilidadIA, RevisionesViabilidadIA, SeveridadViabilidad,
   MaestroViabilidadIA, GrupoViabilidadIA, GrupoDesbalanceIA, ResumenViabilidadIA,
-  CupoMaestroGrupoIA, BloquePocosMaestrosIA, GrupoBloquesApretadosIA, MateriaPorDiasIA,
-  SesionLargaSinParesIA, GrupoHorarioVigenteIA, ResumenRevisionesIA,
+  CupoMaestroGrupoIA, BloquePocosMaestrosIA, GrupoBloquesApretadosIA,
+  ResumenRevisionesIA,
 } from '../api/horarioIAService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
@@ -78,6 +78,8 @@ const HorarioIA: React.FC = () => {
   const [config, setConfig] = useState<ConfigIA>({
     intentos: 6, segundosPorIntento: 60, maxPasos: 60000, llmConfigurado: false,
     modeloPorDefecto: '',
+    // 1 hasta que responda el servidor: así la estimación nunca promete menos tiempo del real.
+    hilos: 1,
   });
   const [modo, setModo] = useState<'heuristica' | 'llm'>('heuristica');
   const [intentos, setIntentos] = useState(6);
@@ -172,12 +174,23 @@ const HorarioIA: React.FC = () => {
     return () => clearInterval(consulta);
   }, [trabajo?.id, enCurso]);
 
-  // reloj de la banda de progreso: segundos contra el presupuesto total (intentos × segundos)
-  const presupuestoSegundos = (trabajo?.intentosPlaneados || intentos) * (trabajo?.segundosPorIntento || segundos);
+  // Reloj de la banda de progreso. OJO con no confundir los dos presupuestos:
+  //
+  //   - el de CPU: intentos × segundosPorIntento. Es el trabajo total a repartir, y es lo que se
+  //     le enseña al usuario como "cuánto cálculo" se ha pedido.
+  //   - el de RELOJ: con 'hilos' intentos a la vez, los N intentos van en ceil(N / hilos) tandas,
+  //     no en N veces. Si la barra se midiera contra el de CPU se quedaría en un tercio al
+  //     terminar (medido: 6 intentos de 120 s tardan 242 s, no 720).
+  const hilos = Math.max(1, config?.hilos ?? 1);
+  const intentosPrevistos = trabajo?.intentosPlaneados || intentos;
+  const segundosPrevistos = trabajo?.segundosPorIntento || segundos;
+  const presupuestoReloj = Math.ceil(intentosPrevistos / hilos) * segundosPrevistos;
   const porcentaje = useMemo(() => {
     if (!trabajo) return 0;
-    return Math.min(100, Math.max(3, (trabajo.segundosTranscurridos * 100) / (presupuestoSegundos || 1)));
-  }, [trabajo, presupuestoSegundos]);
+    // Tope de 99 mientras corre: puede pasarse del presupuesto (por ejemplo si otra escuela está
+    // generando y quedan menos hilos libres), y es mejor que no marque 100% antes de terminar.
+    return Math.min(99, Math.max(3, (trabajo.segundosTranscurridos * 100) / (presupuestoReloj || 1)));
+  }, [trabajo, presupuestoReloj]);
 
   const prevalidar = async () => {
     if (!semestreActivo?.id || !turnoListo) return;
@@ -652,7 +665,9 @@ const HorarioIA: React.FC = () => {
             </span>
           </div>
 
-          {/* banda de progreso: segundos contra el presupuesto (intentos × segundos) */}
+          {/* Banda de progreso: segundos transcurridos contra el presupuesto de RELOJ
+              (tandas × segundos), que es lo que de verdad va a tardar. El de CPU
+              (intentos × segundos) se sigue mostrando abajo, porque es lo que se pidió calcular. */}
           <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700">
             <div
               className={`h-full rounded-full transition-all duration-1000 ${enCurso ? 'bg-indigo-500' : 'bg-emerald-500'}`}
@@ -661,7 +676,7 @@ const HorarioIA: React.FC = () => {
           </div>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
             {enCurso
-              ? `Presupuesto: ${presupuestoSegundos} s (${trabajo.intentosPlaneados} × ${trabajo.segundosPorIntento} s)`
+              ? `Presupuesto: ${presupuestoReloj} s (${trabajo.intentosPlaneados} × ${trabajo.segundosPorIntento} s en CPU${hilos > 1 ? `, ${hilos} a la vez` : ''})`
               : `Terminado en ${trabajo.segundosTranscurridos} s · demanda ${trabajo.horasDemandadas} h`}
             {trabajo.terminadoPorUsuario && ' · terminado por ti'}
           </p>
@@ -1124,12 +1139,12 @@ const AnalisisViabilidadIA: React.FC<{ analisis?: AnalisisViabilidadIA | null }>
         </div>
       )}
 
-      {/* las cinco revisiones finas: qué impide colocar cada hora */}
+      {/* las dos revisiones finas: qué impide colocar cada hora */}
       {revisiones
         ? <RevisionesViabilidadIA revisiones={revisiones} />
         : (
           <AvisoDatoAusente>
-            El análisis de viabilidad vino sin las cinco revisiones finas (<code>revisiones</code>):
+            El análisis de viabilidad vino sin las dos revisiones finas (<code>revisiones</code>):
             puede que el backend todavía no las mande o que las mande con otro nombre. Los totales de
             arriba siguen siendo válidos.
           </AvisoDatoAusente>
@@ -1150,17 +1165,14 @@ const TituloRevision: React.FC<{ icono: React.ReactNode; children: React.ReactNo
 );
 
 /**
- * LAS CINCO REVISIONES QUE BUSCAN QUÉ IMPIDE COLOCAR CADA HORA.
+ * LAS DOS REVISIONES QUE BUSCAN QUÉ IMPIDE COLOCAR CADA HORA.
  *
  * La holgura de horas es CERO por diseño: los grupos tienen exactamente las mismas horas que bloques
  * disponibles, así que un hueco equivale exactamente a una hora que no se colocó y no hay margen para
- * compensar moviendo clases. Estas cinco listas dicen, hora a hora, QUÉ la bloquea:
+ * compensar moviendo clases. Estas dos listas dicen, hora a hora, QUÉ la bloquea:
  *
  *  1. cupo real de cada par (maestro, grupo): horas que debe dar contra bloques comunes;
- *  2. bloques donde el grupo solo tiene 1 o 2 maestros posibles (con 1, punto único de fallo);
- *  3. materias cuyas horas superan los días disponibles (no pueden repetir día);
- *  4. materias con sesiones de 2+ h sin días suficientes con par de bloques contiguos;
- *  5. desglose por grupo del horario vigente: arranques tarde, huecos y adyacencias.
+ *  2. bloques donde el grupo solo tiene 1 o 2 maestros posibles (con 1, punto único de fallo).
  *
  * Es solo diagnóstico: nada de esto impide generar. Los contadores enseñan cuántos casos hay, no los
  * colores (que son una pista, no un error).
@@ -1183,32 +1195,20 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
     );
   }
 
-  // Ninguna de las cinco listas ni el resumen son obligatorios: lo que falte queda vacío.
+  // Ninguna de las dos listas ni el resumen son obligatorios: lo que falte queda vacío.
   const cupo = listaSegura<CupoMaestroGrupoIA>(revisiones.cupo);
   const bloquesApretados = listaSegura<GrupoBloquesApretadosIA>(revisiones.bloquesApretados);
-  const materiasPorDias = listaSegura<MateriaPorDiasIA>(revisiones.materiasPorDias);
-  const sesionesLargas = listaSegura<SesionLargaSinParesIA>(revisiones.sesionesLargas);
-  const horarioVigente = listaSegura<GrupoHorarioVigenteIA>(revisiones.horarioVigente);
   const resumen = objetoSeguro<ResumenRevisionesIA>(revisiones.resumen);
 
   const paresConDeficit = numeroSeguro(resumen?.paresConDeficit);
   const horasDeficit = numeroSeguro(resumen?.horasDeficit);
   const bloquesConUnMaestro = numeroSeguro(resumen?.bloquesConUnMaestro);
   const bloquesConDosMaestros = numeroSeguro(resumen?.bloquesConDosMaestros);
-  const materiasPorDiasTotal = numeroSeguro(resumen?.materiasPorDias);
-  const sesionesLargasCortas = numeroSeguro(resumen?.sesionesLargasCortas);
-  const gruposConArranqueTarde = numeroSeguro(resumen?.gruposConArranqueTarde);
-  const huecosHorarioVigente = numeroSeguro(resumen?.huecosHorarioVigente);
-  const adyacenciasHorarioVigente = numeroSeguro(resumen?.adyacenciasHorarioVigente);
-  const sinHorarioVigente = numeroSeguro(resumen?.sinHorarioVigente);
 
   // Qué campos no llegaron (o no llegaron como lista / objeto): se enseña en un aviso y se sigue.
   const faltantes: string[] = [];
   if (!Array.isArray(revisiones.cupo)) faltantes.push('cupo');
   if (!Array.isArray(revisiones.bloquesApretados)) faltantes.push('bloquesApretados');
-  if (!Array.isArray(revisiones.materiasPorDias)) faltantes.push('materiasPorDias');
-  if (!Array.isArray(revisiones.sesionesLargas)) faltantes.push('sesionesLargas');
-  if (!Array.isArray(revisiones.horarioVigente)) faltantes.push('horarioVigente');
   if (!resumen) faltantes.push('resumen');
 
   // Cupo: primero lo que de verdad no cabe (déficit) y luego lo que va justo (0 o 1 bloque de sobra).
@@ -1242,7 +1242,7 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
         </AvisoDatoAusente>
       )}
 
-      {/* totales de las cinco revisiones */}
+      {/* totales de las dos revisiones */}
       <div className="flex flex-wrap gap-2 text-xs">
         <span className={`rounded-full px-2 py-1 ${paresConDeficit > 0
           ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
@@ -1259,21 +1259,6 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
         <span className={`rounded-full px-2 py-1 ${bloquesConDosMaestros > 0
           ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
           {bloquesConDosMaestros} bloque(s) con solo 2 maestros posibles
-        </span>
-        <span className={`rounded-full px-2 py-1 ${materiasPorDiasTotal > 0
-          ? BADGE_SEVERIDAD.IMPOSIBLE : BADGE_SEVERIDAD.HOLGADO}`}>
-          {materiasPorDiasTotal > 0
-            ? `${materiasPorDiasTotal} materia(s) no caben por la regla de un día`
-            : '✓ ninguna materia pide más horas que días tiene'}
-        </span>
-        <span className={`rounded-full px-2 py-1 ${sesionesLargasCortas > 0
-          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
-          {sesionesLargasCortas} materia(s) con sesiones largas sin pares
-        </span>
-        <span className={`rounded-full px-2 py-1 ${sinHorarioVigente > 0
-          ? BADGE_SEVERIDAD.AJUSTADO : BADGE_SEVERIDAD.HOLGADO}`}>
-          horario vigente: {gruposConArranqueTarde} con arranque tarde ·{' '}
-          {huecosHorarioVigente} huecos · {adyacenciasHorarioVigente} adyacencias
         </span>
       </div>
 
@@ -1403,130 +1388,6 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
         )}
       </div>
 
-      {/* ── REVISIÓN 3 · materias que no caben con la regla de un día ── */}
-      <div className={CAJA_REVISION}>
-        <TituloRevision icono={<MdRule className="text-indigo-600" />}>
-          Materias que no caben con la regla de un día ({materiasPorDias.length})
-        </TituloRevision>
-        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-          El motor exige que una materia no repita día en el mismo grupo, así que su tope de horas son
-          los DÍAS con disponibilidad. Si pide más horas que días tiene, esa materia nunca entrará
-          completa: sobran justo las horas de la columna «faltan».
-        </p>
-        {materiasPorDias.length === 0 ? (
-          <Vacio>Ninguna materia supera los días disponibles de su grupo y su maestro.</Vacio>
-        ) : (
-          <div className="space-y-1">
-            {materiasPorDias.map((m, i) => (
-              <div key={`${texto(m?.grupo, 'grupo')}-${i}`}
-                className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                <span className="font-semibold">{texto(m?.materia, 'materia ?')}</span> · {texto(m?.grupo, 'grupo ?')} · {texto(m?.maestro, 'maestro ?')} ·{' '}
-                <span className="font-semibold">{numeroSeguro(m?.horas)} h</span> para{' '}
-                {numeroSeguro(m?.diasComunes)} día(s) con el maestro ({numeroSeguro(m?.diasGrupo)} del grupo) ·{' '}
-                <span className="font-semibold">faltan {numeroSeguro(m?.faltan)} h</span>
-                {/* REVISIÓN 3 es la única lista que no trae severidad: si no viene, no se pinta badge
-                    (antes esto era `severidad.toLowerCase()` y reventaba la pantalla entera). */}
-                {m?.severidad ? <EtiquetaSeveridad severidad={m.severidad} /> : null}
-                <div className="text-amber-800 dark:text-amber-300">{texto(m?.motivo, '')}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── REVISIÓN 4 · sesiones largas sin pares contiguos ── */}
-      <div className={CAJA_REVISION}>
-        <TituloRevision icono={<MdClass className="text-indigo-600" />}>
-          Sesiones largas sin pares contiguos suficientes ({sesionesLargas.length})
-        </TituloRevision>
-        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-          Una sesión de 2 o más horas ocupa bloques contiguos del mismo día y la materia tampoco puede
-          repetir día, así que cada día solo puede alojar UNA sesión larga. Hacen falta tantos días con
-          par contiguo libre (grupo y maestro a la vez) como sesiones largas pida el patrón.
-        </p>
-        {sesionesLargas.length === 0 ? (
-          <Vacio>
-            Todas las materias con sesiones de 2+ h tienen días suficientes con par de bloques contiguos
-            libres.
-          </Vacio>
-        ) : (
-          <div className="space-y-1">
-            {sesionesLargas.map((s, i) => (
-              <div key={`${texto(s?.grupo, 'grupo')}-${i}`}
-                className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-                <span className="font-semibold">{texto(s?.materia, 'materia ?')}</span> · {texto(s?.grupo, 'grupo ?')} · {texto(s?.maestro, 'maestro ?')} ·{' '}
-                {numeroSeguro(s?.sesionesLargas)} sesión(es) de 2+ h ({numeroSeguro(s?.horasLargas)} h) · días con par{' '}
-                <span className="font-semibold">{numeroSeguro(s?.diasConPar)}</span> (pares contiguos: {numeroSeguro(s?.paresContiguos)})
-                {' '}· <span className="font-semibold">faltan {numeroSeguro(s?.faltan)}</span>
-                <EtiquetaSeveridad severidad={s?.severidad} />
-                <div className="text-amber-800 dark:text-amber-300">{texto(s?.motivo, '')}</div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── REVISIÓN 5 · desglose por grupo del horario vigente ── */}
-      <div className={CAJA_REVISION}>
-        <TituloRevision icono={<MdTimer className="text-indigo-600" />}>
-          Horario vigente por grupo · de más a menos grave ({horarioVigente.length} grupos con clases)
-        </TituloRevision>
-        <p className="mb-2 text-xs text-gray-500 dark:text-gray-400">
-          Los indicadores del resultado (arranques tarde, huecos, adyacencias) eran totales; aquí se
-          abren por grupo sobre el horario guardado (versión 1) para ver dónde se concentra el problema.
-          El arranque tarde son los bloques desde el inicio del turno hasta la primera clase del día; los
-          huecos, los bloques libres entre la primera y la última clase.
-        </p>
-        {horarioVigente.length === 0 ? (
-          <Vacio>
-            Ningún grupo del alcance tiene clases guardadas en la versión 1 del horario: genera uno y
-            regístralo para poder comparar.
-          </Vacio>
-        ) : (
-          <div className="overflow-x-auto rounded-md border border-gray-200 dark:border-gray-600">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-gray-50 text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
-                <tr>
-                  <th className="px-3 py-2 font-medium">#</th>
-                  <th className="px-3 py-2 font-medium">Grupo</th>
-                  <th className="px-3 py-2 font-medium">Clases</th>
-                  <th className="px-3 py-2 font-medium">Días</th>
-                  <th className="px-3 py-2 font-medium">Arranque tarde</th>
-                  <th className="px-3 py-2 font-medium">Huecos</th>
-                  <th className="px-3 py-2 font-medium">Adyacencias</th>
-                  <th className="px-3 py-2 font-medium">Estado</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-600">
-                {horarioVigente.map((g, i) => (
-                  <tr key={`${texto(g?.grupo, 'grupo')}-${i}`} className={g?.severidad === 'IMPOSIBLE' ? 'bg-red-50/50 dark:bg-red-900/10' : ''}>
-                    <td className="px-3 py-2 tabular-nums text-gray-400">{i + 1}</td>
-                    <td className="px-3 py-2 font-medium text-gray-800 dark:text-gray-200">{texto(g?.grupo, 'grupo ?')}</td>
-                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
-                      {numeroSeguro(g?.clases)}/{numeroSeguro(g?.bloquesDelTurno)}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
-                      {numeroSeguro(g?.diasConClase)}
-                    </td>
-                    <td className={`px-3 py-2 tabular-nums ${numeroSeguro(g?.arranquesTarde) > 0
-                      ? 'text-amber-700 dark:text-amber-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                      {numeroSeguro(g?.arranquesTarde)}
-                    </td>
-                    <td className={`px-3 py-2 tabular-nums ${numeroSeguro(g?.huecos) > 0
-                      ? 'font-semibold text-red-700 dark:text-red-400' : 'text-gray-600 dark:text-gray-300'}`}>
-                      {numeroSeguro(g?.huecos)}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums text-gray-600 dark:text-gray-300">
-                      {numeroSeguro(g?.adyacencias)}
-                    </td>
-                    <td className="px-3 py-2"><EtiquetaSeveridad severidad={g?.severidad} /></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 };

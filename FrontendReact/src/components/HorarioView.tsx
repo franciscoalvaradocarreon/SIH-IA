@@ -122,9 +122,18 @@ const HorarioView: React.FC = () => {
         setTurnos(turnosActivos);
         setGrupos(gruposActivos);
 
+        // Preseleccionar el primer turno si el que habia ya no sirve, igual que hace la vista de
+        // maestro. Asi el combo muestra un turno CONCRETO al entrar en vez de "Todos los turnos", y
+        // la lista de grupos sale ya filtrada por el. La opcion "Todos los turnos" sigue estando
+        // disponible en el combo para quien quiera recorrerlos todos.
+        const turnoElegido = turnosActivos.some((t) => t.id === turnoFiltro)
+          ? turnoFiltro
+          : turnosActivos[0]?.id ?? 0;
+        setTurnoSeleccionado(turnoElegido);
+
         const filtrados =
-          turnoFiltro > 0
-            ? gruposActivos.filter((g) => g.turnoId === turnoFiltro)
+          turnoElegido > 0
+            ? gruposActivos.filter((g) => g.turnoId === turnoElegido)
             : gruposActivos;
 
         setGrupoSeleccionado((prev) =>
@@ -399,7 +408,8 @@ const HorarioView: React.FC = () => {
             <select
               value={turnoSeleccionado}
               onChange={handleTurnoChange}
-              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={loading}
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
             >
               <option value={0}>Todos los turnos ({grupos.length} grupos)</option>
               {turnos.map((t) => {
@@ -576,10 +586,20 @@ const HorarioView: React.FC = () => {
         )}
       </div>
 
-      {/* Matriz */}
+      {/*
+        La barra del grupo (nombre, «N de M», Anterior/Siguiente y Total) se queda PEGADA arriba
+        mientras la tabla pasa por debajo: es el mismo patrón que la caja de pines de la generación
+        manual. Dos detalles que NO son opcionales:
+          - 'overflow-hidden' FUERA de la tarjeta. Convertiría la tarjeta en contenedor de scroll,
+            y el 'sticky' se pegaría a ella (que crece con el contenido) en lugar de a la ventana.
+            Su trabajo de recortar las esquinas lo hace 'rounded-t-xl' en la barra.
+          - el fondo tiene que ser OPACO: con 'dark:bg-gray-700/50' las filas se verían por debajo.
+        Si la tabla es más corta que la pantalla, la barra no llega a pegarse… y no hace falta:
+        al bajar del todo el horario se ve entero igual.
+      */}
       {horarios.length > 0 && bloquesFilas.length > 0 ? (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
-          <div className="px-4 py-4 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-400 dark:border-gray-700">
+          <div className="sticky top-0 z-30 rounded-t-xl px-4 py-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-400 dark:border-gray-700 flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3 md:flex-1 md:justify-start">
               <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg">
                 {grupoActual?.nombre?.charAt(0) ?? 'G'}

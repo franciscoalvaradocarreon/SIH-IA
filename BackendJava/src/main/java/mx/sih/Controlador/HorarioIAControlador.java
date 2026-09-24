@@ -53,7 +53,8 @@ public class HorarioIAControlador {
                 trabajos.getSegundosPorIntentoDefecto(),
                 trabajos.getMaxPasosDefecto(),
                 trabajos.llmConfigurado(),
-                trabajos.getModeloPorDefecto()));
+                trabajos.getModeloPorDefecto(),
+                trabajos.getHilos()));
     }
 
     /** Pre-validación: se puede llamar sin lanzar nada, para ver si los datos están consistentes. */
@@ -134,6 +135,6 @@ public class HorarioIAControlador {
 
     /** Ajustes por defecto del generador IA. */
     public record ConfigIA(int intentos, int segundosPorIntento, int maxPasos, boolean llmConfigurado,
-                           String modeloPorDefecto) {
+                           String modeloPorDefecto, int hilos) {
     }
 }

@@ -187,32 +187,16 @@ public class HorarioIAServicio {
      * las reportará como pendientes con el motivo. Lo que sí bloquea son los errores de información
      * (sin aula, sin disponibilidad, patrón más largo que el tramo continuo del turno...).
      *
-     * <p>Las CINCO REVISIONES FINAS del diagnóstico ({@code analizarRevisiones}) son avisos: describen
+     * <p>Las DOS REVISIONES FINAS del diagnóstico ({@code analizarRevisiones}) son avisos: describen
      * qué impide colocar cada hora, pero no tocan {@code aptoParaGenerar}.
      *
-     * @param escuelaId      escuela activa (hace falta para leer el horario vigente de la versión 1)
+     * @param escuelaId      escuela activa de la sesión
      * @param semestreIdParam semestre pedido; si viene nulo se usa el activo
      * @param turnoIdParam   turno del alcance (opcional)
      * @param datos          datos ya cargados por {@link #cargarDatos}
      */
     public ValidacionIADTO validar(Long escuelaId, Long semestreIdParam, Long turnoIdParam, DatosIA datos) {
         ResultadoValidacionDTO backend = horarioServicio.validarFactibilidad(semestreIdParam, turnoIdParam);
-
-        // Semestre real del alcance: el análisis del horario vigente lo necesita para leer la versión 1.
-        Long semestreId = resolverSemestre(escuelaId, semestreIdParam).getSemestreId();
-
-        // Horario VIGENTE del alcance (versión 1). Se carga aquí, antes de todo, porque es lectura y así
-        // el desglose por grupo (revisión 5) puede mirar lo que hay guardado sin abrir otra transacción.
-        Set<Long> gruposDelAlcance = datos.grupos().stream()
-                .map(Grupo::getGrupoId)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        List<Horario> horarioVigente = new ArrayList<>();
-        for (Horario h : horarioRepositorio.findByEscuelaIdAndSemestreId(escuelaId, semestreId)) {
-            if (h.getGrupo() != null && h.getVersion() != null && h.getVersion() == 1
-                    && gruposDelAlcance.contains(h.getGrupo().getGrupoId())) {
-                horarioVigente.add(h);
-            }
-        }
 
         List<String> criticos = horarioServicio.analizarFactibilidad(
                 datos.grupos(), datos.asignaciones(),
@@ -429,9 +413,9 @@ public class HorarioIAServicio {
                         + "las dejará pendientes y dirá por qué."));
 
         // ── análisis de viabilidad del reparto (diagnóstico, nunca bloquea) ──
-        // Incluye las cinco revisiones finas, que miran el horario vigente (versión 1).
+        // Incluye las dos revisiones finas del diagnóstico.
         ValidacionIADTO.AnalisisViabilidad viabilidad = analizarViabilidad(
-                datos, dispG, dispM, porTurnoDia, horarioVigente);
+                datos, dispG, dispM, porTurnoDia);
 
         // El análisis se asoma también a los chequeos: es la primera pregunta del usuario
         // ("¿esto cabe?") y así se ve sin desplegar nada.
@@ -453,7 +437,7 @@ public class HorarioIAServicio {
                             + " grupos no los puede dar ningún maestro de ese grupo."));
         }
 
-        // ── las cinco revisiones finas, asomadas también a los chequeos ──
+        // ── las dos revisiones finas, asomadas también a los chequeos ──
         // Son ADVERTENCIA (nunca ERROR): describen qué impide colocar cada hora, pero en ningún caso
         // cambian `aptoParaGenerar`. La holgura de horas es cero por diseño, así que un hueco equivale
         // exactamente a una hora que no se colocó: estas revisiones dicen de quién es la culpa.
@@ -476,30 +460,6 @@ public class HorarioIAServicio {
             chequeos.add(new ValidacionIADTO.ChequeoIA("Bloques con un solo maestro posible", "OK",
                     "Ningún bloque depende de un único maestro: siempre hay al menos 2 opciones."));
         }
-        if (rr.materiasPorDias() > 0 || rr.sesionesLargasCortas() > 0) {
-            chequeos.add(new ValidacionIADTO.ChequeoIA("Materias contra días y contigüidad",
-                    "ADVERTENCIA",
-                    rr.materiasPorDias() + " materias no caben con la regla de un día por materia y "
-                            + rr.sesionesLargasCortas()
-                            + " no tienen días suficientes con par de bloques contiguos."));
-        } else {
-            chequeos.add(new ValidacionIADTO.ChequeoIA("Materias contra días y contigüidad", "OK",
-                    "Todas las materias caben en los días disponibles y tienen pares contiguos "
-                            + "suficientes para sus sesiones largas."));
-        }
-        if (rr.sinHorarioVigente() > 0) {
-            chequeos.add(new ValidacionIADTO.ChequeoIA("Horario vigente por grupo", "ADVERTENCIA",
-                    rr.sinHorarioVigente() + " grupos del alcance no tienen ninguna clase guardada en "
-                            + "la versión 1 del horario."));
-        } else if (!viabilidad.revisiones().horarioVigente().isEmpty()) {
-            chequeos.add(new ValidacionIADTO.ChequeoIA("Horario vigente por grupo",
-                    rr.gruposConArranqueTarde() > 0 || rr.huecosHorarioVigente() > 0
-                            ? "ADVERTENCIA" : "OK",
-                    "Horario vigente (versión 1): " + rr.gruposConArranqueTarde()
-                            + " grupos arrancan tarde y hay " + rr.huecosHorarioVigente()
-                            + " huecos y " + rr.adyacenciasHorarioVigente()
-                            + " adyacencias. El desglose por grupo está en el diagnóstico."));
-        }
 
         boolean apto = criticos.isEmpty() && chequeos.stream()
                 .noneMatch(c -> "ERROR".equals(c.estado()));
@@ -507,12 +467,8 @@ public class HorarioIAServicio {
         logger.info("Pre-validación IA: {} errores del backend, {} imposibles, {} maestros en déficit, "
                         + "apto={}", criticos.size(), imposibles.size(),
                 viabilidad.resumen().maestrosEnDeficit(), apto);
-        logger.info("Revisiones IA: {} pares con déficit ({} h), {} bloques con 1 maestro, {} materias "
-                        + "por días, {} con sesiones largas cortas, horario vigente {} grupos "
-                        + "({} arranques tarde, {} huecos, {} adyacencias)",
-                rr.paresConDeficit(), rr.horasDeficit(), rr.bloquesConUnMaestro(), rr.materiasPorDias(),
-                rr.sesionesLargasCortas(), viabilidad.revisiones().horarioVigente().size(),
-                rr.gruposConArranqueTarde(), rr.huecosHorarioVigente(), rr.adyacenciasHorarioVigente());
+        logger.info("Revisiones IA: {} pares con déficit ({} h), {} bloques con 1 maestro",
+                rr.paresConDeficit(), rr.horasDeficit(), rr.bloquesConUnMaestro());
 
         return new ValidacionIADTO(backend, chequeos, imposibles, apto,
                 datos.grupos().size(), datos.asignaciones().size(), totalSesiones, datos.bloques().size(),
@@ -551,20 +507,16 @@ public class HorarioIAServicio {
      * </ul>
      * La lista {@code desbalance} sale de este índice ordenado de menor a mayor (el más justo arriba).
      *
-     * <h3>Cinco revisiones finas</h3>
-     * Además del reparto bruto, el análisis incluye las cinco revisiones de
-     * {@code analizarRevisiones}, que sí miran contigüidad, días y el horario vigente para responder a
-     * "¿qué impide colocar CADA hora?".
-     *
-     * @param horarioVigente filas de {@code sih.horario} con {@code version = 1} de los grupos del
-     *                       alcance (para el desglose por grupo)
+     * <h3>Dos revisiones finas</h3>
+     * Además del reparto bruto, el análisis incluye las dos revisiones de
+     * {@code analizarRevisiones}, que sí miran la capacidad real de cada par maestro-grupo y los
+     * bloques con pocos maestros posibles para responder a "¿qué impide colocar CADA hora?".
      */
     private ValidacionIADTO.AnalisisViabilidad analizarViabilidad(
             DatosIA datos,
             Map<Long, Set<Long>> dispG,
             Map<Long, Set<Long>> dispM,
-            Map<Long, Map<Integer, List<TurnoHorario>>> porTurnoDia,
-            List<Horario> horarioVigente) {
+            Map<Long, Map<Integer, List<TurnoHorario>>> porTurnoDia) {
 
         // Bloques ÚNICOS por turno: si algún día un grupo compartiera turno con otro, contar los
         // bloques turno por turno duplicaría el mismo bloque y el déficit saldría mal.
@@ -727,10 +679,9 @@ public class HorarioIAServicio {
                 maestros.size(), maestrosEnDeficit, horasSinHueco, grupos.size(), gruposImposibles,
                 gruposAjustados, bloquesSinMaestroTotal);
 
-        // ── las cinco revisiones finas (diagnóstico, nunca bloquea) ──
+        // ── las dos revisiones finas (diagnóstico, nunca bloquea) ──
         ValidacionIADTO.RevisionesViabilidad revisiones = analizarRevisiones(
-                contextoRevisiones(datos, dispG, dispM, porTurnoDia, etiquetaBloque, gruposPorId),
-                datos, horarioVigente);
+                contextoRevisiones(datos, dispG, dispM, porTurnoDia, etiquetaBloque, gruposPorId));
 
         return new ValidacionIADTO.AnalisisViabilidad(maestros, grupos, desbalance,
                 new ValidacionIADTO.ResumenViabilidad(maestrosEnDeficit, horasSinHueco, gruposImposibles,
@@ -739,13 +690,13 @@ public class HorarioIAServicio {
     }
 
     // ============================================================
-    // LAS CINCO REVISIONES FINAS
+    // LAS DOS REVISIONES FINAS
     // ============================================================
 
     /**
-     * CONTEXTO COMPARTIDO DE LAS CINCO REVISIONES.
+     * CONTEXTO COMPARTIDO DE LAS DOS REVISIONES.
      *
-     * <p>Se calcula una sola vez y se pasa a las cinco: así ninguna repite trabajo pesado (los índices
+     * <p>Se calcula una sola vez y se pasa a las dos: así ninguna repite trabajo pesado (los índices
      * de bloques por turno y por maestro, los nombres y la relación bloque → turno).
      *
      * @param gruposPorId  grupos del alcance indexados por id
@@ -828,7 +779,7 @@ public class HorarioIAServicio {
     }
 
     /**
-     * LAS CINCO REVISIONES: aquí se busca QUÉ IMPIDE COLOCAR CADA HORA.
+     * LAS DOS REVISIONES: aquí se busca QUÉ IMPIDE COLOCAR CADA HORA.
      *
      * <p>El negocio tiene una particularidad que lo cambia todo: cada grupo tiene EXACTAMENTE las
      * mismas horas que bloques disponibles (36 h en 36 bloques, 33 en 33). La holgura de horas es CERO
@@ -846,29 +797,14 @@ public class HorarioIAServicio {
      *       disponibles en cada bloque. Con 1 solo maestro es un PUNTO ÚNICO DE FALLO: si ese maestro se
      *       ocupa en otro grupo, ese bloque queda libre garantizado (y con holgura cero, eso es una hora
      *       perdida). También se cuentan los bloques con 2.</li>
-     *   <li><b>Materias que no caben con la regla de un día</b>: el motor exige que una materia no
-     *       repita día en el mismo grupo, así que el máximo de horas de una materia son los DÍAS
-     *       distintos con disponibilidad. Si las horas asignadas superan los días, esa materia nunca
-     *       entrará completa.</li>
-     *   <li><b>Sesiones largas sin pares contiguos</b>: una sesión de 2 o más horas ocupa bloques
-     *       contiguos del mismo día; como la materia tampoco repite día, cada día solo puede alojar UNA
-     *       sesión larga. Se comprueba que haya tantos días con par contiguo libre (grupo y maestro a la
-     *       vez) como sesiones largas pide el patrón.</li>
-     *   <li><b>Desglose por grupo del horario vigente</b>: los indicadores del resultado (arranques
-     *       tarde, castigo de huecos, adyacencias) eran totales; aquí se abren por grupo sobre
-     *       {@code sih.horario} con {@code version = 1}, ordenados por gravedad.</li>
      * </ol>
      *
      * <p>INFORMACIÓN, nunca error: nada de esto cambia {@code aptoParaGenerar}.
      */
-    private ValidacionIADTO.RevisionesViabilidad analizarRevisiones(
-            ContextoRevisiones ctx, DatosIA datos, List<Horario> horarioVigente) {
+    private ValidacionIADTO.RevisionesViabilidad analizarRevisiones(ContextoRevisiones ctx) {
 
         List<ValidacionIADTO.CupoMaestroGrupo> cupo = revisarCupoMaestroGrupo(ctx);
         List<ValidacionIADTO.GrupoBloquesApretados> bloquesApretados = revisarBloquesApretados(ctx);
-        List<ValidacionIADTO.MateriaPorDias> materiasPorDias = revisarMateriasPorDias(ctx);
-        List<ValidacionIADTO.SesionLargaSinPares> sesionesLargas = revisarSesionesLargas(ctx);
-        List<ValidacionIADTO.GrupoHorarioVigente> vigente = revisarHorarioVigente(ctx, datos, horarioVigente);
 
         int paresConDeficit = (int) cupo.stream()
                 .filter(c -> c.deficit() > 0).count();
@@ -879,24 +815,13 @@ public class HorarioIAServicio {
                 .mapToInt(ValidacionIADTO.GrupoBloquesApretados::bloquesConUno).sum();
         int bloquesConDosMaestros = bloquesApretados.stream()
                 .mapToInt(ValidacionIADTO.GrupoBloquesApretados::bloquesConDos).sum();
-        int gruposConArranqueTarde = (int) vigente.stream()
-                .filter(g -> g.arranquesTarde() > 0).count();
-        int huecosVigente = vigente.stream().mapToInt(ValidacionIADTO.GrupoHorarioVigente::huecos).sum();
-        int adyacenciasVigente = vigente.stream()
-                .mapToInt(ValidacionIADTO.GrupoHorarioVigente::adyacencias).sum();
-        int sinHorarioVigente = datos.grupos().size() - vigente.size();
 
-        logger.info("Revisiones IA: {} pares con déficit ({} h), {} bloques con 1 maestro y {} con 2, "
-                        + "{} materias que no caben por días, {} con sesiones largas sin pares, "
-                        + "horario vigente de {} grupos ({} sin clases)",
-                paresConDeficit, horasDeficit, bloquesConUnMaestro, bloquesConDosMaestros,
-                materiasPorDias.size(), sesionesLargas.size(), vigente.size(), sinHorarioVigente);
+        logger.info("Revisiones IA: {} pares con déficit ({} h), {} bloques con 1 maestro y {} con 2",
+                paresConDeficit, horasDeficit, bloquesConUnMaestro, bloquesConDosMaestros);
 
-        return new ValidacionIADTO.RevisionesViabilidad(cupo, bloquesApretados, materiasPorDias,
-                sesionesLargas, vigente, new ValidacionIADTO.ResumenRevisiones(paresConDeficit,
-                horasDeficit, gruposConBloqueUnico, bloquesConUnMaestro, bloquesConDosMaestros,
-                materiasPorDias.size(), sesionesLargas.size(), gruposConArranqueTarde, huecosVigente,
-                adyacenciasVigente, Math.max(0, sinHorarioVigente)));
+        return new ValidacionIADTO.RevisionesViabilidad(cupo, bloquesApretados,
+                new ValidacionIADTO.ResumenRevisiones(paresConDeficit,
+                horasDeficit, gruposConBloqueUnico, bloquesConUnMaestro, bloquesConDosMaestros));
     }
 
     /**
@@ -1002,258 +927,6 @@ public class HorarioIAServicio {
         return grupos;
     }
 
-    /**
-     * REVISIÓN 3 · MATERIAS QUE NO CABEN CON LA REGLA DE UN DÍA.
-     *
-     * <p>El motor no permite que una materia repita día en el mismo grupo (es la regla dura "misma
-     * materia en días distintos"). Por tanto el máximo de horas de una materia en un grupo son los DÍAS
-     * distintos en que ese grupo tiene disponibilidad... y, siendo finos, los días en que ADEMÁS su
-     * maestro está disponible.
-     *
-     * <p>Si las horas asignadas superan ese tope, la materia nunca entrará completa: sobrarán tantas
-     * horas como la diferencia.
-     */
-    private List<ValidacionIADTO.MateriaPorDias> revisarMateriasPorDias(ContextoRevisiones ctx) {
-        record Par(Long grupoId, Long materiaId, Long maestroId) {
-        }
-
-        Map<Par, Integer> horasPorMateria = new LinkedHashMap<>();
-        Map<Par, Asignacion> primera = new LinkedHashMap<>();
-        for (Asignacion a : ctx.asignaciones()) {
-            Par par = new Par(a.getGrupo().getGrupoId(),
-                    a.getMateria() != null ? a.getMateria().getMateriaId() : -1L,
-                    a.getMaestro().getMaestroId());
-            primera.putIfAbsent(par, a);
-            horasPorMateria.merge(par, a.getHoras() == null ? 0 : a.getHoras(), Integer::sum);
-        }
-
-        List<ValidacionIADTO.MateriaPorDias> fuera = new ArrayList<>();
-        for (Map.Entry<Par, Integer> e : horasPorMateria.entrySet()) {
-            Asignacion a = primera.get(e.getKey());
-            int horas = e.getValue();
-            int diasGrupo = ctx.porTurnoDia().getOrDefault(turnoDeGrupo(ctx, e.getKey().grupoId()),
-                    Map.of()).size();
-            int diasComunes = diasComunes(ctx, e.getKey().grupoId(), e.getKey().maestroId()).size();
-            int tope = Math.min(diasGrupo, diasComunes);
-            if (horas <= tope) {
-                continue;
-            }
-            String motivo = diasComunes < horas && diasGrupo >= horas
-                    ? "El grupo tiene " + diasGrupo + " días, pero solo " + diasComunes
-                    + " coinciden con la disponibilidad de " + a.getMaestro().getTituloNombreCompleto()
-                    + ": sobran " + (horas - diasComunes) + " h de esta materia."
-                    : "El grupo solo tiene " + diasGrupo + " días con disponibilidad y la materia pide "
-                    + horas + " horas: sobran " + (horas - diasGrupo)
-                    + " h (una materia no puede repetir día).";
-            fuera.add(new ValidacionIADTO.MateriaPorDias(e.getKey().grupoId(),
-                    a.getGrupo().getNombre(), nombreMateria(a),
-                    a.getMaestro().getTituloNombreCompleto(), horas, diasGrupo, diasComunes,
-                    horas - tope, motivo));
-        }
-        // Las que más horas dejan fuera, primero.
-        fuera.sort(Comparator.comparingInt(ValidacionIADTO.MateriaPorDias::faltan).reversed()
-                .thenComparingInt(ValidacionIADTO.MateriaPorDias::horas).reversed());
-        return fuera;
-    }
-
-    /**
-     * REVISIÓN 4 · SESIONES LARGAS SIN PARES CONTIGUOS SUFICIENTES.
-     *
-     * <p>Una sesión de 2 o más horas ocupa bloques CONTIGUOS del mismo día. Además la materia no puede
-     * repetir día, así que cada día solo puede alojar UNA de esas sesiones largas. Por tanto hacen falta
-     * tantos DÍAS con algún tramo contiguo libre (grupo y maestro a la vez, con el largo que pide la
-     * sesión) como sesiones de 2+ h tenga el patrón.
-     *
-     * <p>Se informan también los pares contiguos totales: si hay muchos pares pero en pocos días, el
-     * problema es la regla de un día; si directamente no hay pares, el problema es la disponibilidad.
-     *
-     * @see GeneradorIA#duracionesDe(Asignacion) de dónde salen las duraciones del patrón
-     */
-    private List<ValidacionIADTO.SesionLargaSinPares> revisarSesionesLargas(ContextoRevisiones ctx) {
-        record Par(Long grupoId, Long materiaId, Long maestroId) {
-        }
-
-        Map<Par, List<Integer>> duraciones = new LinkedHashMap<>();
-        Map<Par, Asignacion> primera = new LinkedHashMap<>();
-        for (Asignacion a : ctx.asignaciones()) {
-            Par par = new Par(a.getGrupo().getGrupoId(),
-                    a.getMateria() != null ? a.getMateria().getMateriaId() : -1L,
-                    a.getMaestro().getMaestroId());
-            primera.putIfAbsent(par, a);
-            // Varias filas de la misma materia y grupo se SUMAN: el patrón de cada fila se acumula.
-            duraciones.computeIfAbsent(par, k -> new ArrayList<>()).addAll(GeneradorIA.duracionesDe(a));
-        }
-
-        List<ValidacionIADTO.SesionLargaSinPares> fuera = new ArrayList<>();
-        for (Map.Entry<Par, List<Integer>> e : duraciones.entrySet()) {
-            Asignacion a = primera.get(e.getKey());
-            List<Integer> largas = e.getValue().stream().filter(d -> d >= 2).toList();
-            if (largas.isEmpty()) {
-                continue;   // una materia de puras sesiones de 1 h no necesita contigüidad
-            }
-            int mayor = largas.stream().mapToInt(Integer::intValue).max().orElse(0);
-            int horasLargas = largas.stream().mapToInt(Integer::intValue).sum();
-            Set<Long> comunes = comunes(ctx, e.getKey().grupoId(), e.getKey().maestroId());
-            Map<Integer, List<TurnoHorario>> dias = ctx.porTurnoDia()
-                    .getOrDefault(turnoDeGrupo(ctx, e.getKey().grupoId()), Map.of());
-            int pares = 0;
-            int diasConPar = 0;
-            for (List<TurnoHorario> arr : dias.values()) {
-                // El día solo sirve para una sesión larga (la materia no repite día), así que basta con
-                // saber si el tramo contiguo libre más largo del día llega al largo de la sesión.
-                int mejor = 0;
-                int actual = 0;
-                for (int p = 0; p < arr.size(); p++) {
-                    if (p > 0 && minutos(arr.get(p).getHoraInicio()) - minutos(arr.get(p - 1).getHoraFin())
-                            > ReglasIA.TOLERANCIA_CONTIGUIDAD_MIN) {
-                        actual = 0;
-                    }
-                    actual = comunes.contains(arr.get(p).getId()) ? actual + 1 : 0;
-                    mejor = Math.max(mejor, actual);
-                    if (p > 0 && comunes.contains(arr.get(p).getId())
-                            && comunes.contains(arr.get(p - 1).getId())
-                            && minutos(arr.get(p).getHoraInicio()) - minutos(arr.get(p - 1).getHoraFin())
-                            <= ReglasIA.TOLERANCIA_CONTIGUIDAD_MIN) {
-                        pares++;
-                    }
-                }
-                if (mejor >= mayor) {
-                    diasConPar++;
-                }
-            }
-            int faltan = largas.size() - diasConPar;
-            if (faltan <= 0) {
-                continue;
-            }
-            fuera.add(new ValidacionIADTO.SesionLargaSinPares(e.getKey().grupoId(),
-                    a.getGrupo().getNombre(), nombreMateria(a),
-                    a.getMaestro().getTituloNombreCompleto(), horasLargas, largas.size(), pares,
-                    diasConPar, faltan,
-                    "Pide " + largas.size() + " sesión(es) de " + mayor + "+ h seguidas y solo hay "
-                            + diasConPar + " día(s) con " + mayor + " bloques contiguos libres para el "
-                            + "grupo y el maestro (una sesión larga por día): " + faltan + " no caben.",
-                    diasConPar == 0 ? "IMPOSIBLE"
-                            : (diasConPar == largas.size() ? "AJUSTADO" : "HOLGADO")));
-        }
-        fuera.sort(Comparator.comparingInt(ValidacionIADTO.SesionLargaSinPares::faltan).reversed()
-                .thenComparingInt(ValidacionIADTO.SesionLargaSinPares::horasLargas).reversed());
-        return fuera;
-    }
-
-    /**
-     * REVISIÓN 5 · DESGLOSE POR GRUPO DEL HORARIO VIGENTE (versión 1).
-     *
-     * <p>Los indicadores del resultado (arranques tarde, castigo de huecos, adyacencias) son totales y
-     * no dicen dónde está el problema. Aquí se recalculan POR GRUPO sobre {@code sih.horario} con
-     * {@code version = 1}, con los mismos criterios que usa el motor al puntuar un intento:
-     *
-     * <ul>
-     *   <li><b>Arranque tarde</b>: bloques que pasan desde el inicio del turno hasta la primera clase
-     *       del día, sumado en los días en que el grupo no arranca a primera hora. Es lo que el motor
-     *       castiga con {@link ReglasIA#PESO_ARRANQUE}.</li>
-     *   <li><b>Huecos</b>: bloques libres ENTRE la primera y la última clase del grupo (antes de la
-     *       primera o después de la última no son huecos, son turno sin usar). Cuenta como
-     *       {@link ReglasIA#PESO_HUECO} por bloque, con el tope diario
-     *       {@link ReglasIA#TOPE_HUECOS_DIA}.</li>
-     *   <li><b>Adyacencias</b>: pares de bloques consecutivos del mismo día con materias distintas del
-     *       mismo maestro ({@link ReglasIA#PESO_ADYACENCIA}). Se cuentan tanto si son contiguos de
-     *       verdad como si están pegados dentro de {@link ReglasIA#TOLERANCIA_ADYACENCIA_MIN}.</li>
-     * </ul>
-     *
-     * <p>Se ordena por gravedad (más huecos, luego más arranques tarde, luego más adyacencias) para que
-     * se vea de un vistazo dónde se concentra el problema.
-     */
-    private List<ValidacionIADTO.GrupoHorarioVigente> revisarHorarioVigente(
-            ContextoRevisiones ctx, DatosIA datos, List<Horario> horarioVigente) {
-
-        // Ocupación por grupo y bloque: la fila del horario vigente que cae en ese bloque (si hay más de
-        // una en el mismo bloque, que no debería, gana la última y la comprobación dura ya lo avisaría).
-        Map<Long, Map<Long, Horario>> ocupacion = new HashMap<>();
-        for (Horario h : horarioVigente) {
-            if (h.getGrupo() == null || h.getTurnoHorario() == null) {
-                continue;
-            }
-            ocupacion.computeIfAbsent(h.getGrupo().getGrupoId(), k -> new HashMap<>())
-                    .put(h.getTurnoHorario().getId(), h);
-        }
-
-        List<ValidacionIADTO.GrupoHorarioVigente> grupos = new ArrayList<>();
-        for (Grupo g : ctx.gruposPorId().values()) {
-            Map<Long, Horario> suyas = ocupacion.getOrDefault(g.getGrupoId(), Map.of());
-            Map<Integer, List<TurnoHorario>> dias = ctx.porTurnoDia()
-                    .getOrDefault(turnoDeGrupo(ctx, g.getGrupoId()), Map.of());
-
-            int clases = 0;
-            int arranquesTarde = 0;
-            int huecos = 0;
-            int adyacencias = 0;
-            int diasConClase = 0;
-            for (Map.Entry<Integer, List<TurnoHorario>> dia : dias.entrySet()) {
-                List<TurnoHorario> arr = dia.getValue();
-                boolean[] ocupado = new boolean[arr.size()];
-                int primera = -1;
-                int ultima = -1;
-                for (int p = 0; p < arr.size(); p++) {
-                    ocupado[p] = suyas.containsKey(arr.get(p).getId());
-                    if (ocupado[p]) {
-                        if (primera < 0) {
-                            primera = p;
-                        }
-                        ultima = p;
-                        clases++;
-                    }
-                }
-                if (primera < 0) {
-                    continue;   // día sin clase: ni arranque tarde ni huecos
-                }
-                diasConClase++;
-                // Arranque tarde: desde el inicio del turno hasta la primera clase de ESE día.
-                arranquesTarde += primera;
-                for (int p = primera; p < ultima; p++) {
-                    if (!ocupado[p]) {
-                        huecos++;
-                    }
-                }
-                // Adyacencias: par pegado del mismo maestro con materias distintas.
-                for (int p = 0; p + 1 < arr.size(); p++) {
-                    if (minutos(arr.get(p + 1).getHoraInicio()) - minutos(arr.get(p).getHoraFin())
-                            > ReglasIA.TOLERANCIA_ADYACENCIA_MIN) {
-                        continue;
-                    }
-                    Horario x = suyas.get(arr.get(p).getId());
-                    Horario y = suyas.get(arr.get(p + 1).getId());
-                    if (x == null || y == null || x.getMaestroId() == null
-                            || !x.getMaestroId().equals(y.getMaestroId())) {
-                        continue;
-                    }
-                    Long asigX = x.getAsignacion() != null ? x.getAsignacion().getAsignacionId() : null;
-                    Long asigY = y.getAsignacion() != null ? y.getAsignacion().getAsignacionId() : null;
-                    if (asigX != null && !asigX.equals(asigY)) {
-                        adyacencias++;
-                    }
-                }
-            }
-            if (clases == 0) {
-                continue;   // grupo sin horario vigente: se cuenta aparte en el resumen
-            }
-            grupos.add(new ValidacionIADTO.GrupoHorarioVigente(g.getGrupoId(), g.getNombre(), clases,
-                    clases, bloquesEnOrden(ctx,
-                    ctx.disponiblesGrupo().getOrDefault(g.getGrupoId(), Set.of())).size(),
-                    diasConClase, arranquesTarde, huecos, adyacencias,
-                    huecos > 0 ? "IMPOSIBLE" : (arranquesTarde > 0 ? "AJUSTADO" : "HOLGADO")));
-        }
-        // De más a menos grave para que arriba quede dónde se concentra el problema.
-        grupos.sort(Comparator
-                .comparingInt(ValidacionIADTO.GrupoHorarioVigente::huecos).reversed()
-                .thenComparing(Comparator.comparingInt(
-                        ValidacionIADTO.GrupoHorarioVigente::arranquesTarde).reversed())
-                .thenComparing(Comparator.comparingInt(
-                        ValidacionIADTO.GrupoHorarioVigente::adyacencias).reversed())
-                .thenComparing(ValidacionIADTO.GrupoHorarioVigente::grupo,
-                        Comparator.nullsLast(Comparator.naturalOrder())));
-        return grupos;
-    }
-
     // ============================================================
     // AUXILIARES DE LAS REVISIONES
     // ============================================================
@@ -1314,12 +987,6 @@ public class HorarioIAServicio {
         return orden;
     }
 
-    /** Turno del grupo (null si el grupo no lo tiene). */
-    private static Long turnoDeGrupo(ContextoRevisiones ctx, Long grupoId) {
-        Grupo g = ctx.gruposPorId().get(grupoId);
-        return g != null && g.getTurno() != null ? g.getTurno().getTurnoId() : null;
-    }
-
     /** Ids de los maestros que dan clase en ese grupo. */
     private static Set<Long> maestrosDelGrupo(ContextoRevisiones ctx, Long grupoId) {
         Set<Long> maestros = new LinkedHashSet<>();
@@ -1348,24 +1015,6 @@ public class HorarioIAServicio {
                 ctx.disponiblesGrupo().getOrDefault(grupoId, Set.of()));
         salida.retainAll(ctx.disponiblesMaestro().getOrDefault(maestroId, Set.of()));
         return salida;
-    }
-
-    /** Días distintos en los que el grupo y el maestro están disponibles a la vez. */
-    private static Set<Integer> diasComunes(ContextoRevisiones ctx, Long grupoId, Long maestroId) {
-        Set<Long> comunes = comunes(ctx, grupoId, maestroId);
-        Set<Integer> dias = new LinkedHashSet<>();
-        for (Long bloqueId : comunes) {
-            Long turnoId = ctx.bloquePorId().get(bloqueId);
-            Map<Integer, List<TurnoHorario>> diasDelTurno = ctx.porTurnoDia().getOrDefault(turnoId, Map.of());
-            for (Map.Entry<Integer, List<TurnoHorario>> e : diasDelTurno.entrySet()) {
-                for (TurnoHorario b : e.getValue()) {
-                    if (b.getId().equals(bloqueId)) {
-                        dias.add(e.getKey());
-                    }
-                }
-            }
-        }
-        return dias;
     }
 
     /** Dos decimales, que es lo que se enseña en la pantalla. */
