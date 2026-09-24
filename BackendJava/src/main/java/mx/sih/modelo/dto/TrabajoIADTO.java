@@ -50,6 +50,10 @@ public class TrabajoIADTO {
 
     private int horasDemandadas;
 
+    /** Con qué banderas se lanzó esta generación, para poder guardarlas con la corrida. */
+    private boolean asignarMaestros;
+    private boolean asignarAulas;
+
     /** Número del intento con mejor resultado (null mientras no haya ninguno). */
     private Integer mejorNumero;
 

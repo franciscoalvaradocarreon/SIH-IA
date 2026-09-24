@@ -166,6 +166,7 @@ public class HorarioIAControlador {
         SolicitudGuardarCorridaDTO s = solicitud != null ? solicitud : new SolicitudGuardarCorridaDTO();
 
         return ResponseEntity.ok(corridas.guardar(escuelaId, trabajo.getSemestreId(), trabajo.getTurnoId(),
+                trabajo.isAsignarMaestros(), trabajo.isAsignarAulas(),
                 intento, s.getNombre(), s.getNotas(), usuario(autenticacion)));
     }
 

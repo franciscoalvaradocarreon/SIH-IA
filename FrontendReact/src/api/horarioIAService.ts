@@ -237,6 +237,10 @@ export interface CorridaIA {
   creado: string;
   creadoPor: string | null;
 
+  /** Con qué banderas se generó. null = guardada antes de que se empezara a registrar. */
+  asignarMaestros: boolean | null;
+  asignarAulas: boolean | null;
+
   // ── metricas: es lo que se compara entre corridas ──
   milisegundos: number;
   horas: number;

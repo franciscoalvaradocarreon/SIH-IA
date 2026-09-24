@@ -541,6 +541,9 @@ public class HorarioIATrabajoServicio {
         dto.setIntentosPlaneados(t.intentosPlaneados);
         dto.setIntentoActual(t.intentoActual);
         dto.setHorasDemandadas(t.horasDemandadas);
+        // Las banderas viajan al cliente para que, al guardar la corrida, queden registradas con ella.
+        dto.setAsignarMaestros(t.asignarMaestros);
+        dto.setAsignarAulas(t.asignarAulas);
         dto.setMejorNumero(t.mejorNumero);
         dto.setRegistrado(t.registrado);
         dto.setRegistradoEn(t.registradoEn);

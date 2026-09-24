@@ -1675,6 +1675,20 @@ const nombreDeTurno = (turnos: Turno[], turnoId: number | null): string => {
 };
 
 /**
+ * Etiqueta corta de con qué banderas se generó una corrida.
+ *
+ * <p>"sin registrar" no es lo mismo que "sin stock": las corridas guardadas antes de que existiera
+ * este dato no tienen forma de saberlo, y decir "sin stock" afirmaría algo que no consta.
+ */
+const etiquetaModo = (c: CorridaIA): string => {
+  if (c.asignarMaestros == null && c.asignarAulas == null) return 'sin registrar';
+  const partes: string[] = [];
+  if (c.asignarMaestros) partes.push('maestros');
+  if (c.asignarAulas) partes.push('talleres');
+  return partes.length > 0 ? partes.join(' + ') : 'sin stock';
+};
+
+/**
  * Confirmación en modal para aplicar o borrar una corrida.
  *
  * <p>Antes era un window.confirm: el diálogo nativo del navegador rompía la estética (y no respeta el
@@ -1814,7 +1828,8 @@ const ListaCorridas: React.FC<{
       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
         Son opciones apartadas: no afectan al horario hasta que pulsas Aplicar. El motor considera mejor
         la corrida sin problemas, con más horas colocadas, con menos pendientes y, a igualdad, mejor
-        score (medium).
+        score (medium). La columna Modo dice con qué banderas se generó cada una; «sin registrar» son
+        las guardadas antes de que se anotara ese dato.
       </p>
 
       <AvisoAccion mensaje={mensaje} />
@@ -1831,6 +1846,7 @@ const ListaCorridas: React.FC<{
               <tr className="border-b border-gray-200 text-left text-gray-500 dark:border-gray-600 dark:text-gray-400">
                 <th className="px-2 py-1 font-medium">Corrida</th>
                 <th className="px-2 py-1 font-medium">Turno</th>
+                <th className="px-2 py-1 font-medium">Modo</th>
                 <th className="px-2 py-1 text-right font-medium">Horas</th>
                 <th className="px-2 py-1 text-right font-medium">Pendientes</th>
                 <th className="px-2 py-1 text-right font-medium">Huecos</th>
@@ -1854,6 +1870,11 @@ const ListaCorridas: React.FC<{
                     )}
                   </td>
                   <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreDeTurno(turnos, c.turnoId)}</td>
+                  <td className={`px-2 py-2 ${c.asignarMaestros == null && c.asignarAulas == null
+                    ? 'text-gray-400 dark:text-gray-500'
+                    : 'text-gray-700 dark:text-gray-300'}`}>
+                    {etiquetaModo(c)}
+                  </td>
                   <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
                     {numeroSeguro(c.horas)}/{numeroSeguro(c.horasDemandadas)}
                   </td>

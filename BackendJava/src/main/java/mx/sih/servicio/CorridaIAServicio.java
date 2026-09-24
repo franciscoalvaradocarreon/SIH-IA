@@ -78,6 +78,7 @@ public class CorridaIAServicio {
      */
     @Transactional
     public CorridaIADTO guardar(Long escuelaId, Long semestreId, Long turnoId,
+                                Boolean asignarMaestros, Boolean asignarAulas,
                                 IntentoIA intento, String nombre, String notas, String usuario) {
         if (escuelaId == null) {
             throw new NegocioExcepcion("sin_escuela_activa", "No se ha seleccionado una escuela activa");
@@ -113,6 +114,10 @@ public class CorridaIAServicio {
         corrida.setNombre(nombreLimpio);
         corrida.setNotas(notasLimpias);
         corrida.setAsesor(intento.getAsesor());
+        // Con que banderas se genero: es lo que permite comparar despues las combinaciones sin fiarse
+        // del nombre que le hayas puesto a la corrida.
+        corrida.setAsignarMaestros(asignarMaestros);
+        corrida.setAsignarAulas(asignarAulas);
         corrida.setNumeroIntento(intento.getNumero());
         corrida.setGeneradoEn(intento.getGeneradoEn());
         corrida.setCreadoPor(usuario);
@@ -384,6 +389,8 @@ public class CorridaIAServicio {
                 c.getGeneradoEn(),
                 c.getCreado(),
                 c.getCreadoPor(),
+                c.getAsignarMaestros(),
+                c.getAsignarAulas(),
                 c.getMilisegundos(),
                 c.getHoras(),
                 c.getHorasDemandadas(),

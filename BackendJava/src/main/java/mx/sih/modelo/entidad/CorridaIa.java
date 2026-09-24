@@ -73,6 +73,19 @@ public class CorridaIa {
     @Column(name = "creado_por", length = 120)
     private String creadoPor;
 
+    /**
+     * Con que banderas se genero: reparto de maestros desde el stock y eleccion de taller desde el
+     * stock de la materia.
+     *
+     * <p>Nullable a proposito: una corrida guardada antes de que existiera este dato no tiene forma de
+     * saberlo, y ponerla a false afirmaria que se genero SIN stock, que es distinto de no saberlo.
+     */
+    @Column(name = "asignar_maestros")
+    private Boolean asignarMaestros;
+
+    @Column(name = "asignar_aulas")
+    private Boolean asignarAulas;
+
     // ============================================================
     // METRICAS DEL INTENTO: es lo que se compara entre corridas
     // ============================================================

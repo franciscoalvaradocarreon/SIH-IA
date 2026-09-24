@@ -77,6 +77,19 @@ SELECT '3. COLUMNA NULABLE', k.tabla || '.' || k.columna || ' permite NULL'
     ON c.table_schema = 'sih' AND c.table_name = k.tabla AND c.column_name = k.columna
  WHERE c.is_nullable <> 'NO';
 
+-- Columnas que anaden las migraciones posteriores al volcado. Van en un bloque APARTE del de arriba
+-- a proposito: estas SI pueden ser NULL (una corrida guardada antes de que existiera el dato no
+-- tiene forma de saberlo), asi que no pueden entrar en el chequeo de nulabilidad.
+WITH nuevas(tabla, columna) AS (
+  VALUES ('corrida_ia','asignar_maestros'), ('corrida_ia','asignar_aulas')
+)
+INSERT INTO qa_problemas (seccion, detalle)
+SELECT '3. COLUMNA AUSENTE', n.tabla || '.' || n.columna
+  FROM nuevas n
+ WHERE NOT EXISTS (SELECT 1 FROM information_schema.columns c
+                    WHERE c.table_schema = 'sih' AND c.table_name = n.tabla
+                      AND c.column_name = n.columna);
+
 -- ── 4 y 5) DATOS: choques reales e integridad ──────────────────────────────
 -- Cada consulta se ejecuta en un subbloque con EXCEPTION: si el esquema no es
 -- el esperado, se marca 'no revisable' y el QA continua.

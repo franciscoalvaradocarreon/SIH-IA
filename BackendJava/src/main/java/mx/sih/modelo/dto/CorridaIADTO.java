@@ -27,6 +27,10 @@ public record CorridaIADTO(
         LocalDateTime creado,
         String creadoPor,
 
+        // ── Con qué banderas se generó. null = corrida guardada antes de que se registrara ──
+        Boolean asignarMaestros,
+        Boolean asignarAulas,
+
         // ── Metricas del intento: es lo que se compara entre corridas ──
         Long milisegundos,
         Integer horas,
