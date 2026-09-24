@@ -265,6 +265,39 @@ public class CorridaIAServicio {
     }
 
     // ============================================================
+    // BORRAR
+    // ============================================================
+
+    /**
+     * Quita una corrida de la lista de opciones guardadas, con sus bloques.
+     *
+     * <p>NO toca el horario vigente: si esa corrida ya se habia aplicado, el horario que quedo sigue
+     * tal cual. Borrarla solo la quita de la lista. Conviene tenerlo claro, porque es facil suponer que
+     * borrar la corrida deshace lo que se aplico, y no es asi.
+     */
+    @Transactional
+    public void eliminar(Long escuelaId, Long corridaId) {
+        if (escuelaId == null) {
+            throw new NegocioExcepcion("sin_escuela_activa", "No se ha seleccionado una escuela activa");
+        }
+        if (corridaId == null) {
+            throw new NegocioExcepcion("sin_corrida", "No se ha indicado la corrida que borrar.");
+        }
+
+        CorridaIa corrida = corridas.buscarPorIdYEscuela(corridaId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("corrida_no_encontrada",
+                        "Esa corrida guardada no existe o no pertenece a la escuela activa."));
+
+        String nombre = corrida.getNombre();
+        // Primero el detalle y despues la cabecera: al reves, la clave foranea lo impediria.
+        int filas = detalles.borrarPorCorrida(corridaId);
+        corridas.delete(corrida);
+
+        logger.info("Corrida IA '{}' (id {}) borrada de la lista de opciones ({} bloques). "
+                + "El horario vigente no se ha tocado.", nombre, corridaId, filas);
+    }
+
+    // ============================================================
     // AUXILIARES
     // ============================================================
 

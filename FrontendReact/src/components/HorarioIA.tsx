@@ -15,7 +15,7 @@ import ErrorBoundary from './ErrorBoundary';
 import {
   MdAutoAwesome, MdCheckCircle, MdError, MdWarning, MdInfo, MdPlayArrow,
   MdStop, MdSave, MdExpandMore, MdExpandLess, MdPerson, MdClass,
-  MdTimer, MdRule, MdHourglassEmpty, MdScience, MdBookmarkAdd, MdDoneAll,
+  MdTimer, MdRule, MdHourglassEmpty, MdScience, MdBookmarkAdd, MdDoneAll, MdDelete,
 } from 'react-icons/md';
 import { SwitchToggle } from '../utils/SwitchToggle';
 
@@ -112,6 +112,7 @@ const HorarioIA: React.FC = () => {
   const [cargandoCorridas, setCargandoCorridas] = useState(false);
   const [guardandoCorrida, setGuardandoCorrida] = useState<number | null>(null);
   const [aplicandoCorrida, setAplicandoCorrida] = useState<number | null>(null);
+  const [borrandoCorrida, setBorrandoCorrida] = useState<number | null>(null);
 
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -345,6 +346,27 @@ const HorarioIA: React.FC = () => {
       setError(mensajeError(e, 'No se pudo aplicar la corrida'));
     } finally {
       setAplicandoCorrida(null);
+    }
+  };
+
+  /** Quita una corrida de la lista. NO deshace lo aplicado: solo borra la opcion guardada. */
+  const borrarCorridaGuardada = async (corrida: CorridaIA) => {
+    const seguro = window.confirm(
+      `¿Borrar la corrida "${corrida.nombre}" de la lista de opciones?\n\n` +
+      'El horario actual NO se toca: si ya la aplicaste, seguira como esta.'
+    );
+    if (!seguro) return;
+    setBorrandoCorrida(corrida.id);
+    setError('');
+    setAviso('');
+    try {
+      await horarioIAService.borrarCorrida(corrida.id);
+      setAviso(`Corrida "${corrida.nombre}" borrada de la lista. El horario no se ha tocado.`);
+      await cargarCorridas();
+    } catch (e) {
+      setError(mensajeError(e, 'No se pudo borrar la corrida'));
+    } finally {
+      setBorrandoCorrida(null);
     }
   };
 
@@ -809,8 +831,10 @@ const HorarioIA: React.FC = () => {
         corridas={corridas}
         cargando={cargandoCorridas}
         aplicando={aplicandoCorrida}
+        borrando={borrandoCorrida}
         turnos={turnos}
         onAplicar={aplicarCorridaGuardada}
+        onBorrar={borrarCorridaGuardada}
         onRefrescar={cargarCorridas}
       />
     </div>
@@ -1552,10 +1576,12 @@ const ListaCorridas: React.FC<{
   corridas: CorridaIA[];
   cargando: boolean;
   aplicando: number | null;
+  borrando: number | null;
   turnos: Turno[];
   onAplicar: (corrida: CorridaIA) => void;
+  onBorrar: (corrida: CorridaIA) => void;
   onRefrescar: () => void;
-}> = ({ corridas, cargando, aplicando, turnos, onAplicar, onRefrescar }) => {
+}> = ({ corridas, cargando, aplicando, borrando, turnos, onAplicar, onBorrar, onRefrescar }) => {
 
   /** El turno se resuelve con la lista que ya tiene la pantalla: una consulta menos. */
   const nombreTurno = (turnoId: number | null): string => {
@@ -1649,20 +1675,30 @@ const ListaCorridas: React.FC<{
                     {(numeroSeguro(c.milisegundos) / 1000).toFixed(1)} s
                   </td>
                   <td className="px-2 py-2 text-right">
-                    {c.aplicable ? (
+                    <div className="flex items-center justify-end gap-1">
+                      {c.aplicable ? (
+                        <button
+                          onClick={() => onAplicar(c)}
+                          disabled={aplicando === c.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          <MdDoneAll /> {aplicando === c.id ? 'Aplicando…' : 'Aplicar'}
+                        </button>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-gray-200 px-2 py-1 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                          <MdError /> No aplicable
+                        </span>
+                      )}
                       <button
-                        onClick={() => onAplicar(c)}
-                        disabled={aplicando === c.id}
-                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                        onClick={() => onBorrar(c)}
+                        disabled={borrando === c.id}
+                        title="Borrar de la lista (no toca el horario)"
+                        className="inline-flex items-center rounded-md border border-red-300 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/20"
                       >
-                        <MdDoneAll /> {aplicando === c.id ? 'Aplicando…' : 'Aplicar'}
+                        <MdDelete />
                       </button>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-200 px-2 py-1 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                        <MdError /> No aplicable
-                      </span>
-                    )}
-                    {/* Aviso corto bajo el boton: si no se puede aplicar, por que; y si el detalle
+                    </div>
+                    {/* Aviso corto bajo los botones: si no se puede aplicar, por que; y si el detalle
                         quedo corto, cuanto falta. Asi no hay que adivinar. */}
                     {!c.aplicable && c.motivoNoAplicable && (
                       <span className="mt-1 block max-w-[18rem] text-[11px] text-red-700 dark:text-red-400">

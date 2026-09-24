@@ -37,6 +37,7 @@ import java.util.List;
  *       horario. Es lo que permite seguir generando para comparar opciones.</li>
  *   <li>{@code GET  /corridas?semestreId=N}: corridas guardadas de ese semestre, con sus métricas.</li>
  *   <li>{@code POST /corridas/{id}/aplicar}: aplica una corrida guardada al horario vigente.</li>
+ *   <li>{@code DELETE /corridas/{id}}: quita una corrida de la lista (NO toca el horario).</li>
  * </ul>
  */
 @RestController
@@ -182,6 +183,16 @@ public class HorarioIAControlador {
     @PostMapping("/corridas/{id}/aplicar")
     public ResponseEntity<HorarioIAServicio.RegistroIA> aplicar(@PathVariable Long id) {
         return ResponseEntity.ok(corridas.aplicar(EscuelaContexto.getEscuelaId(), id));
+    }
+
+    /**
+     * Borra una corrida de la lista de opciones. NO toca el horario vigente: si esa corrida ya se
+     * aplico, el horario que quedo sigue igual. Solo la quita de la lista.
+     */
+    @DeleteMapping("/corridas/{id}")
+    public ResponseEntity<Void> eliminarCorrida(@PathVariable Long id) {
+        corridas.eliminar(EscuelaContexto.getEscuelaId(), id);
+        return ResponseEntity.noContent().build();
     }
 
     private String usuario(Authentication autenticacion) {

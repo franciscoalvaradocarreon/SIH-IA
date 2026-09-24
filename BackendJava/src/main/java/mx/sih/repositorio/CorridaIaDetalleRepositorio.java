@@ -2,9 +2,11 @@
 package mx.sih.repositorio;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
 import java.util.List;
@@ -39,4 +41,16 @@ public interface CorridaIaDetalleRepositorio extends JpaRepository<CorridaIaDeta
            "WHERE d.corrida.corridaIaId IN :ids " +
            "GROUP BY d.corrida.corridaIaId")
     List<Object[]> contarPorCorridas(@Param("ids") Collection<Long> ids);
+
+    /**
+     * Borra todas las filas de una corrida en UNA sentencia, sin cargarlas en memoria.
+     *
+     * <p>La tabla tiene ON DELETE CASCADE, asi que borrar la cabecera ya se llevaria el detalle. Se
+     * hace explicito igualmente por dos motivos: no depender de que la cascada este puesta, y poder
+     * aplicar el nombre de la corrida en el log aunque el detalle tenga cientos de filas.
+     */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM CorridaIaDetalle d WHERE d.corrida.corridaIaId = :corridaId")
+    int borrarPorCorrida(@Param("corridaId") Long corridaId);
 }

@@ -406,4 +406,12 @@ export const horarioIAService = {
   /** Aplica una corrida guardada al horario VIGENTE: reemplaza el de los grupos del alcance. */
   aplicarCorrida: (id: number) =>
     api.post<ResumenAplicadoIA>(`/horario-ia/corridas/${id}/aplicar`),
+
+  /**
+   * Quita una corrida de la lista de opciones.
+   *
+   * NO toca el horario real: si esa corrida ya se aplico, el horario que quedo sigue igual.
+   */
+  borrarCorrida: (id: number) =>
+    api.delete<void>(`/horario-ia/corridas/${id}`),
 };
