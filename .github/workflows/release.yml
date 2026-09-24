@@ -9,6 +9,8 @@ name: Release (imagen en GHCR + WAR)
 #      inyectados (por eso GET /api/version deja de decir "dev").
 #   2. Un GitHub Release con el WAR ejecutable adjunto, para quien quiera el
 #      programa suelto en vez del contenedor.
+#   3. El despliegue en el servidor de Oracle, llamando a cd.yml. Publicar un
+#      tag es, por tanto, todo el proceso: construir, publicar y desplegar.
 on:
   push:
     tags: [ 'v*' ]
@@ -126,3 +128,26 @@ jobs:
           files: BackendJava/target/SIH-IA-1.0.war
           generate_release_notes: true
           name: SIH-IA ${{ github.ref_name }}
+
+  # --------------------------------------------------------------------------
+  # Despliegue en el servidor de Oracle
+  # --------------------------------------------------------------------------
+  desplegar:
+    name: Desplegar en Oracle
+    # La imagen tiene que existir antes de ir a buscarla al servidor. Con
+    # 'needs', GitHub no lanza este trabajo hasta que 'imagen' termino BIEN: si
+    # el build falla, no se despliega nada. El trabajo del WAR es independiente,
+    # asi que esto corre en paralelo con el.
+    needs: imagen
+    # Solo al publicar un tag. Un 'workflow_dispatch' de este workflow no es un
+    # despliegue, y ademas su github.ref seria 'refs/heads/main', con lo que la
+    # comprobacion final de version no tendria sentido.
+    if: startsWith(github.ref, 'refs/tags/v')
+    # 'uses' en lugar de 'steps': llama al workflow reutilizable. Asi la logica
+    # del despliegue (SSH, pull, reinicio, verificacion) vive en un solo sitio y
+    # se puede lanzar a mano desde la pestana Actions.
+    uses: ./.github/workflows/cd.yml
+    with:
+      version: ${{ github.ref_name }}
+    # Los secretos (SSH_KEY, SSH_HOST, SSH_USER) pasan al workflow llamado.
+    secrets: inherit

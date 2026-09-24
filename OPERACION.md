@@ -68,15 +68,24 @@ Usa una versión **nueva** cada vez (`v1.0.2`, `v1.0.3`...). Una versión public
 
 | Workflow | Qué hace | Cuánto tarda |
 |---|---|---|
-| **Release** | Construye la imagen multi-arquitectura y la publica en GHCR, y adjunta el WAR | ~9 min (emulación ARM) |
+| **Release** | Construye la imagen **solo ARM64** (runner ARM nativo, sin emulación) y la publica en GHCR, y adjunta el WAR | unos minutos |
 | **CD** | Entra por SSH, descarga la imagen, reinicia solo la aplicación y **verifica la versión** | ~2 min |
 
-No hay que hacer nada. El CD solo se ejecuta si el Release termina bien.
+No hay que hacer nada. El Release **llama** al CD como último trabajo, así que el CD
+no puede ejecutarse antes de que la imagen exista: si el build falla, no se
+despliega y producción se queda como estaba.
+
+> Este encadenamiento antes se hacía con el disparador `workflow_run` y **no
+> funcionaba**: los cuatro despliegues que había registrados se habían lanzado a
+> mano, y por eso `v1.1.1` se construyó y se publicó en GHCR pero producción se
+> quedó en `v1.0.1`. Ahora el Release llama al CD directamente
+> (`uses: ./.github/workflows/cd.yml`), que es una garantía por construcción y no
+> un evento que pueda fallar en silencio.
 
 ### Paso 5 · Confirmar
 
 ```powershell
-ssh sih "curl -s http://127.0.0.1/api/version"
+ssh -n sih "curl -s http://127.0.0.1/api/version"
 ```
 
 O desde el navegador: `http://140.84.191.170/api/version`
@@ -88,6 +97,13 @@ Debe responder con **la versión que acabas de publicar**:
 ```
 
 Si la versión no coincide, el CD se habrá puesto en rojo y te habrá mostrado los logs del servidor.
+
+### Redesplegar sin publicar una versión nueva
+
+**Actions → CD (desplegar en el servidor) → Run workflow.** En el campo
+`version` escribe el tag que esperas ver en producción (por ejemplo `v1.1.1`); si
+lo dejas vacío, solo comprueba que el servicio responde. Sirve para volver a
+desplegar lo último publicado o para diagnosticar sin tocar nada.
 
 ---
 

@@ -1,28 +1,46 @@
 name: CD (desplegar en el servidor)
 
-# Se dispara cuando el workflow de Release termina BIEN. Asi, el orden es:
-#   1. Creas el tag           -> git push origin v1.0.2
-#   2. Release construye la imagen y la publica en GHCR
-#   3. Este workflow entra por SSH, descarga la imagen y reinicia la aplicacion
-#   4. Verifica que la version en produccion es EXACTAMENTE la publicada
+# Este workflow tiene DOS entradas, y ninguna consiste en "escuchar" a otro
+# workflow:
 #
-# Si el Release falla, esto no se ejecuta: nunca se despliega una imagen que no
-# se construyo correctamente.
-on:
-  workflow_run:
-    workflows: [ "Release (imagen en GHCR + WAR)" ]
-    types: [ completed ]
-  # Permite lanzarlo a mano desde la pestana Actions (util para probarlo).
-  workflow_dispatch:
+#   1. workflow_call  -> lo llama release.yml cuando la imagen ya esta en GHCR.
+#      Al ser una llamada directa, GitHub NO lanza este trabajo hasta que el
+#      trabajo 'imagen' del Release ha terminado BIEN. Esa es la garantia de
+#      orden por construccion.
+#
+#      Antes esto se intentaba con el disparador 'workflow_run' y NUNCA llego a
+#      dispararse: los cuatro despliegues registrados en el repositorio se
+#      lanzaron a mano. Por eso v1.1.1 se construyo y se publico en GHCR, pero
+#      produccion se quedo en v1.0.1. Un mecanismo que no se puede verificar no
+#      sirve como garantia; una llamada explicita si.
+#
+#   2. workflow_dispatch -> a mano desde la pestana Actions. Sirve para
+#      redesplegar lo ultimo publicado (por ejemplo despues de un rollback) o
+#      para comprobar que el servicio responde sin publicar nada nuevo.
+#
+# Que hace en los dos casos: entra por SSH, trae la imagen de GHCR y reinicia
+# SOLO la aplicacion. La base de datos y las fotos de los maestros no se tocan.
 
-permissions:
-  contents: read
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: "Tag que debe quedar en produccion (ej. v1.1.1). Vacio = solo comprobar que el servicio responde."
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag que debe quedar en produccion (ej. v1.1.1). Vacio = solo comprobar que el servicio responde."
+        required: false
+        type: string
+        default: ""
 
 jobs:
   desplegar:
     name: Desplegar en Oracle
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     steps:
 
       - name: Preparar la clave SSH
@@ -52,9 +70,10 @@ jobs:
           # Se llama USUARIO y no USER a proposito: USER es una variable del
           # sistema en Linux y reutilizar ese nombre es pedir interferencias.
           USUARIO: ${{ secrets.SSH_USER }}
-          # El tag publicado (por ejemplo v1.0.2). Con workflow_dispatch no existe,
-          # y entonces solo se comprueba que el servicio responda.
-          ESPERADA: ${{ github.event.workflow_run.head_branch }}
+          # El tag publicado (por ejemplo v1.1.1), que llega como parametro:
+          # del Release cuando llama a este workflow, o del formulario cuando se
+          # lanza a mano. Vacio = basta con que el servicio responda.
+          ESPERADA: ${{ inputs.version }}
         run: |
           set -euo pipefail
 
@@ -100,7 +119,7 @@ jobs:
             echo "  intento $intento: $VERSION"
 
             if [ -z "$ESPERADA" ]; then
-              # Lanzado a mano: basta con que el servicio este sano.
+              # Sin version esperada: basta con que el servicio este sano.
               echo "$VERSION" | grep -q '"estado":"ok"' && { echo "OK: el servicio responde"; exit 0; }
             else
               # Despliegue por tag: la version en produccion debe ser la publicada.
@@ -119,5 +138,5 @@ jobs:
         if: always()
         run: |
           echo "### Despliegue" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Version publicada: \`${{ github.event.workflow_run.head_branch }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Version esperada: \`${{ inputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- Estado: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
