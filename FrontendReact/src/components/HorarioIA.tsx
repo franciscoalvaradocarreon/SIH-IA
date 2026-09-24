@@ -6,7 +6,7 @@ import type {
   AnalisisViabilidadIA, RevisionesViabilidadIA, SeveridadViabilidad,
   MaestroViabilidadIA, GrupoViabilidadIA, GrupoDesbalanceIA, ResumenViabilidadIA,
   CupoMaestroGrupoIA, BloquePocosMaestrosIA, GrupoBloquesApretadosIA,
-  ResumenRevisionesIA,
+  ResumenRevisionesIA, CorridaIA,
 } from '../api/horarioIAService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
@@ -15,7 +15,7 @@ import ErrorBoundary from './ErrorBoundary';
 import {
   MdAutoAwesome, MdCheckCircle, MdError, MdWarning, MdInfo, MdPlayArrow,
   MdStop, MdSave, MdExpandMore, MdExpandLess, MdPerson, MdClass,
-  MdTimer, MdRule, MdHourglassEmpty, MdScience,
+  MdTimer, MdRule, MdHourglassEmpty, MdScience, MdBookmarkAdd, MdDoneAll,
 } from 'react-icons/md';
 import { SwitchToggle } from '../utils/SwitchToggle';
 
@@ -105,6 +105,13 @@ const HorarioIA: React.FC = () => {
   const [registrando, setRegistrando] = useState<number | null>(null);
   const [mostrarProblemas, setMostrarProblemas] = useState(false);
   const [abierto, setAbierto] = useState<number | null>(null);
+
+  // ── corridas guardadas ──
+  // Son opciones APARTADAS: guardarlas NO toca el horario. Solo aplicarlas lo reescribe.
+  const [corridas, setCorridas] = useState<CorridaIA[]>([]);
+  const [cargandoCorridas, setCargandoCorridas] = useState(false);
+  const [guardandoCorrida, setGuardandoCorrida] = useState<number | null>(null);
+  const [aplicandoCorrida, setAplicandoCorrida] = useState<number | null>(null);
 
   const [error, setError] = useState('');
   const [aviso, setAviso] = useState('');
@@ -276,6 +283,68 @@ const HorarioIA: React.FC = () => {
       setError(mensajeError(e, 'No se pudo registrar el intento'));
     } finally {
       setRegistrando(null);
+    }
+  };
+
+  // ── corridas guardadas ────────────────────────────────────────────────────
+
+  const cargarCorridas = async () => {
+    if (!semestreActivo?.id) return;
+    setCargandoCorridas(true);
+    try {
+      const res = await horarioIAService.corridas(semestreActivo.id);
+      setCorridas(Array.isArray(res.data) ? res.data : []);
+    } catch {
+      // No poder leer la lista no debe tumbar la pantalla de generación: se muestra vacía.
+      setCorridas([]);
+    } finally {
+      setCargandoCorridas(false);
+    }
+  };
+
+  useEffect(() => {
+    cargarCorridas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [semestreActivo?.id]);
+
+  /** Aparta ese intento con un nombre. NO escribe en el horario: eso es el botón "Usar este". */
+  const guardarCorrida = async (numero: number, nombre: string) => {
+    if (!trabajo) return;
+    setGuardandoCorrida(numero);
+    setError('');
+    setAviso('');
+    try {
+      const res = await horarioIAService.guardarCorrida(trabajo.id, numero, nombre);
+      setAviso(`Corrida "${res.data.nombre}" guardada como opción. El horario actual NO se ha tocado.`);
+      await cargarCorridas();
+    } catch (e) {
+      setError(mensajeError(e, 'No se pudo guardar la corrida'));
+    } finally {
+      setGuardandoCorrida(null);
+    }
+  };
+
+  /** Aplica una corrida guardada al horario vigente. Es lo único destructivo de esta pantalla. */
+  const aplicarCorridaGuardada = async (corrida: CorridaIA) => {
+    const seguro = window.confirm(
+      `Vas a aplicar "${corrida.nombre}" al horario vigente.\n\n` +
+      `Se REEMPLAZA el horario actual de los grupos de ese turno y semestre (${corrida.horas} h).\n\n` +
+      '¿Continuar?'
+    );
+    if (!seguro) return;
+    setAplicandoCorrida(corrida.id);
+    setError('');
+    setAviso('');
+    try {
+      const res = await horarioIAService.aplicarCorrida(corrida.id);
+      setAviso(
+        `Corrida "${corrida.nombre}" aplicada al horario: ${res.data.horas} h en ` +
+        `${res.data.filas} bloques de ${res.data.grupos} grupo(s).`
+      );
+    } catch (e) {
+      setError(mensajeError(e, 'No se pudo aplicar la corrida'));
+    } finally {
+      setAplicandoCorrida(null);
     }
   };
 
@@ -697,6 +766,8 @@ const HorarioIA: React.FC = () => {
                   onRegistrar={() => registrar(it.numero)}
                   registrando={registrando === it.numero}
                   puedeRegistrar={!enCurso && trabajo.registrado == null}
+                  onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
+                  guardandoCorrida={guardandoCorrida === it.numero}
                 />
               ))}
             </div>
@@ -727,10 +798,21 @@ const HorarioIA: React.FC = () => {
       {!trabajo && !validando && (
         <div className="flex items-center gap-3 rounded-lg border border-dashed border-gray-300 p-6 text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
           <MdInfo className="text-lg" />
-          Pre-valida para revisar la información y luego genera. Cada intento parte de cero y el mejor
-          se puede guardar en el horario real.
+          Pre-valida para revisar la información y luego genera. Cada intento parte de cero. Cualquiera
+          se puede GUARDAR COMO OPCIÓN (sin tocar el horario) para compararlas, y la que sirva se aplica
+          al horario real.
         </div>
       )}
+
+      {/* ── corridas guardadas: comparar opciones sin tocar el horario ── */}
+      <ListaCorridas
+        corridas={corridas}
+        cargando={cargandoCorridas}
+        aplicando={aplicandoCorrida}
+        turnos={turnos}
+        onAplicar={aplicarCorridaGuardada}
+        onRefrescar={cargarCorridas}
+      />
     </div>
   );
 };
@@ -743,10 +825,19 @@ const FichaIntento: React.FC<{
   abierto: boolean;
   registrando: boolean;
   puedeRegistrar: boolean;
+  guardandoCorrida: boolean;
   onAlternar: () => void;
   onRegistrar: () => void;
-}> = ({ intento, esMejor, registrado, abierto, registrando, puedeRegistrar, onAlternar, onRegistrar }) => {
+  onGuardarCorrida: (nombre: string) => void;
+}> = ({ intento, esMejor, registrado, abierto, registrando, puedeRegistrar, guardandoCorrida,
+       onAlternar, onRegistrar, onGuardarCorrida }) => {
   const completo = intento.pendientes.length === 0;
+
+  // El nombre se pide EN LINEA y no con window.prompt: prompt bloquea el navegador y tapa el intento
+  // justo cuando estas decidiendo el nombre.
+  const [pidiendoNombre, setPidiendoNombre] = useState(false);
+  const [nombreCorrida, setNombreCorrida] = useState('');
+
   return (
     <div className={`rounded-md border p-3 ${esMejor
       ? 'border-indigo-300 bg-indigo-50/60 dark:border-indigo-800 dark:bg-indigo-900/10'
@@ -776,17 +867,69 @@ const FichaIntento: React.FC<{
             {abierto ? <MdExpandLess /> : <MdExpandMore />}
             {completo ? 'Sin pendientes' : `${intento.pendientes.length} pendiente(s)`}
           </button>
+          {/* Guardar como opcion: aparta la corrida SIN tocar el horario. Es distinto de "Usar este",
+              que si reescribe el horario vigente. */}
+          {intento.problemas.length === 0 && (
+            <button
+              onClick={() => {
+                setNombreCorrida(`Opción intento ${intento.numero}`);
+                setPidiendoNombre(true);
+              }}
+              disabled={guardandoCorrida}
+              className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              <MdBookmarkAdd /> {guardandoCorrida ? 'Guardando…' : 'Guardar corrida'}
+            </button>
+          )}
           {puedeRegistrar && intento.problemas.length === 0 && (
             <button
               onClick={onRegistrar}
               disabled={registrando}
               className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              <MdSave /> {registrando ? 'Guardando…' : 'Usar este'}
+              <MdSave /> {registrando ? 'Aplicando…' : 'Usar este'}
             </button>
           )}
         </div>
       </div>
+
+      {pidiendoNombre && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-200 pt-2 dark:border-gray-700">
+          <input
+            autoFocus
+            type="text"
+            value={nombreCorrida}
+            maxLength={120}
+            onChange={e => setNombreCorrida(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && nombreCorrida.trim()) {
+                onGuardarCorrida(nombreCorrida.trim());
+                setPidiendoNombre(false);
+              }
+              if (e.key === 'Escape') setPidiendoNombre(false);
+            }}
+            placeholder="Nombre de la corrida (ej: Opción A - sin huecos)"
+            className="min-w-[15rem] flex-1 rounded-md border border-gray-300 px-2 py-1 text-xs dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          />
+          <button
+            onClick={() => {
+              onGuardarCorrida(nombreCorrida.trim());
+              setPidiendoNombre(false);
+            }}
+            disabled={!nombreCorrida.trim() || guardandoCorrida}
+            className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <MdBookmarkAdd /> {guardandoCorrida ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button
+            onClick={() => setPidiendoNombre(false)}
+            className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+          >
+            Cancelar
+          </button>
+          <span className="text-xs text-gray-500 dark:text-gray-400">No toca el horario actual.</span>
+        </div>
+      )}
 
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
         <span className="flex items-center gap-1">
@@ -1390,6 +1533,154 @@ const RevisionesViabilidadIA: React.FC<{ revisiones?: RevisionesViabilidadIA | n
         )}
       </div>
 
+    </div>
+  );
+};
+
+/**
+ * CORRIDAS GUARDADAS: las opciones apartadas, con sus métricas, para poder compararlas.
+ *
+ * Guardar una corrida NO toca el horario; solo "Aplicar" lo reescribe (con confirmación, porque es
+ * destructivo).
+ *
+ * La tabla NO marca cuál es la mejor, y es a propósito: la regla del motor es "sin problemas > más
+ * horas > menos pendientes > mejor score" (HorarioIAServicio.comparar). Duplicarla aquí solo serviría
+ * para que las dos versiones se separaran con el tiempo. En su lugar se enseñan los números y se
+ * explica el criterio, que es lo que permite decidir con conocimiento.
+ */
+const ListaCorridas: React.FC<{
+  corridas: CorridaIA[];
+  cargando: boolean;
+  aplicando: number | null;
+  turnos: Turno[];
+  onAplicar: (corrida: CorridaIA) => void;
+  onRefrescar: () => void;
+}> = ({ corridas, cargando, aplicando, turnos, onAplicar, onRefrescar }) => {
+
+  /** El turno se resuelve con la lista que ya tiene la pantalla: una consulta menos. */
+  const nombreTurno = (turnoId: number | null): string => {
+    if (!turnoId) return '—';
+    const t = turnos.find(x => x.id === turnoId);
+    return t ? t.nombre : `turno ${turnoId}`;
+  };
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-gray-100">
+          <MdBookmarkAdd className="text-indigo-600" /> Corridas guardadas
+          {corridas.length > 0 && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-normal text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+              {corridas.length}
+            </span>
+          )}
+        </h2>
+        <button
+          onClick={onRefrescar}
+          disabled={cargando}
+          className="rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+        >
+          {cargando ? 'Cargando…' : 'Actualizar'}
+        </button>
+      </div>
+
+      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        Son opciones apartadas: no afectan al horario hasta que pulsas Aplicar. El motor considera mejor
+        la corrida sin problemas, con más horas colocadas, con menos pendientes y, a igualdad, mejor
+        score (medium).
+      </p>
+
+      {corridas.length === 0 ? (
+        <p className="mt-3 rounded-md border border-dashed border-gray-300 p-4 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+          Todavía no has guardado ninguna corrida. Genera, y en el intento que te interese pulsa
+          «Guardar corrida» y ponle un nombre.
+        </p>
+      ) : (
+        <div className="mt-3 overflow-x-auto">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="border-b border-gray-200 text-left text-gray-500 dark:border-gray-600 dark:text-gray-400">
+                <th className="px-2 py-1 font-medium">Corrida</th>
+                <th className="px-2 py-1 font-medium">Turno</th>
+                <th className="px-2 py-1 text-right font-medium">Horas</th>
+                <th className="px-2 py-1 text-right font-medium">Pendientes</th>
+                <th className="px-2 py-1 text-right font-medium">Huecos</th>
+                <th className="px-2 py-1 text-right font-medium">Adyacencias</th>
+                <th className="px-2 py-1 text-right font-medium">Materias</th>
+                <th className="px-2 py-1 text-right font-medium">Score</th>
+                <th className="px-2 py-1 text-right font-medium">Tiempo</th>
+                <th className="px-2 py-1" />
+              </tr>
+            </thead>
+            <tbody>
+              {corridas.map(c => (
+                <tr key={c.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
+                  <td className="px-2 py-2">
+                    <span className="font-medium text-gray-900 dark:text-gray-100">{c.nombre}</span>
+                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                      {texto(c.creadoPor, '—')} · {texto(c.asesor, '—')}
+                    </span>
+                    {c.notas && (
+                      <span className="block text-[11px] text-gray-500 dark:text-gray-400">{c.notas}</span>
+                    )}
+                  </td>
+                  <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreTurno(c.turnoId)}</td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {numeroSeguro(c.horas)}/{numeroSeguro(c.horasDemandadas)}
+                  </td>
+                  <td className={`px-2 py-2 text-right ${numeroSeguro(c.totalPendientes) > 0
+                    ? 'font-medium text-amber-700 dark:text-amber-400'
+                    : 'text-gray-700 dark:text-gray-300'}`}>
+                    {numeroSeguro(c.totalPendientes)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {numeroSeguro(c.castigoHuecos)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {numeroSeguro(c.adyacencias)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {numeroSeguro(c.materiasCompletas)}/{numeroSeguro(c.materiasTotales)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {numeroSeguro(c.medium)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-gray-700 dark:text-gray-300">
+                    {(numeroSeguro(c.milisegundos) / 1000).toFixed(1)} s
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    {c.aplicable ? (
+                      <button
+                        onClick={() => onAplicar(c)}
+                        disabled={aplicando === c.id}
+                        className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        <MdDoneAll /> {aplicando === c.id ? 'Aplicando…' : 'Aplicar'}
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-200 px-2 py-1 text-xs text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        <MdError /> No aplicable
+                      </span>
+                    )}
+                    {/* Aviso corto bajo el boton: si no se puede aplicar, por que; y si el detalle
+                        quedo corto, cuanto falta. Asi no hay que adivinar. */}
+                    {!c.aplicable && c.motivoNoAplicable && (
+                      <span className="mt-1 block max-w-[18rem] text-[11px] text-red-700 dark:text-red-400">
+                        {c.motivoNoAplicable}
+                      </span>
+                    )}
+                    {c.aplicable && numeroSeguro(c.filasGuardadas) !== numeroSeguro(c.totalFilas) && (
+                      <span className="mt-1 block text-[11px] text-amber-700 dark:text-amber-400">
+                        Guardados {numeroSeguro(c.filasGuardadas)} de {numeroSeguro(c.totalFilas)} bloques
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 };

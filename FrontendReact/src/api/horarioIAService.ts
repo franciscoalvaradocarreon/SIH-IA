@@ -220,6 +220,54 @@ export interface TrabajoIA {
   intentos: IntentoIA[];
 }
 
+/**
+ * Una corrida guardada del generador: una solucion completa con sus metricas.
+ *
+ * Guardar NO toca el horario real. Es lo que permite lanzar varias generaciones, apartar las que
+ * interesen y aplicar despues la mejor.
+ */
+export interface CorridaIA {
+  id: number;
+  nombre: string;
+  notas: string | null;
+  /** Turno del alcance. Puede ser null si el turno se borro del catalogo. */
+  turnoId: number | null;
+  asesor: string;
+  generadoEn: string;
+  creado: string;
+  creadoPor: string | null;
+
+  // ── metricas: es lo que se compara entre corridas ──
+  milisegundos: number;
+  horas: number;
+  horasDemandadas: number;
+  sesionesLargas: number;
+  sesionesLargasPendientes: number;
+  arranquesTarde: number;
+  castigoHuecos: number;
+  adyacencias: number;
+  materiasCompletas: number;
+  materiasTotales: number;
+  medium: number;
+
+  totalFilas: number;
+  totalPendientes: number;
+  totalProblemas: number;
+  /** Bloques que hay guardados AHORA. Si no cuadra con totalFilas, la corrida esta incompleta. */
+  filasGuardadas: number;
+  aplicable: boolean;
+  /** Por que no se puede aplicar, listo para mostrar. null si si se puede. */
+  motivoNoAplicable: string | null;
+}
+
+/** Lo que devuelve aplicar una corrida al horario vigente. */
+export interface ResumenAplicadoIA {
+  filas: number;
+  horas: number;
+  grupos: number;
+  pendientes: number;
+}
+
 export interface ConfigIA {
   intentos: number;
   segundosPorIntento: number;
@@ -338,4 +386,24 @@ export const horarioIAService = {
 
   mejor: (trabajoId: string) =>
     api.get<IntentoIA>(`/horario-ia/trabajo/${encodeURIComponent(trabajoId)}/mejor`),
+
+  /**
+   * Guarda ese intento como una opcion, SIN tocar el horario real.
+   *
+   * OJO con el nombre, que invita a confusion: el boton "Usar este" de la pantalla llama a
+   * registrar(), que SI escribe en el horario. Esto solo aparta la corrida para compararla despues.
+   */
+  guardarCorrida: (trabajoId: string, numero: number, nombre: string, notas?: string) =>
+    api.post<CorridaIA>(
+      `/horario-ia/trabajo/${encodeURIComponent(trabajoId)}/intento/${numero}/guardar`,
+      { nombre, notas }
+    ),
+
+  /** Corridas guardadas de un semestre, para comparar sus metricas. */
+  corridas: (semestreId: number) =>
+    api.get<CorridaIA[]>('/horario-ia/corridas', { params: { semestreId } }),
+
+  /** Aplica una corrida guardada al horario VIGENTE: reemplaza el de los grupos del alcance. */
+  aplicarCorrida: (id: number) =>
+    api.post<ResumenAplicadoIA>(`/horario-ia/corridas/${id}/aplicar`),
 };

@@ -58,9 +58,12 @@ CREATE TABLE IF NOT EXISTS sih.corrida_ia (
     numero_intento integer,
     generado_en timestamp without time zone,
 
-    -- Quien la guardo y cuando.
+    -- Quien la guardo y cuando. Es el CORREO, no un id: mismo criterio que el
+    -- "solicitadoPor" del modulo IA (el controlador ya pasa claims.correo()), y
+    -- asi no hace falta una clave foranea ni una consulta mas solo para poder
+    -- decir quien guardo la corrida.
     creado timestamp without time zone DEFAULT CURRENT_TIMESTAMP,
-    creado_por bigint,
+    creado_por character varying(120),
 
     -- ── Metricas del intento: es lo que se compara entre corridas ──────────
     milisegundos bigint,
@@ -77,8 +80,9 @@ CREATE TABLE IF NOT EXISTS sih.corrida_ia (
 
     -- ── Recuentos esperados del detalle ───────────────────────────────────
     -- Si total_filas no cuadra con las filas que hay guardadas, la corrida se
-    -- marca como incompleta y no se aplica a ciegas (ver la consulta de
-    -- verificacion del final).
+    -- marca como incompleta y no se aplica a ciegas: alguna asignacion o bloque
+    -- del catalogo se borro despues y la clave foranea en cascada se llevo
+    -- filas por delante.
     total_filas integer,
     total_pendientes integer,
 
@@ -96,9 +100,7 @@ CREATE TABLE IF NOT EXISTS sih.corrida_ia (
     -- SET NULL, no CASCADE: borrar un turno no debe borrar las opciones
     -- guardadas, solo dejarlas sin etiqueta de alcance.
     CONSTRAINT corrida_ia_turno_id_fkey FOREIGN KEY (turno_id)
-        REFERENCES sih.turno(turno_id) ON DELETE SET NULL,
-    CONSTRAINT corrida_ia_creado_por_fkey FOREIGN KEY (creado_por)
-        REFERENCES sih.usuarios(usuario_id) ON DELETE SET NULL
+        REFERENCES sih.turno(turno_id) ON DELETE SET NULL
 );
 
 
@@ -107,9 +109,6 @@ CREATE TABLE IF NOT EXISTS sih.corrida_ia_detalle (
     corrida_ia_detalle_id bigint NOT NULL,
     corrida_ia_id bigint NOT NULL,
 
-    -- El grupo se guarda aunque se deduzca de la asignacion: es lo que permite
-    -- la red de seguridad de abajo y evita un JOIN al listar.
-    grupo_id bigint NOT NULL,
     asignacion_id bigint NOT NULL,
     turno_horario_id bigint NOT NULL,
 
@@ -123,8 +122,6 @@ CREATE TABLE IF NOT EXISTS sih.corrida_ia_detalle (
     CONSTRAINT corrida_ia_detalle_pkey PRIMARY KEY (corrida_ia_detalle_id),
     CONSTRAINT corrida_ia_detalle_corrida_ia_id_fkey FOREIGN KEY (corrida_ia_id)
         REFERENCES sih.corrida_ia(corrida_ia_id) ON DELETE CASCADE,
-    CONSTRAINT corrida_ia_detalle_grupo_id_fkey FOREIGN KEY (grupo_id)
-        REFERENCES sih.grupos(grupo_id) ON DELETE CASCADE,
     CONSTRAINT corrida_ia_detalle_asignacion_id_fkey FOREIGN KEY (asignacion_id)
         REFERENCES sih.asignacion(asignacion_id) ON DELETE CASCADE,
     CONSTRAINT corrida_ia_detalle_turno_horario_id_fkey FOREIGN KEY (turno_horario_id)
@@ -166,14 +163,19 @@ ALTER TABLE sih.corrida_ia_detalle
     ALTER COLUMN corrida_ia_detalle_id SET DEFAULT nextval('sih.corrida_ia_detalle_corrida_ia_detalle_id_seq');
 
 
--- ── Red de seguridad: una corrida guardada tampoco puede solaparse ─────────
--- Equivalente a los indices no_solape_* de horario, pero SIN el filtro
--- version = 1: aqui todas las filas pertenecen a una opcion guardada, no a un
--- horario vigente. El motor ya no genera solapes; esto es la ultima linea de
--- defensa por si un guardado llega corrupto.
-CREATE UNIQUE INDEX IF NOT EXISTS no_solape_corrida_grupo_bloque
-    ON sih.corrida_ia_detalle (corrida_ia_id, grupo_id, turno_horario_id);
+-- ── Red de seguridad del detalle ──────────────────────────────────────────
+-- NO lleva grupo_id, y no es un olvido: IntentoIA.Fila (lo que produce el
+-- motor) trae asignacion, bloque, maestro y aula, pero no el grupo. Anadirlo
+-- obligaba a tocar el generador solo por esto.
+-- Tampoco hace falta para la integridad: al APLICAR la corrida las filas entran
+-- en sih.horario, y alli los tres indices no_solape_* ya rechazan cualquier
+-- solape de grupo, maestro o aula. Esto de aqui solo evita guardar dos veces la
+-- misma fila.
+CREATE UNIQUE INDEX IF NOT EXISTS no_solape_corrida_asignacion_bloque
+    ON sih.corrida_ia_detalle (corrida_ia_id, asignacion_id, turno_horario_id);
 
+-- Maestro y aula: en Postgres los NULL no chocan entre si, asi que estos dos
+-- solo muerden cuando ambos valores estan presentes, que es el caso normal.
 CREATE UNIQUE INDEX IF NOT EXISTS no_solape_corrida_maestro_bloque
     ON sih.corrida_ia_detalle (corrida_ia_id, maestro_id, turno_horario_id);
 
@@ -199,7 +201,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS corrida_ia_nombre_unico
 
 
 -- ── Verificacion inmediata ────────────────────────────────────────────────
--- Debe salir: 2 tablas, 3 indices UNIQUE y 1 nombre unico.
+-- Debe salir: 2 tablas, 3 indices UNIQUE, 1 nombre unico y 2 secuencias.
 SELECT '1. TABLAS' AS revision,
        (SELECT count(*)::text FROM information_schema.tables
          WHERE table_schema = 'sih'
