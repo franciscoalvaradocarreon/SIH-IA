@@ -32,8 +32,9 @@
 -- volumen de datos.
 --
 -- ORDEN DE DESPLIEGUE: este script va ANTES que el codigo que usa las tablas.
--- Al reves, Hibernate encuentra la entidad sin tabla y la aplicacion no
--- arranca.
+-- Al reves la aplicacion SI arranca (ddl-auto no esta configurado, asi que
+-- Hibernate no valida el esquema al inicio), pero el boton de guardar corridas
+-- falla con "relation sih.corrida_ia does not exist".
 -- ============================================================================
 
 
@@ -223,3 +224,34 @@ UNION ALL
 SELECT '4. SECUENCIAS',
        (SELECT count(*)::text FROM information_schema.sequences
          WHERE sequence_schema = 'sih' AND sequence_name LIKE 'corrida_ia%') || ' de 2' AS resultado;
+
+
+-- ============================================================================
+-- NOTA PARA UNA BASE DE DESARROLLO RESTAURADA (no aplica en produccion)
+-- ============================================================================
+-- Si este script lo aplica un usuario DISTINTO del que usa la aplicacion, el
+-- usuario de la aplicacion se queda SIN permisos sobre las tablas nuevas.
+-- Es el caso de una base de desarrollo restaurada: las tablas son de 'postgres'
+-- y la aplicacion entra como 'User_app'.
+--
+-- OJO: no basta con que el usuario sea miembro de pg_read_all_data y
+-- pg_write_all_data. Comprobado en esta base: esas dos pertenencias estan
+-- otorgadas con INHERIT FALSE (pg_auth_members.inherit_option = f), asi que NO
+-- se aplican solas y haria falta un SET ROLE. Las tablas antiguas funcionan
+-- porque tienen un GRANT explicito por tabla en su ACL, no por esos roles.
+--
+-- En produccion no hace falta nada de esto: alli el usuario de la aplicacion es
+-- el DUENO de las tablas (las creo el) y tiene todos los permisos implicitos.
+--
+-- Sintoma si falta el permiso: al pulsar "Guardar corrida" en la pantalla,
+-- error 500 con "permiso denegado a la tabla corrida_ia". Y la tabla tampoco
+-- aparece en information_schema.tables, porque esa vista solo muestra lo que el
+-- usuario puede usar.
+--
+-- Solucion, ejecutada como dueno de las tablas (normalmente postgres). El
+-- nombre "User_app" va entre comillas dobles porque distingue mayusculas:
+--   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE sih.corrida_ia TO "User_app";
+--   GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE sih.corrida_ia_detalle TO "User_app";
+--   GRANT USAGE, SELECT ON SEQUENCE sih.corrida_ia_corrida_ia_id_seq TO "User_app";
+--   GRANT USAGE, SELECT ON SEQUENCE sih.corrida_ia_detalle_corrida_ia_detalle_id_seq TO "User_app";
+-- ============================================================================

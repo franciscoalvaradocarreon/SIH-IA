@@ -88,6 +88,8 @@ public class HorarioIATrabajoServicio {
         private final int maxPasos;
         /** Modo "asignar maestros desde el stock" (el motor elige el maestro por disponibilidad). */
         private final boolean asignarMaestros;
+        /** Modo "asignar aulas desde el stock" (el motor elige el taller de la materia). Es independiente. */
+        private final boolean asignarAulas;
         private final String solicitadoPor;
         private final LocalDateTime encoladoEn = LocalDateTime.now();
 
@@ -124,7 +126,7 @@ public class HorarioIATrabajoServicio {
 
         private Trabajo(Long escuelaId, Long semestreId, Long turnoId, String modo,
                         int intentosPlaneados, int segundosPorIntento, int maxPasos,
-                        boolean asignarMaestros, String solicitadoPor) {
+                        boolean asignarMaestros, boolean asignarAulas, String solicitadoPor) {
             this.escuelaId = escuelaId;
             this.semestreId = semestreId;
             this.turnoId = turnoId;
@@ -133,6 +135,7 @@ public class HorarioIATrabajoServicio {
             this.segundosPorIntento = segundosPorIntento;
             this.maxPasos = maxPasos;
             this.asignarMaestros = asignarMaestros;
+            this.asignarAulas = asignarAulas;
             this.solicitadoPor = solicitadoPor;
         }
     }
@@ -219,7 +222,8 @@ public class HorarioIATrabajoServicio {
     public synchronized TrabajoIADTO iniciar(Long escuelaId, Long semestreId, Long turnoId, String modo,
                                              Integer intentos, Integer segundosPorIntento,
                                              Integer maxPasos, String apiKey, String url, String modelo,
-                                             Boolean asignarMaestros, String solicitadoPor) {
+                                             Boolean asignarMaestros, Boolean asignarAulas,
+                                             String solicitadoPor) {
         Optional<Trabajo> enCurso = trabajos.values().stream()
                 .filter(t -> EN_COLA.equals(t.estado) || EN_PROCESO.equals(t.estado))
                 .filter(t -> Objects.equals(t.escuelaId, escuelaId)
@@ -244,6 +248,7 @@ public class HorarioIATrabajoServicio {
                         ? segundosPorIntentoDefecto : Math.min(segundosPorIntento, 1800),
                 maxPasos == null || maxPasos <= 0 ? maxPasosDefecto : Math.min(maxPasos, 20_000_000),
                 Boolean.TRUE.equals(asignarMaestros),
+                Boolean.TRUE.equals(asignarAulas),
                 solicitadoPor);
         trabajo.asesor = asesor;
         trabajos.put(trabajo.id, trabajo);
@@ -466,7 +471,7 @@ public class HorarioIATrabajoServicio {
                 return null;
             }
             return servicio.intento(datos, numero, System.nanoTime(), trabajo.segundosPorIntento,
-                    trabajo.maxPasos, trabajo.asignarMaestros, asesor,
+                    trabajo.maxPasos, trabajo.asignarMaestros, trabajo.asignarAulas, asesor,
                     linea -> logger.debug("IA[{}] {}", trabajo.id, linea));
         } finally {
             EscuelaContexto.limpiar();

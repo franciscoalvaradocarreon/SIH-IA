@@ -58,16 +58,17 @@ public class GeneradorIA {
 
     /** Un intento completo. */
     public IntentoIA generarIntento(DatosIA datos, int numero, int maxPasos, long semilla,
-                                    int segundosMax, boolean asignarMaestros,
+                                    int segundosMax, boolean asignarMaestros, boolean asignarAulas,
                                     AsesorIA asesor, Consumer<String> log) {
         long inicio = System.currentTimeMillis();
         long limite = segundosMax > 0 ? inicio + segundosMax * 1000L : 0L;
         Corrida c = new Corrida(datos, semilla, limite);
-        // MODO STOCK: con el flag encendido el motor elige también el AULA de cada sesión -no solo el
-        // maestro- entre las del stock de su materia, y lo hace desde la construcción y en todas las
-        // fases (no solo como respaldo cuando la de la asignación está ocupada). Con el flag apagado el
-        // motor es exactamente el de siempre: cada sesión usa el aula de su asignación.
-        c.modoStock = asignarMaestros;
+        // DOS DECISIONES INDEPENDIENTES, que antes eran una sola bandera:
+        //   - asignarMaestros: el motor reparte los maestros de cada materia (fase del final).
+        //   - asignarAulas: el motor elige el TALLER de cada sesion entre los del stock de su materia,
+        //     desde la construccion y en todas las fases, no solo como respaldo.
+        // Se combinan libremente. Con las dos apagadas el motor es exactamente el de siempre.
+        c.modoAulas = asignarAulas;
 
         // Todo lo que cuenta el motor va al log del servidor y a la bitácora del intento.
         List<String> bitacora = new ArrayList<>();
@@ -123,7 +124,8 @@ public class GeneradorIA {
                     + mejorHoras + " h, " + mejorPendientes + " pendientes)");
         }
 
-        // Modo "asignar maestros desde el stock": al final, para no interferir con las fases normales.
+        // Reparto de MAESTROS desde el stock: al final, para no interferir con las fases normales.
+        // Depende SOLO de su bandera: el reparto es el mismo con las aulas libres o fijas.
         if (asignarMaestros) {
             c.asignarMaestros(registro);
         }
@@ -139,9 +141,10 @@ public class GeneradorIA {
         // Es la regla que el usuario pidió explícita: deben quedar separadas.
         c.separarAdyacencias(registro);
 
-        // Medición final del modo stock: la separación de adyacencias todavía puede mover una sesión a
+        // Medición final de las AULAS: la separación de adyacencias todavía puede mover una sesión a
         // otro taller del stock, así que el recuento bueno es el de aquí, con el intento ya cerrado.
-        if (asignarMaestros) {
+        // Va con la bandera de AULAS, no con la de maestros: si el aula es fija, no hay nada que medir.
+        if (asignarAulas) {
             c.logAulas(registro, "final", true);
         }
 
@@ -208,8 +211,8 @@ public class GeneradorIA {
     /**
      * Destino: día + ventana + AULA elegida.
      *
-     * <p>El aula forma parte del destino porque en modo stock también la decide el motor: la elige
-     * entre las del stock de la materia (ver {@code Corrida.aulaElegida}). Sin modo stock, o sin stock,
+     * <p>El aula forma parte del destino porque en modo aulas también la decide el motor: la elige
+     * entre las del stock de la materia (ver {@code Corrida.aulaElegida}). Sin modo aulas, o sin stock,
      * siempre es el aula de la asignación y el destino es el de antes.
      */
     private record Destino(int dia, Ventana ventana, long aula) {
@@ -221,9 +224,9 @@ public class GeneradorIA {
         final long asigId;
         final int dur;
         final long gid;
-        /** Maestro asignado. MUTABLE en el modo "stock": el motor puede cambiarlo por otro del pool. */
+        /** Maestro asignado. MUTABLE en el modo "maestros": el motor puede cambiarlo por otro del pool. */
         long mid;
-        /** Aula asignada. MUTABLE en el modo stock: el motor puede elegir otro taller de la materia. */
+        /** Aula asignada. MUTABLE en el modo aulas: el motor puede elegir otro taller de la materia. */
         long aid;
         /** Maestros elegibles (stock de la materia: los que ya la imparten en las asignaciones). */
         final Set<Long> stock;
@@ -279,7 +282,7 @@ public class GeneradorIA {
         /**
          * NOMBRE DE CADA MAESTRO (id → nombre), tomado de las asignaciones ya cargadas.
          *
-         * <p>En modo stock el motor puede cambiar el maestro de una sesión, así que el nombre de una
+         * <p>En modo maestros el motor puede cambiar el maestro de una sesión, así que el nombre de una
          * sesión NO se puede leer de su asignación: hay que resolverlo por el id que la sesión tiene
          * ahora. Este mapa es esa fuente única y no consulta nada nuevo.
          */
@@ -287,17 +290,21 @@ public class GeneradorIA {
 
         /**
          * NOMBRE DE CADA AULA (id → nombre), tomado de las asignaciones ya cargadas. Solo lo usa el
-         * resumen del modo stock en la bitácora; no consulta nada nuevo.
+         * resumen del modo aulas en la bitácora; no consulta nada nuevo.
          */
         final Map<Long, String> nombreDeAulaPorId = new HashMap<>();
 
         /**
-         * MODO STOCK (asignarMaestros == true): además del maestro, el motor elige libremente el AULA
-         * de cada sesión entre las del stock de su materia, en todas las fases y no solo como respaldo.
-         * Lo enciende {@code generarIntento} antes de construir. Apagado, el motor es el de siempre: la
-         * sesión solo puede usar el aula de su asignación.
+         * MODO AULAS (asignarAulas == true): el motor elige libremente el AULA de cada sesión entre
+         * las del stock de su materia, en todas las fases y no solo como respaldo. Lo enciende
+         * {@code generarIntento} antes de construir.
+         *
+         * <p>Apagado, el aula de una sesión es SIEMPRE la de su asignación: no la cambia ninguna fase,
+         * ni siquiera la de separar adyacencias (ver {@code separarPar}). Antes esta decisión venía
+         * pegada a la de maestros y aquella fase se saltaba el filtro, así que "stock apagado" no
+         * garantizaba que el aula no se moviera.
          */
-        boolean modoStock;
+        boolean modoAulas;
 
         final List<Integer> dias = new ArrayList<>();
         /**
@@ -510,15 +517,15 @@ public class GeneradorIA {
 
         // ───────── factibilidad y coste ─────────
 
-        // ───────── elección del AULA al colocar (modo stock) ─────────
+        // ───────── elección del AULA al colocar (modo aulas) ─────────
 
         /**
          * AULAS CANDIDATAS de una sesión: el STOCK de su materia, es decir, las aulas que esa materia
          * ya usa en las asignaciones (el universo de candidatos). Si el stock está vacío -o el modo
-         * stock está apagado- el universo es solo el aula de la asignación, y todo queda como estaba.
+         * aulas está apagado- el universo es solo el aula de la asignación, y todo queda como estaba.
          */
         List<Long> aulasCandidatas(Sesion s) {
-            if (!modoStock || s.stockAulas.isEmpty()) {
+            if (!modoAulas || s.stockAulas.isEmpty()) {
                 return List.of(s.aid);
             }
             return new ArrayList<>(s.stockAulas);
@@ -562,7 +569,7 @@ public class GeneradorIA {
         }
 
         /**
-         * ELECCIÓN DEL AULA AL COLOCAR (modo stock): devuelve el aula elegida para esa sesión en esa
+         * ELECCIÓN DEL AULA AL COLOCAR (modo aulas): devuelve el aula elegida para esa sesión en esa
          * ventana, o {@code null} si NINGUNA candidata está libre (entonces la ventana no sirve).
          *
          * <p>El aula ya no viene fijada por la asignación: se elige entre las candidatas cada vez que
@@ -611,7 +618,7 @@ public class GeneradorIA {
         /**
          * Destinos posibles ahora mismo (día + ventana + aula) respetando disponibilidad y ocupación.
          *
-         * <p>En modo stock el aula se elige aquí, ventana a ventana; sin stock el destino lleva el aula
+         * <p>En modo aulas el aula se elige aquí, ventana a ventana; sin stock el destino lleva el aula
          * de la asignación y la lista es exactamente la de antes.
          */
         List<Destino> candidatas(Sesion s) {
@@ -709,7 +716,7 @@ public class GeneradorIA {
         /**
          * Quita la sesión y devuelve su colocación anterior (null si no estaba colocada).
          *
-         * <p>Guarda también el AULA: en modo stock el aula es una decisión del motor y forma parte del
+         * <p>Guarda también el AULA: en modo aulas el aula es una decisión del motor y forma parte del
          * estado, así que deshacer una colocación tiene que devolverla a la de antes.
          */
         long[] quitar(Sesion s) {
@@ -1024,7 +1031,7 @@ public class GeneradorIA {
         /**
          * Mejor destino para una sesión SIN colocarla (no toca el estado salvo el temporal de la
          * medición, que se deshace): mayor ganancia neta respecto al estado actual. El destino incluye
-         * el AULA cuando el modo stock está encendido (ver {@link #aulaElegida}).
+         * el AULA cuando el modo aulas está encendido (ver {@link #aulaElegida}).
          */
         Destino mejorDestino(Sesion s, List<Long> excluir) {
             Map<Integer, Integer> antes = new HashMap<>();
@@ -2767,7 +2774,7 @@ public class GeneradorIA {
          * colocar, pero no bloquean el cambio: puede que el unico hueco sea para las demas.
          *
          * <p>Requisito duro: si alguna sesion que estaba colocada se quedaria pendiente, se deshace TODO
-         * (maestro incluido) y devuelve false. Es el invariante del modo stock: el reparto nunca puede
+         * (maestro incluido) y devuelve false. Es el invariante del modo maestros: el reparto nunca puede
          * costar cobertura.
          */
         boolean ponerLote(Lote l, long t) {
@@ -3155,7 +3162,7 @@ public class GeneradorIA {
         }
 
         /**
-         * MEDICIÓN DEL EFECTO DE ELEGIR EL AULA LIBREMENTE (modo stock).
+         * MEDICIÓN DEL EFECTO DE ELEGIR EL AULA LIBREMENTE (modo aulas).
          *
          * <p>Cuenta las sesiones colocadas que acabaron en un taller DISTINTO al de su asignación -que
          * es justo lo que puede cambiar este modo- y, si se pide detalle, resume por materia qué
@@ -3369,7 +3376,10 @@ public class GeneradorIA {
                     // Además del bloque, se prueban los TALLERES del stock de la materia: en grupos
                     // amarrados a un aula compartida (p. ej. G1), el aula es justo lo que bloquea el
                     // movimiento aunque el maestro tenga toda la disponibilidad del mundo.
-                    for (long al : s1.stockAulas) {
+                    // OJO: esto solo vale si el aula la decide el motor (modo aulas). Con el aula fija
+                    // esta fase prueba SOLO el aula de la asignación, que es lo que hace que "stock de
+                    // aulas apagado" signifique de verdad que ninguna fase mueve el aula.
+                    for (long al : (modoAulas ? s1.stockAulas : List.of(s1.aid))) {
                         s1.aid = al;
                         boolean ok = true;
                         for (long bid : v.ids()) {
@@ -3567,7 +3577,7 @@ public class GeneradorIA {
             p.setMateriaNombre(s.asig.getMateria() != null ? s.asig.getMateria().getNombre() : "?");
             p.setMaestroId(s.mid);
             // El nombre TIENE que ser el del maestro de ESTA sesión (s.mid), no el de la asignación:
-            // en modo stock el motor puede haberle dado otro maestro al grupo.
+            // en modo maestros el motor puede haberle dado otro maestro al grupo.
             p.setMaestroNombre(nombreMaestro(s.mid));
             p.setDuracion(s.dur);
 

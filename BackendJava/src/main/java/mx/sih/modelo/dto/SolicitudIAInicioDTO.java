@@ -33,8 +33,26 @@ public class SolicitudIAInicioDTO {
      * de cada materia entre los que ya la imparten en las asignaciones (stock), por disponibilidad y
      * carga, con la regla de Jóvenes (maestro con otra clase en el grupo y un Jóvenes por maestro).
      * Al registrar se escribe el maestro elegido en el horario.
+     *
+     * <p>Es INDEPENDIENTE de {@link #asignarAulas}: las dos banderas se combinan libremente.
      */
     private Boolean asignarMaestros;
+
+    /**
+     * MODO "ASIGNAR AULAS DESDE EL STOCK": si true, el motor elige el TALLER (aula) de cada sesión
+     * entre los que ya usa su materia en las asignaciones, en vez de quedarse siempre con el aula de
+     * la asignación.
+     *
+     * <p>Antes iba pegado a {@link #asignarMaestros} (una sola bandera encendía las dos cosas), asi
+     * que no se podia probar una sin la otra. Ahora son dos decisiones separadas:
+     * <ul>
+     *   <li>maestros ON + aulas OFF: el motor reparte los maestros y cada sesion respeta el aula de su
+     *       asignacion.</li>
+     *   <li>maestros OFF + aulas ON: cada sesion conserva su maestro, pero el motor busca taller.</li>
+     *   <li>las dos OFF: el motor de siempre.</li>
+     * </ul>
+     */
+    private Boolean asignarAulas;
 
     /**
      * Clave de la API del asesor LLM, SOLO para esta generación.

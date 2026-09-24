@@ -57,9 +57,9 @@ public class IntentoIA {
     public static class Fila {
         private Long asignacionId;
         private Long turnoHorarioId;
-        /** Maestro elegido para esa sesión (en modo stock puede diferir del de la asignación). */
+        /** Maestro elegido para esa sesión (en modo maestros puede diferir del de la asignación). */
         private Long maestroId;
-        /** Taller (aula) elegido para esa sesión (en modo stock puede diferir del de la asignación). */
+        /** Taller (aula) elegido para esa sesión (en modo aulas puede diferir del de la asignación). */
         private Long aulaId;
     }
 

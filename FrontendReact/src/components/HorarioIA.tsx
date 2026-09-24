@@ -93,8 +93,11 @@ const HorarioIA: React.FC = () => {
   const [proveedorIA, setProveedorIA] = useState('openai');
   const [urlIA, setUrlIA] = useState('');
   const [verClave, setVerClave] = useState(false);
-  // Modo nuevo: el motor asigna los maestros desde el stock (materias de la misma asignación).
+  // Dos modos INDEPENDIENTES: repartir los maestros desde el stock y/o elegir el taller desde el
+  // stock de aulas de la materia. Antes eran una sola bandera, así que no se podía probar una sin la
+  // otra.
   const [asignarMaestros, setAsignarMaestros] = useState(false);
+  const [asignarAulas, setAsignarAulas] = useState(false);
 
   const [validacion, setValidacion] = useState<ValidacionIA | null>(null);
   const [validando, setValidando] = useState(false);
@@ -248,8 +251,9 @@ const HorarioIA: React.FC = () => {
         modelo: usaLLM && modeloIA.trim() ? modeloIA.trim() : undefined,
         // La URL del proveedor elegido (DeepSeek, OpenAI u otro) va solo para esta generación.
         url: usaLLM && urlIA.trim() ? urlIA.trim() : undefined,
-        // El motor asigna los maestros desde el stock (los que ya dan la materia en las asignaciones).
+        // Dos banderas independientes: reparto de maestros y elección de taller.
         asignarMaestros: asignarMaestros || undefined,
+        asignarAulas: asignarAulas || undefined,
       });
       setTrabajo(res.data);
       setClaveIA('');           // no se queda guardada ni en la pantalla
@@ -482,10 +486,22 @@ const HorarioIA: React.FC = () => {
               disabled={enCurso || !turnoListo}
             />
           </div>
+          <div className="flex items-center gap-2 rounded-md border border-gray-200 px-2 py-1.5 text-xs text-gray-700 hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700">
+            <SwitchToggle
+              checked={asignarAulas}
+              onChange={setAsignarAulas}
+              label="Asignar aulas desde el stock"
+              color="blue"
+              size="md"
+              disabled={enCurso || !turnoListo}
+            />
+          </div>
           <span className="text-xs text-gray-500 dark:text-gray-400">
-            el motor elige el maestro de cada materia y el taller (aula) entre los que ya usa la
-            materia (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo de Jóvenes por
-            maestro)
+            son dos decisiones independientes: <strong>maestros</strong> reparte quién da cada materia
+            entre los que ya la imparten (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo
+            de Jóvenes por maestro) y <strong>aulas</strong> deja que el motor busque taller entre los
+            que ya usa la materia, en vez de respetar siempre el de la asignación. Con las dos
+            apagadas el horario sale como siempre
           </span>
         </div>
 

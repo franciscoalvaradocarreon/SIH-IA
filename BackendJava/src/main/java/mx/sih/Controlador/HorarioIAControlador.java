@@ -92,7 +92,8 @@ public class HorarioIAControlador {
         SolicitudIAInicioDTO s = solicitud != null ? solicitud : new SolicitudIAInicioDTO();
         TrabajoIADTO trabajo = trabajos.iniciar(escuelaId, s.getSemestreId(), s.getTurnoId(), s.getModo(),
                 s.getIntentos(), s.getSegundosPorIntento(), s.getMaxPasos(),
-                s.getApiKey(), s.getUrl(), s.getModelo(), s.getAsignarMaestros(), usuario(autenticacion));
+                s.getApiKey(), s.getUrl(), s.getModelo(),
+                s.getAsignarMaestros(), s.getAsignarAulas(), usuario(autenticacion));
         return ResponseEntity.accepted().body(trabajo);
     }
 

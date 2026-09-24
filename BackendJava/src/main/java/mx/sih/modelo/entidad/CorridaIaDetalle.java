@@ -39,7 +39,7 @@ public class CorridaIaDetalle {
     private Long turnoHorarioId;
 
     /**
-     * Maestro elegido para esa sesion. En modo stock puede diferir del de la asignacion. Nullable: si
+     * Maestro elegido para esa sesion. En modo maestros puede diferir del de la asignacion. Nullable: si
      * el maestro desaparece del catalogo la fila queda en null y {@code registrar} vuelve a usar el
      * de la asignacion en lugar de romperse.
      */

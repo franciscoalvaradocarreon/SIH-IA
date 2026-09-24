@@ -1114,9 +1114,11 @@ public class HorarioIAServicio {
 
     /** Un intento completo del motor IA, con tope de tiempo propio. */
     public IntentoIA intento(DatosIA datos, int numero, long semilla, int segundosMax, int maxPasos,
-                             boolean asignarMaestros, AsesorIA asesor, Consumer<String> log) {
+                             boolean asignarMaestros, boolean asignarAulas, AsesorIA asesor,
+                             Consumer<String> log) {
         IntentoIA intento = new GeneradorIA()
-                .generarIntento(datos, numero, maxPasos, semilla, segundosMax, asignarMaestros, asesor, log);
+                .generarIntento(datos, numero, maxPasos, semilla, segundosMax,
+                        asignarMaestros, asignarAulas, asesor, log);
         if (asesor != null && asesor.nota() != null) {
             log.accept("  asesor: " + asesor.nota());
         }
@@ -1209,8 +1211,9 @@ public class HorarioIAServicio {
             horario.setAsignacion(a);
             horario.setTurnoHorario(b);
             horario.setAula(a.getAula());
-            // En modo stock, la fila trae el maestro y el taller que eligió el motor; si no, los de
-            // la asignación.
+            // En modo maestros y/o modo aulas, la fila trae el maestro y el taller que eligió el
+            // motor; si no, los de la asignación. Se comprueba cada uno por separado, porque las dos
+            // banderas son independientes.
             horario.setMaestroId(fila.getMaestroId() != null && fila.getMaestroId() > 0
                     ? fila.getMaestroId() : a.getMaestro().getMaestroId());
             if (fila.getAulaId() != null && fila.getAulaId() > 0) {

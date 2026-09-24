@@ -306,6 +306,13 @@ export interface SolicitudIA {
    */
   asignarMaestros?: boolean;
   /**
+   * MODO "ASIGNAR AULAS DESDE EL STOCK": el motor elige el taller (aula) de cada sesión entre los que
+   * ya usa su materia, en vez de quedarse siempre con el de la asignación.
+   *
+   * Es INDEPENDIENTE de `asignarMaestros`: las dos banderas se combinan libremente.
+   */
+  asignarAulas?: boolean;
+  /**
    * URL del endpoint `/chat/completions` (opcional). Se manda al elegir proveedor, porque la clave
    * del servidor puede ser de otro proveedor distinto del configurado.
    */
