@@ -36,8 +36,12 @@ import * as XLSX from 'xlsx';
  *     asignacion.horas cambia de un grupo a otro (en esta escuela, TICS va de 2 a 4).
  *
  * Salidas: pantalla (una tarjeta por especialidad), PDF con corte de hoja por
- * especialidad y Excel con una hoja por especialidad. Mismo patrón que los reportes
- * "Horario por grupo" y "Materias x Especialidad".
+ * especialidad y Excel con una hoja por especialidad. Mismo patrón que el reporte
+ * "Horario por grupo".
+ *
+ * Sustituye al reporte "Materias x Especialidad": daba los mismos datos pero en
+ * vertical y sin agrupar por grado. Ese reporte ya no existe y la migración 10 apaga
+ * su entrada del menú.
  */
 
 /** Nombre de la especialidad del grupo. La API la manda como TEXTO; se toleran las dos formas. */

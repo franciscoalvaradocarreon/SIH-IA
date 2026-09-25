@@ -142,7 +142,12 @@ BEGIN
       -- entrada del menu vive en la base. Si sigue activa, es un enlace roto.
       ('5g. Menu hacia la pantalla retirada',
        'SELECT count(*) FROM sih.menu WHERE activo AND ruta = ''/horarios/generador/automatico''',
-       'menu(s) activo(s) que apuntan al generador automatico, que ya no existe')
+       'menu(s) activo(s) que apuntan al generador automatico, que ya no existe'),
+      -- Migracion 10: el reporte de materias por especialidad se retiro (lo cubre el
+      -- de maestros por especialidad). Su entrada del menu tambien vive en la base.
+      ('5h. Menu hacia el reporte retirado',
+       'SELECT count(*) FROM sih.menu WHERE activo AND ruta = ''/reportes/materias-especialidad''',
+       'menu(s) activo(s) que apuntan al reporte de materias por especialidad, que ya no existe')
     ) v(titulo, sql, texto)
   LOOP
     n := NULL;

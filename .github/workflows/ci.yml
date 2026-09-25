@@ -83,6 +83,7 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/07_quitar_solver.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/08_reporte_maestro_por_materia.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/09_menu_reporte_maestros.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/10_quitar_reporte_materias.sql
       - name: Compilar y correr pruebas
         run: mvn -B clean verify
       - name: Empaquetar el programa (WAR ejecutable)
@@ -124,6 +125,7 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/07_quitar_solver.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/08_reporte_maestro_por_materia.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/09_menu_reporte_maestros.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/10_quitar_reporte_materias.sql
 
       - name: QA del esquema (el veredicto es un gate)
         run: |
