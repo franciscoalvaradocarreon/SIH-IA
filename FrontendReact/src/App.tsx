@@ -35,7 +35,6 @@ import DisponibilidadGrupo from './components/DisponibilidadGrupo';
 import DisponibilidadGrupoForm from './components/DisponibilidadGrupoForm';
 import HorarioView from './components/HorarioView.tsx';
 import HorarioMaestroView from './components/HorarioMaestro.tsx';
-import HorarioAutomatico from './components/HorarioAutomatico';
 import HorarioIA from './components/HorarioIA';
 import ReporteMateriasEspecialidad from './components/ReporteMateriasEspecialidad';
 import HorarioManual from './components/HorarioManual';
@@ -158,7 +157,6 @@ function App() {
               <Route path="/horarios/aula" element={<HorarioAula />} />
 
               {/* Generador de Horarios */}
-              <Route path="/horarios/generador/automatico" element={<HorarioAutomatico />} />
               <Route path="/horarios/generador/ia" element={<HorarioIA />} />
               <Route path="/horarios/generador/manual" element={<HorarioManual />} />
 

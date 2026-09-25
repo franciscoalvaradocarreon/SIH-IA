@@ -50,6 +50,7 @@ services:
       - ./db/05_corridas_ia.sql:/docker-entrypoint-initdb.d/05_corridas_ia.sql:ro
       # Migraciones posteriores, en orden. Cada una es idempotente.
       - ./db/06_corridas_ia_banderas.sql:/docker-entrypoint-initdb.d/06_corridas_ia_banderas.sql:ro
+      - ./db/07_quitar_solver.sql:/docker-entrypoint-initdb.d/07_quitar_solver.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]

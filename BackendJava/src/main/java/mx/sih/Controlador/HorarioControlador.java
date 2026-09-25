@@ -1,46 +1,35 @@
 // mx.sih.controlador.HorarioControlador.java
 package mx.sih.controlador;
 
-import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.modelo.dto.AnalisisCuelloBotellaDTO;
-import mx.sih.modelo.dto.ClaimsUsuario;
 import mx.sih.modelo.dto.HorarioDTO;
-import mx.sih.modelo.dto.HorarioSolucionDTO;
-import mx.sih.modelo.dto.HorarioSolucionMasivaDTO;
 import mx.sih.modelo.dto.ResultadoValidacionDTO;
-import mx.sih.modelo.dto.TrabajoGeneracionDTO;
 import mx.sih.modelo.dto.SolicitudManualDTO;
 import mx.sih.modelo.dto.ResultadoManualDTO;
-import mx.sih.seguridad.contexto.EscuelaContexto;
-import mx.sih.servicio.GeneracionHorarioTrabajoServicio;
 import mx.sih.servicio.HorarioServicio;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * HORARIOS: consulta, validacion previa y tablero manual.
+ *
+ * <p>Aquí ya NO hay generación automática. El solver de Timefold se retiró entero: el horario se arma
+ * con el motor propio del módulo IA ({@code /api/horario-ia}) o a mano con el tablero de pines
+ * ({@code POST /manual}). Lo que queda en este controlador es leer el horario, validar si los datos
+ * dan para generarlo y aplicar cambios manuales.
+ */
 @RestController
 @RequestMapping("/api/horarios")
 @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
 public class HorarioControlador {
 
     private final HorarioServicio horarioServicio;
-    private final GeneracionHorarioTrabajoServicio trabajosGeneracion;
 
-    public HorarioControlador(HorarioServicio horarioServicio,
-                              GeneracionHorarioTrabajoServicio trabajosGeneracion) {
+    public HorarioControlador(HorarioServicio horarioServicio) {
         this.horarioServicio = horarioServicio;
-        this.trabajosGeneracion = trabajosGeneracion;
-    }
-
-    @PostMapping("/generar/{grupoId}")
-    public ResponseEntity<HorarioSolucionDTO> generarHorario(
-            @PathVariable Long grupoId,
-            @RequestParam(required = false) Long semestreId) {
-        HorarioSolucionDTO resultado = horarioServicio.generarHorario(grupoId, semestreId);
-        return ResponseEntity.ok(resultado);
     }
 
     @GetMapping("/grupo/{grupoId}")
@@ -71,62 +60,13 @@ public class HorarioControlador {
     }
 
     /**
-     * Generación masiva ASÍNCRONA.
-     *
-     * Responde 202 Accepted de inmediato con un trabajo en estado EN_COLA: el solver
-     * tarda hasta 300 s y antes este endpoint se quedaba bloqueado todo ese tiempo en
-     * el hilo HTTP (con riesgo de timeout en navegador o proxy). El resultado se
-     * consulta en {@link #consultarGeneracion(String)}.
-     *
-     * Si ya hay una generación en curso con el mismo alcance, devuelve ESA (idempotente
-     * ante dobles clics).
-     */
-    @PostMapping("/generar-todos")
-    public ResponseEntity<TrabajoGeneracionDTO> generarTodos(
-            @RequestParam(required = false) Long semestreId,
-            @RequestParam(required = false) Long turnoId,
-            Authentication autenticacion) {
-
-        Long escuelaId = EscuelaContexto.getEscuelaId();
-        if (escuelaId == null) {
-            throw new NegocioExcepcion("sin_escuela_activa",
-                    "No se ha seleccionado una escuela activa");
-        }
-
-        TrabajoGeneracionDTO trabajo = trabajosGeneracion.iniciar(
-                escuelaId, semestreId, turnoId, usuarioAutenticado(autenticacion));
-
-        return ResponseEntity.accepted().body(trabajo);
-    }
-
-    /** Estado del trabajo de generación. Incluye el resultado completo al COMPLETARSE. */
-    @GetMapping("/generar-todos/{trabajoId}")
-    public ResponseEntity<TrabajoGeneracionDTO> consultarGeneracion(@PathVariable String trabajoId) {
-        return trabajosGeneracion.consultar(trabajoId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    /**
-     * Termina la generación en curso.
-     *
-     * <p>No se pierde el trabajo hecho: el solver devuelve lo mejor que haya encontrado hasta ese
-     * momento y ESA solución es la que se guarda, así que se puede cortar una generación larga en
-     * cuanto aparezca un resultado que sirva.
-     */
-    @PostMapping("/generar-todos/{trabajoId}/terminar")
-    public ResponseEntity<TrabajoGeneracionDTO> terminarGeneracion(@PathVariable String trabajoId) {
-        return trabajosGeneracion.terminar(trabajoId)
-                .map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.notFound().build());
-    }
-
-    /**
      * Valida la factibilidad de generar horarios.
      *
-     * Devuelve TODAS las validaciones realizadas (no solo las que fallan),
-     * cada una con estado OK / ADVERTENCIA / ERROR, para que el frontend
-     * muestre la lista completa con iconos.
+     * <p>Devuelve TODAS las validaciones realizadas (no solo las que fallan), cada una con estado
+     * OK / ADVERTENCIA / ERROR, para que el frontend muestre la lista completa con iconos.
+     *
+     * <p>Sigue siendo necesario aunque el solver se haya ido: el módulo IA lo usa para su
+     * pre-validación (ver {@code HorarioIAServicio.validar}).
      */
     @GetMapping("/validar")
     public ResponseEntity<ResultadoValidacionDTO> validarFactibilidad(
@@ -158,12 +98,5 @@ public class HorarioControlador {
     public ResponseEntity<ResultadoManualDTO> aplicarCambiosManuales(
             @RequestBody SolicitudManualDTO solicitud) {
         return ResponseEntity.ok(horarioServicio.aplicarCambiosManuales(solicitud));
-    }
-
-    private String usuarioAutenticado(Authentication autenticacion) {
-        if (autenticacion != null && autenticacion.getPrincipal() instanceof ClaimsUsuario claims) {
-            return claims.correo();
-        }
-        return "desconocido";
     }
 }

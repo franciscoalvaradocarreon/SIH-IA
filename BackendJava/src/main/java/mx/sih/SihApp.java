@@ -16,10 +16,7 @@ import org.springframework.context.annotation.Configuration;
 @SpringBootApplication
 public class SihApp {
     public static void main(String[] args) {
-        System.setProperty("spring.autoconfigure.exclude", 
-            "ai.timefold.solver.spring.boot.autoconfigure.TimefoldSolverAutoConfiguration");
         SpringApplication.run(SihApp.class, args);
-                
     }
     
     

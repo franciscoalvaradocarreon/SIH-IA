@@ -6,10 +6,10 @@ import java.util.regex.Pattern;
 /**
  * REGLAS DEL GENERADOR IA — una sola fuente de verdad.
  *
- * <p>Este fichero existe para que las reglas del motor de IA no se separen de las que ya están
- * definidas en el solver de Timefold ({@code mx.sih.modelo.solver.HorarioConstraintProvider}). Cada
- * constante documenta de qué constraint del provider sale y con qué valor, así que si allí cambia un
- * peso, aquí se cambia igual y los dos motores siguen siendo comparables.
+ * <p>Este fichero es la UNICA fuente de verdad de las reglas del motor: el solver de Timefold se
+ * retiro, asi que ya no hay dos motores que mantener en sincronia. Cada peso documenta de donde sale
+ * (muchos vienen del modelo de constraints que usaba el solver, y su valor se conservo a proposito
+ * para que las puntuaciones sigan siendo comparables con las corridas anteriores).
  *
  * <h2>Reglas DURAS (nunca se puede violar)</h2>
  * <ol>
@@ -83,9 +83,8 @@ public final class ReglasIA {
      *       dejando horas fuera.</li>
      *   <li><b>= 3 (adyacencia) y por debajo de la forma</b>: es un desempate: decide entre
      *       colocaciones que cuestan lo mismo, pero no compra cobertura ni huecos con ella.</li>
-     *   <li><b>Igual que el solver</b> (3 allí, ver {@code HorarioConstraintProvider}), para que las
-     *       puntuaciones de los dos motores sigan siendo comparables: es el objetivo de este
-     *       fichero.</li>
+     *   <li><b>El mismo valor que tenia el solver</b> (3), conservado al retirarlo para que las
+     *       puntuaciones de las corridas anteriores sigan siendo comparables.</li>
      * </ul>
      * El desvío se acota solo: una materia con "1,1,1,1,1" y las cinco horas el mismo día desvía 8
      * (24 puntos), y a partir de ahí sale más barato seguir con otras materias que desarmar medias

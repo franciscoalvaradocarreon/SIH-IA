@@ -1,46 +1,7 @@
 import api from './axiosConfig';
-import type { AnalisisCuelloBotella, Horario, HorarioSolucion, ResultadoValidacion, TrabajoGeneracion } from '../types';
+import type { AnalisisCuelloBotella, Horario, ResultadoValidacion } from '../types';
 
 export const horarioService = {
-  generar: (grupoId: number, semestreId?: number) => {
-    const params = new URLSearchParams();
-    if (semestreId) params.set('semestreId', String(semestreId));
-    return api.post<HorarioSolucion>(
-      `/horarios/generar/${grupoId}${params.toString() ? `?${params.toString()}` : ''}`
-    );
-  },
-
-  /**
-   * Encola la generación masiva de horarios.
-   *
-   * El backend responde 202 con un trabajo en estado EN_COLA: el solver tarda hasta
-   * 300 s y antes esta petición se quedaba bloqueada todo ese tiempo (riesgo de
-   * timeout en navegador, proxy o balanceador). Hay que consultar el avance con
-   * consultarGeneracion() hasta que el estado sea COMPLETADO o ERROR.
-   */
-  generarTodos: (semestreId: number, turnoId?: number) => {
-    const params = new URLSearchParams();
-    params.set('semestreId', String(semestreId));
-    if (turnoId) params.set('turnoId', String(turnoId));
-    return api.post<TrabajoGeneracion>(`/horarios/generar-todos?${params.toString()}`);
-  },
-
-  /**
-   * Estado del trabajo de generación.
-   * Cuando estado = 'COMPLETADO' incluye el resultado completo en `resultado`.
-   */
-  consultarGeneracion: (trabajoId: string) =>
-    api.get<TrabajoGeneracion>(`/horarios/generar-todos/${encodeURIComponent(trabajoId)}`),
-
-  /**
-   * Termina la generación en curso conservando la MEJOR solución ya encontrada.
-   * El backend deja de lanzar intentos, guarda esa solución y el trabajo pasa a COMPLETADO.
-   */
-  terminarGeneracion: (trabajoId: string) =>
-    api.post<TrabajoGeneracion>(
-      `/horarios/generar-todos/${encodeURIComponent(trabajoId)}/terminar`
-    ),
-
   validar: (semestreId: number, turnoId?: number) => {
     const params = new URLSearchParams();
     params.set('semestreId', String(semestreId));

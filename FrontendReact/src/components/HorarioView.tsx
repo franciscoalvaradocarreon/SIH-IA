@@ -1,13 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { isAxiosError } from 'axios';
 import { horarioService } from '../api/horarioService';
 import { grupoService } from '../api/grupoService';
 import { turnoService } from '../api/turnoService';
 import { turnoHorarioService } from '../api/turnoHorarioService';
 import { disponibilidadGrupoService } from '../api/disponibilidadGrupoService';
 import { useAuth } from '../context/AuthContext';
-import type { Horario, Grupo, Turno, ClaseNoAsignada, TurnoHorario } from '../types';
+import type { Horario, Grupo, Turno, TurnoHorario } from '../types';
 import {
   MdRefresh, MdSchedule, MdClass, MdWarning,
   MdChevronLeft, MdChevronRight,
@@ -32,12 +31,9 @@ const HorarioView: React.FC = () => {
   const [horarios, setHorarios] = useState<Horario[]>([]);
   const [bloquesTurno, setBloquesTurno] = useState<TurnoHorario[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generando, setGenerando] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [bloquesConfigurados, setBloquesConfigurados] = useState<number | null>(null);
   const [validandoGrupo, setValidandoGrupo] = useState(false);
-  const [noAsignadas, setNoAsignadas] = useState<ClaseNoAsignada[]>([]);
 
   // Nonce para forzar recarga sin duplicar la lógica de carga
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -161,7 +157,6 @@ const HorarioView: React.FC = () => {
       setHorarios([]);
       setBloquesTurno([]);
       setBloquesConfigurados(null);
-      setNoAsignadas([]);
       return;
     }
 
@@ -174,7 +169,6 @@ const HorarioView: React.FC = () => {
       setLoading(true);
       setError('');
       setValidandoGrupo(true);
-      setNoAsignadas([]);
 
       const validacionPromise = disponibilidadGrupoService
         .contarDisponibles(grupoId, semestreId)
@@ -266,53 +260,7 @@ const HorarioView: React.FC = () => {
   };
 
   const handleRecargar = () => {
-    setNoAsignadas([]);
     setReloadNonce((n) => n + 1);
-  };
-
-  const handleGenerarHorario = async () => {
-    if (grupoSeleccionado === 0) {
-      setError('Selecciona un grupo');
-      return;
-    }
-    if (bloquesConfigurados === null || bloquesConfigurados === 0) {
-      setError(
-        `El grupo "${grupoActual?.nombre ?? ''}" no tiene bloques configurados ` +
-          `en este semestre. Configura su disponibilidad antes de generar el horario.`
-      );
-      return;
-    }
-
-    setGenerando(true);
-    setError('');
-    setSuccess('');
-    setNoAsignadas([]);
-
-    try {
-      const res = await horarioService.generar(grupoSeleccionado, semestreActivo!.id);
-      const data = res.data;
-
-      setSuccess(
-        `✅ Horario generado. Clases asignadas: ${data.totalClasesAsignadas}. ` +
-          (data.totalClasesNoAsignadas && data.totalClasesNoAsignadas > 0
-            ? `⚠️ ${data.totalClasesNoAsignadas} sin acomodar.`
-            : '') +
-          ` Score: ${data.score?.hardScore ?? 0} hard / ${data.score?.mediumScore ?? 0} medium / ${data.score?.softScore ?? 0} soft`
-      );
-
-      if (data.clasesNoAsignadas) setNoAsignadas(data.clasesNoAsignadas);
-
-      setReloadNonce((n) => n + 1);
-      setTimeout(() => setSuccess(''), 5000);
-    } catch (err: unknown) {
-      console.error('Error al generar horario:', err);
-      const msg = isAxiosError(err)
-        ? (err.response?.data as { message?: string } | undefined)?.message
-        : undefined;
-      setError(msg ?? 'Error al generar el horario');
-    } finally {
-      setGenerando(false);
-    }
   };
 
   // ── Guards de render ──
@@ -327,9 +275,6 @@ const HorarioView: React.FC = () => {
     );
   }
 
-  const generarDeshabilitado =
-    generando || grupoSeleccionado === 0 || bloquesConfigurados === 0;
-
   // ── Render ──
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -337,10 +282,10 @@ const HorarioView: React.FC = () => {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-800 dark:text-white">
-            Generador de Horarios
+            Horario por Grupo
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Selecciona un grupo para generar o visualizar su horario
+            Selecciona un grupo para ver su horario
             {turnoActual && (
               <span className="ml-2 text-indigo-600 dark:text-indigo-400 font-medium">
                 · Turno: {turnoActual.nombre}
@@ -359,18 +304,6 @@ const HorarioView: React.FC = () => {
           >
             <MdRefresh className="text-xl" />
             Recargar
-          </button>
-          <button
-            onClick={handleGenerarHorario}
-            disabled={generarDeshabilitado}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg shadow-md transition ${
-              generarDeshabilitado
-                ? 'bg-gray-400 cursor-not-allowed text-white'
-                : 'bg-green-600 hover:bg-green-700 text-white'
-            }`}
-          >
-            <MdSchedule className="text-xl" />
-            {generando ? 'Generando...' : 'Generar Horario'}
           </button>
         </div>
       </div>
@@ -467,72 +400,6 @@ const HorarioView: React.FC = () => {
           </div>
         </div>
 
-        {/* Clases no asignadas */}
-        {noAsignadas.length > 0 && (
-          <div className="mt-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 flex items-center gap-2">
-                <MdWarning className="text-2xl" />
-                Clases no acomodadas ({noAsignadas.length})
-              </h3>
-            </div>
-            <p className="text-sm text-red-700 dark:text-red-300 mb-4">
-              Estas clases no encontraron un bloque compatible. Revisa la
-              disponibilidad del grupo y del maestro, o ajusta las asignaciones.
-            </p>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-red-200 dark:divide-red-800">
-                <thead className="bg-red-100 dark:bg-red-900/30">
-                  <tr>
-                    {['Materia', 'Maestro', 'Aula', 'Motivo'].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-2 text-left text-xs font-medium text-red-700 dark:text-red-300 uppercase"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-red-200 dark:divide-red-800">
-                  {noAsignadas.map((n, idx) => (
-                    <tr
-                      key={`${n.materiaClave}-${idx}`}
-                      className="hover:bg-red-100/50 dark:hover:bg-red-900/20"
-                    >
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full"
-                            style={{ backgroundColor: '#dc2626' }}
-                          />
-                          <div>
-                            <div className="text-sm font-semibold text-gray-900 dark:text-white">
-                              {n.materiaClave}
-                            </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400">
-                              {n.materiaNombre}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                        {n.maestroNombre}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
-                        {n.aulaNombre}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-red-700 dark:text-red-300">
-                        {n.motivo}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
         {validandoGrupo && (
           <p className="mt-3 text-sm text-gray-500 dark:text-gray-400">
             Verificando disponibilidad del grupo...
@@ -576,12 +443,6 @@ const HorarioView: React.FC = () => {
             }`}
           >
             {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="mt-4 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 p-3 rounded-lg border border-green-200 dark:border-green-800">
-            {success}
           </div>
         )}
       </div>
@@ -698,7 +559,7 @@ const HorarioView: React.FC = () => {
           <p className="text-gray-500 dark:text-gray-400 mb-4">
             {turnoSeleccionado > 0
               ? `Este grupo del turno ${turnoActual?.nombre} no tiene horario generado aún.`
-              : 'Selecciona un grupo y presiona "Generar Horario" para crear su horario automáticamente.'}
+              : 'Selecciona un grupo para ver su horario.'}
           </p>
           {bloquesConfigurados === 0 && grupoSeleccionado > 0 && (
             <div className="inline-flex items-center gap-2 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 px-4 py-2 rounded-lg border border-yellow-200 dark:border-yellow-800">

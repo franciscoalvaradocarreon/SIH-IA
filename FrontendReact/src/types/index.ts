@@ -441,69 +441,6 @@ export interface Horario {
   semestreNombre?: string;
 }
 
-export interface HorarioSolucion {
-  grupoId: number;
-  grupoNombre?: string;
-  score: ScoreHardMediumSoft;
-  fechaGeneracion: string;
-  totalClasesAsignadas: number;
-  totalClasesNoAsignadas?: number;
-  clasesNoAsignadas?: ClaseNoAsignada[];
-  semestreId: number;
-  semestreNombre: string;
-}
-
-export interface HorarioSolucionMasiva {
-  semestreId: number;
-  semestreNombre: string;
-  fechaGeneracion: string;
-  score?: ScoreHardMediumSoft;
-  hardScore: number;
-  mediumScore: number;
-  softScore: number;
-  totalGrupos: number;
-  gruposConHorario: number;
-  gruposSinAsignaciones: number;
-  gruposSinDisponibilidad: number;
-  totalClasesAsignadas: number;
-  totalAsignaciones: number;
-  tiempoMs: number;
-  tiempoSegundos: number;
-  turnoId?: number;
-  turnoNombre?: string;
-  detalles: DetalleGrupo[];
-  factible: boolean;
-  motivoInfactibilidad?: string | null;
-  violacionesHard: ViolacionConstraint[];
-  detalleAsignaciones: DetalleAsignacion[];
-  conflictosDetectados: DetalleConflicto[];
-}
-
-/**
- * Trabajo de generación masiva de horarios (asíncrono).
- *
- * POST /api/horarios/generar-todos devuelve 202 con uno de estos trabajos; hay que
- * consultar su estado en GET /api/horarios/generar-todos/{id} hasta que pase a
- * COMPLETADO (el resultado viaja en `resultado`) o a ERROR (el motivo en `error`).
- */
-export interface TrabajoGeneracion {
-  id: string;
-  estado: 'EN_COLA' | 'EN_PROCESO' | 'COMPLETADO' | 'ERROR';
-  mensaje: string;
-  encoladoEn?: string;
-  iniciadoEn?: string | null;
-  finalizadoEn?: string | null;
-  segundosTranscurridos?: number;
-  /** Límite configurado del solver masivo, en segundos (lo publica el backend). */
-  limiteSegundos?: number;
-  semestreId?: number;
-  turnoId?: number | null;
-  solicitadoPor?: string;
-  error?: string | null;
-  /** Solo viene cuando estado = 'COMPLETADO'. */
-  resultado?: HorarioSolucionMasiva | null;
-}
-
 export interface ViolacionConstraint {
   constraint: string;
   detalle: string;

@@ -151,7 +151,8 @@ public interface AsignacionRepositorio extends JpaRepository<Asignacion, Long> {
     /**
      * 🔥 Obtener todas las asignaciones ACTIVAS de un grupo en un semestre específico.
      * Carga las relaciones necesarias (grupo, materia, maestro, aula, semestre)
-     * para evitar LazyInitializationException al construir el HorarioSolution.
+     * para evitar LazyInitializationException al recorrerlas fuera de la transacción: lo usa el
+     * generador IA al cargar los datos del semestre (ver HorarioIAServicio.cargarDatos).
      *
      * @param grupoId ID del grupo
      * @param semestreId ID del semestre

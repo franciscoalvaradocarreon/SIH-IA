@@ -126,7 +126,12 @@ BEGIN
        'menu(s) activo(s) sin ruta'),
       ('5f. Horario de asignaciones inexistentes',
        'SELECT count(*) FROM sih.horario h WHERE NOT EXISTS (SELECT 1 FROM sih.asignacion a WHERE a.asignacion_id = h.asignacion_id)',
-       'fila(s) de horario huerfanas')
+       'fila(s) de horario huerfanas'),
+      -- Migracion 07: la pantalla del generador automatico se retiro con el solver, y su
+      -- entrada del menu vive en la base. Si sigue activa, es un enlace roto.
+      ('5g. Menu hacia la pantalla retirada',
+       'SELECT count(*) FROM sih.menu WHERE activo AND ruta = ''/horarios/generador/automatico''',
+       'menu(s) activo(s) que apuntan al generador automatico, que ya no existe')
     ) v(titulo, sql, texto)
   LOOP
     n := NULL;
