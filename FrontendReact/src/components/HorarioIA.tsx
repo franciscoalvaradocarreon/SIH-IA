@@ -87,14 +87,14 @@ const HorarioIA: React.FC = () => {
   const [turnoSeleccionado, setTurnoSeleccionado] = useState(0);
 
   const [config, setConfig] = useState<ConfigIA>({
-    intentos: 6, segundosPorIntento: 60, maxPasos: 60000, llmConfigurado: false,
+    intentos: 12, segundosPorIntento: 500, maxPasos: 60000, llmConfigurado: false,
     modeloPorDefecto: '',
     // 1 hasta que responda el servidor: así la estimación nunca promete menos tiempo del real.
     hilos: 1,
   });
   const [modo, setModo] = useState<'heuristica' | 'llm'>('heuristica');
-  const [intentos, setIntentos] = useState(6);
-  const [segundos, setSegundos] = useState(60);
+  const [intentos, setIntentos] = useState(12);
+  const [segundos, setSegundos] = useState(500);
 
   // Clave del asesor IA: se pide al elegir el modo y vive SOLO en memoria, para esta generación.
   const [pedirClave, setPedirClave] = useState(false);
@@ -119,9 +119,9 @@ const HorarioIA: React.FC = () => {
   const [mostrarProblemas, setMostrarProblemas] = useState(false);
   const [abierto, setAbierto] = useState<number | null>(null);
 
-  // La lista de intentos se puede plegar: con 6 intentos ocupa media pantalla y, una vez elegido el
-  // que sirve, estorba para llegar a las corridas guardadas. Empieza desplegada para que se vean
-  // aparecer los intentos mientras genera.
+  // La lista de intentos se puede plegar: con 12 intentos ocupa mas de una pantalla y, una vez
+  // elegido el que sirve, estorba para llegar a las corridas guardadas. Empieza desplegada para que se
+  // vean aparecer los intentos mientras genera.
   const [intentosAbiertos, setIntentosAbiertos] = useState(true);
 
   // ── corridas guardadas ──

@@ -159,13 +159,13 @@ public class HorarioIATrabajoServicio {
     private final int hilos;
 
     public HorarioIATrabajoServicio(HorarioIAServicio servicio,
-                                    @Value("${app.ia.intentos:6}") int intentosPorDefecto,
-                                    @Value("${app.ia.segundos-por-intento:60}") int segundosPorIntentoDefecto,
+                                    @Value("${app.ia.intentos:12}") int intentosPorDefecto,
+                                    @Value("${app.ia.segundos-por-intento:500}") int segundosPorIntentoDefecto,
                                     @Value("${app.ia.max-pasos:60000}") int maxPasosDefecto,
                                     @Value("${app.ia.hilos:3}") int hilos) {
         this.servicio = servicio;
-        this.intentosPorDefecto = intentosPorDefecto <= 0 ? 6 : intentosPorDefecto;
-        this.segundosPorIntentoDefecto = segundosPorIntentoDefecto <= 0 ? 60 : segundosPorIntentoDefecto;
+        this.intentosPorDefecto = intentosPorDefecto <= 0 ? 12 : intentosPorDefecto;
+        this.segundosPorIntentoDefecto = segundosPorIntentoDefecto <= 0 ? 500 : segundosPorIntentoDefecto;
         this.maxPasosDefecto = maxPasosDefecto <= 0 ? 60000 : maxPasosDefecto;
         // Tope de 16 por si alguien escribe un número absurdo en la configuración: más hilos que
         // núcleos no acelera nada, solo reparte el mismo tiempo entre más intentos a medias.
