@@ -119,6 +119,11 @@ const HorarioIA: React.FC = () => {
   const [mostrarProblemas, setMostrarProblemas] = useState(false);
   const [abierto, setAbierto] = useState<number | null>(null);
 
+  // La lista de intentos se puede plegar: con 6 intentos ocupa media pantalla y, una vez elegido el
+  // que sirve, estorba para llegar a las corridas guardadas. Empieza desplegada para que se vean
+  // aparecer los intentos mientras genera.
+  const [intentosAbiertos, setIntentosAbiertos] = useState(true);
+
   // ── corridas guardadas ──
   // Son opciones APARTADAS: guardarlas NO toca el horario. Solo aplicarlas lo reescribe.
   const [corridas, setCorridas] = useState<CorridaIA[]>([]);
@@ -841,25 +846,43 @@ const HorarioIA: React.FC = () => {
             {trabajo.terminadoPorUsuario && ' · terminado por ti'}
           </p>
 
-          {/* lista de intentos */}
+          {/* lista de intentos, plegable */}
           {trabajo.intentos.length > 0 && (
-            <div className="mt-3 space-y-2">
-              {trabajo.intentos.map(it => (
-                <FichaIntento
-                  key={`${trabajo.id}-${it.numero}`}
-                  intento={it}
-                  esMejor={trabajo.mejorNumero === it.numero}
-                  registrado={trabajo.registrado === it.numero}
-                  abierto={abierto === it.numero}
-                  onAlternar={() => setAbierto(abierto === it.numero ? null : it.numero)}
-                  onRegistrar={() => registrar(it.numero)}
-                  registrando={registrando === it.numero}
-                  puedeRegistrar={!enCurso && trabajo.registrado == null}
-                  onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
-                  guardandoCorrida={guardandoCorrida === it.numero}
-                  mensaje={mensajeDeIntento(it.numero)}
-                />
-              ))}
+            <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-700">
+              <button
+                onClick={() => setIntentosAbiertos(v => !v)}
+                className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+              >
+                {intentosAbiertos ? <MdExpandLess /> : <MdExpandMore />}
+                Intentos ({trabajo.intentos.length})
+                {/* Plegada, la lista tiene que seguir diciendo lo esencial: cuál es el mejor. */}
+                {!intentosAbiertos && trabajo.mejorNumero != null && (
+                  <span className="font-normal text-gray-400 dark:text-gray-500">
+                    · mejor: intento {trabajo.mejorNumero}
+                  </span>
+                )}
+              </button>
+
+              {intentosAbiertos && (
+                <div className="mt-2 space-y-2">
+                  {trabajo.intentos.map(it => (
+                    <FichaIntento
+                      key={`${trabajo.id}-${it.numero}`}
+                      intento={it}
+                      esMejor={trabajo.mejorNumero === it.numero}
+                      registrado={trabajo.registrado === it.numero}
+                      abierto={abierto === it.numero}
+                      onAlternar={() => setAbierto(abierto === it.numero ? null : it.numero)}
+                      onRegistrar={() => registrar(it.numero)}
+                      registrando={registrando === it.numero}
+                      puedeRegistrar={!enCurso && trabajo.registrado == null}
+                      onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
+                      guardandoCorrida={guardandoCorrida === it.numero}
+                      mensaje={mensajeDeIntento(it.numero)}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
