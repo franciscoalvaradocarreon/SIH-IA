@@ -53,6 +53,8 @@ services:
       - ./db/07_quitar_solver.sql:/docker-entrypoint-initdb.d/07_quitar_solver.sql:ro
       # Reporte de maestros por materia: una FUNCION (no toca datos).
       - ./db/08_reporte_maestro_por_materia.sql:/docker-entrypoint-initdb.d/08_reporte_maestro_por_materia.sql:ro
+      # Entrada de menu del reporte nuevo (dato, no esquema).
+      - ./db/09_menu_reporte_maestros.sql:/docker-entrypoint-initdb.d/09_menu_reporte_maestros.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]
