@@ -636,7 +636,10 @@ const HorarioManual: React.FC = () => {
   const cancelarYSalir = () => {
     if (hayCambios && !window.confirm(`¿Salir y descartar ${cambios.length} cambio(s) sin guardar?`)) return;
     setCambios([]);
-    navigate('/horarios/generador/automatico');
+    /* Antes iba a /horarios/generador/automatico, que ya no existe: con el solver retirado
+       esa ruta solo caia en el catch-all del router ("Pagina no encontrada"). Salta al otro
+       generador, que es la pantalla hermana de este tablero. */
+    navigate('/horarios/generador/ia');
   };
 
   const enviar = async (soloValidar: boolean) => {
