@@ -824,10 +824,32 @@ const HorarioIA: React.FC = () => {
               {enCurso ? <MdHourglassEmpty className="animate-pulse text-indigo-600" /> : <MdAutoAwesome className="text-indigo-600" />}
               {trabajo.mensaje}
             </span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              {trabajo.estado} · {trabajo.segundosTranscurridos} s
-              {trabajo.error ? ` · ${trabajo.error}` : ''}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Plegada, aquí queda lo esencial de la lista: cuál es el mejor intento. */}
+              {!intentosAbiertos && trabajo.mejorNumero != null && (
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  mejor: intento {trabajo.mejorNumero}
+                </span>
+              )}
+              <span className="text-xs text-gray-500 dark:text-gray-400">
+                {trabajo.estado} · {trabajo.segundosTranscurridos} s
+                {trabajo.error ? ` · ${trabajo.error}` : ''}
+              </span>
+              {/* Plegar la lista es un BOTÓN, no una flechita suelta: el texto dice qué hace y se ve
+                  entre los demás controles. La flecha sola se perdía. Va a la derecha, con el resto. */}
+              {trabajo.intentos.length > 0 && (
+                <button
+                  onClick={() => setIntentosAbiertos(v => !v)}
+                  title={intentosAbiertos
+                    ? 'Ocultar la lista de intentos'
+                    : 'Mostrar la lista de intentos'}
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  {intentosAbiertos ? <MdExpandLess /> : <MdExpandMore />}
+                  {intentosAbiertos ? 'Ocultar intentos' : `Ver intentos (${trabajo.intentos.length})`}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Banda de progreso: segundos transcurridos contra el presupuesto de RELOJ
@@ -846,43 +868,25 @@ const HorarioIA: React.FC = () => {
             {trabajo.terminadoPorUsuario && ' · terminado por ti'}
           </p>
 
-          {/* lista de intentos, plegable */}
-          {trabajo.intentos.length > 0 && (
-            <div className="mt-3 border-t border-gray-200 pt-3 dark:border-gray-700">
-              <button
-                onClick={() => setIntentosAbiertos(v => !v)}
-                className="flex flex-wrap items-center gap-2 text-xs font-medium text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-              >
-                {intentosAbiertos ? <MdExpandLess /> : <MdExpandMore />}
-                Intentos ({trabajo.intentos.length})
-                {/* Plegada, la lista tiene que seguir diciendo lo esencial: cuál es el mejor. */}
-                {!intentosAbiertos && trabajo.mejorNumero != null && (
-                  <span className="font-normal text-gray-400 dark:text-gray-500">
-                    · mejor: intento {trabajo.mejorNumero}
-                  </span>
-                )}
-              </button>
-
-              {intentosAbiertos && (
-                <div className="mt-2 space-y-2">
-                  {trabajo.intentos.map(it => (
-                    <FichaIntento
-                      key={`${trabajo.id}-${it.numero}`}
-                      intento={it}
-                      esMejor={trabajo.mejorNumero === it.numero}
-                      registrado={trabajo.registrado === it.numero}
-                      abierto={abierto === it.numero}
-                      onAlternar={() => setAbierto(abierto === it.numero ? null : it.numero)}
-                      onRegistrar={() => registrar(it.numero)}
-                      registrando={registrando === it.numero}
-                      puedeRegistrar={!enCurso && trabajo.registrado == null}
-                      onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
-                      guardandoCorrida={guardandoCorrida === it.numero}
-                      mensaje={mensajeDeIntento(it.numero)}
-                    />
-                  ))}
-                </div>
-              )}
+          {/* lista de intentos: el botón de plegar está en la cabecera del recuadro, a la derecha */}
+          {intentosAbiertos && trabajo.intentos.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {trabajo.intentos.map(it => (
+                <FichaIntento
+                  key={`${trabajo.id}-${it.numero}`}
+                  intento={it}
+                  esMejor={trabajo.mejorNumero === it.numero}
+                  registrado={trabajo.registrado === it.numero}
+                  abierto={abierto === it.numero}
+                  onAlternar={() => setAbierto(abierto === it.numero ? null : it.numero)}
+                  onRegistrar={() => registrar(it.numero)}
+                  registrando={registrando === it.numero}
+                  puedeRegistrar={!enCurso && trabajo.registrado == null}
+                  onGuardarCorrida={(nombre) => guardarCorrida(it.numero, nombre)}
+                  guardandoCorrida={guardandoCorrida === it.numero}
+                  mensaje={mensajeDeIntento(it.numero)}
+                />
+              ))}
             </div>
           )}
 
