@@ -37,6 +37,17 @@ SELECT '1. TABLA FALTANTE', 'sih.' || e.n
  WHERE NOT EXISTS (SELECT 1 FROM information_schema.tables t
                     WHERE t.table_schema = 'sih' AND t.table_name = e.n);
 
+-- ── 1b) FUNCIONES OBLIGATORIAS ─────────────────────────────────────────────
+-- El reporte de maestros por materia es una FUNCION (db/08_reporte_maestro_por_materia.sql).
+-- Mismo criterio que con las tablas: si la migracion no se aplico en esta base, el QA
+-- tiene que decirlo en vez de dar el visto bueno.
+INSERT INTO qa_problemas (seccion, detalle)
+SELECT '1. FUNCION FALTANTE', 'sih.' || e.n
+  FROM (VALUES ('reporte_maestro_por_materia')) e(n)
+ WHERE NOT EXISTS (SELECT 1 FROM pg_proc p
+                     JOIN pg_namespace ns ON ns.oid = p.pronamespace
+                    WHERE ns.nspname = 'sih' AND p.proname = e.n);
+
 -- ── 2) RED DE SEGURIDAD CONTRA SOLAPES ─────────────────────────────────────
 -- Se exige indice UNIQUE PARCIAL por (columna, turno_horario_id) sobre version = 1.
 -- Equivale a la exclusion constraint, pero sin necesidad de btree_gist.
@@ -161,6 +172,12 @@ SELECT '2. RED DE SOLAPE' AS revision,
 
 SELECT '3. FILAS EN HORARIO' AS revision,
        COALESCE((SELECT count(*)::text FROM sih.horario WHERE version = 1), 'no revisable') || ' clase(s) en la version vigente' AS resultado;
+
+SELECT '4. REPORTE MAESTRO/MATERIA' AS revision,
+       CASE WHEN EXISTS (SELECT 1 FROM pg_proc p
+                           JOIN pg_namespace ns ON ns.oid = p.pronamespace
+                          WHERE ns.nspname = 'sih' AND p.proname = 'reporte_maestro_por_materia')
+            THEN 'funcion presente' ELSE 'NO existe la funcion' END AS resultado;
 
 -- ── 7) PROBLEMAS DETECTADOS ────────────────────────────────────────────────
 SELECT seccion, detalle FROM qa_problemas ORDER BY seccion, detalle;
