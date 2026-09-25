@@ -446,7 +446,7 @@ const HorarioIA: React.FC = () => {
             <MdScience className="text-indigo-600" /> Generador IA
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">
-            Motor propio, sin Timefold · semestre {semestreActivo.nombre}
+            Motor para diseño de horarios, semestre {semestreActivo.nombre}
           </p>
         </div>
         <div className="flex items-center gap-2 text-xs">
@@ -551,13 +551,12 @@ const HorarioIA: React.FC = () => {
               disabled={enCurso || !turnoListo}
             />
           </div>
-          <span className="text-xs text-gray-500 dark:text-gray-400">
-            son dos decisiones independientes: <strong>maestros</strong> reparte quién da cada materia
-            entre los que ya la imparten (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo
-            de Jóvenes por maestro) y <strong>talleres</strong> deja que el motor cambie el aula de una
-            sesión por otra de las que <strong>ya usa esa materia</strong> —no entre todas las aulas del
-            plantel—, en vez de respetar siempre la de la asignación. Con las dos apagadas el horario
-            sale como siempre
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            <strong>Maestros</strong> reparte quién da cada materia entre los que ya la imparten 
+            (Jóvenes: un maestro que dé otra clase en el grupo, y un grupo de Jóvenes por maestro) ----
+            <strong>Talleres</strong> deja que el motor cambie el aula (taller) entre las clases asignadas
+            —no entre todas las aulas del plantel—, en vez de respetar la de la asignación. Con las dos apagadas 
+            el horario sale como siempre.
           </span>
         </div>
 
@@ -1852,13 +1851,11 @@ const ListaCorridas: React.FC<{
         </button>
       </div>
 
-      <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-        Son opciones apartadas: no afectan al horario hasta que pulsas Aplicar. El motor considera mejor
+      <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        Son opciones guardadas: no afectan al horario hasta que pulsas Aplicar. El motor considera mejor
         la corrida sin problemas, con más horas colocadas, con menos pendientes y, a igualdad, mejor
-        score (medium). La columna Modo dice con qué banderas se generó cada una; «sin registrar» son
-        las guardadas antes de que se anotara ese dato. La corrida marcada «en el horario» es la que
-        está puesta ahora mismo: la marca se comprueba contra el horario real, así que desaparece sola
-        si alguien lo toca a mano.
+        score (medium). La columna Modo dice con qué banderas se generó cada una; La corrida marcada «en el horario» es la que
+        está puesta ahora mismo: la marca desaparece sola si alguien toca el horario a mano.
       </p>
 
       <AvisoAccion mensaje={mensaje} />
@@ -1870,7 +1867,7 @@ const ListaCorridas: React.FC<{
         </p>
       ) : (
         <div className="mt-3 overflow-x-auto">
-          <table className="min-w-full text-xs">
+          <table className="min-w-full text-sm">
             <thead>
               <tr className="border-b border-gray-200 text-left text-gray-500 dark:border-gray-600 dark:text-gray-400">
                 <th className="px-2 py-1 font-medium">Corrida</th>
@@ -1901,11 +1898,11 @@ const ListaCorridas: React.FC<{
                         </span>
                       )}
                     </span>
-                    <span className="block text-[11px] text-gray-500 dark:text-gray-400">
+                    <span className="block text-[13px] text-gray-500 dark:text-gray-400">
                       {texto(c.creadoPor, '—')} · {texto(c.asesor, '—')}
                     </span>
                     {c.notas && (
-                      <span className="block text-[11px] text-gray-500 dark:text-gray-400">{c.notas}</span>
+                      <span className="block text-[13px] text-gray-500 dark:text-gray-400">{c.notas}</span>
                     )}
                   </td>
                   <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreDeTurno(turnos, c.turnoId)}</td>
