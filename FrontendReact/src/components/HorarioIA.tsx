@@ -1087,7 +1087,7 @@ const FichaIntento: React.FC<{
           cierra al guardar: si no, el aviso de "nombre repetido" desaparecería con él. */}
       <AvisoAccion mensaje={mensaje} />
 
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 dark:text-gray-300">
         <span className="flex items-center gap-1">
           <MdClass /> {intento.horas}/{intento.horasDemandadas} h
         </span>
