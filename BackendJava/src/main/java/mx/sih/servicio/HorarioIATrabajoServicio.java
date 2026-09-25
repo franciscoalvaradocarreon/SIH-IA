@@ -387,7 +387,14 @@ public class HorarioIATrabajoServicio {
                         : "Intentos " + (lanzados + 1) + "-" + hasta + " de "
                                 + trabajo.intentosPlaneados + " en marcha";
 
-                boolean perfecto = false;
+                // NO hay corte anticipado: se lanzan SIEMPRE los intentos planeados y al final se elige
+                // el mejor. Antes se paraba en cuanto un intento colocaba todas las horas, y eso dejaba
+                // la busqueda a medias con huecos, arranques tarde y adyacencias encima de la mesa
+                // (medido: 183/188 materias, 20 de castigo de huecos, 9 adyacencias, medium -111, y con
+                // las horas TODAS colocadas). Decidir "esto ya es suficientemente bueno" a mitad de
+                // camino es justo lo que impide encontrar algo mejor, y ninguna condicion intermedia
+                // acierta: lo que parece bueno en el intento 2 puede quedar tercero en el 6.
+                // El unico corte es el del usuario, con el boton Terminar.
                 for (Future<IntentoIA> futuro : futuros) {
                     IntentoIA intento = recoger(futuro, trabajo);
                     if (intento == null) {
@@ -405,28 +412,9 @@ public class HorarioIATrabajoServicio {
                             trabajo.id, intento.getNumero(), intento.getHoras(),
                             intento.getHorasDemandadas(), intento.getPendientes().size(),
                             intento.getProblemas().size(), intento.getMedium());
-
-                    // SOLO se corta con un intento PERFECTO. Antes bastaba con que colocara todas las
-                    // horas, y eso dejaba la busqueda a medias con huecos, arranques tarde y
-                    // adyacencias sobre la mesa: un horario "completo" puede seguir siendo malo
-                    // (medido: 183/188 materias, 20 de castigo de huecos y 9 adyacencias, medium -111,
-                    // con las horas todas colocadas).
-                    //
-                    // medium es 0 justo cuando no queda NADA que mejorar: sin horas pendientes, sin
-                    // sesiones largas pendientes, sin arranques tarde, sin huecos, sin adyacencias y
-                    // con la distribucion pedida (ver ReglasIA.medium). Con cualquier otra cosa se
-                    // siguen lanzando intentos hasta agotar los planeados.
-                    if (intento.getProblemas().isEmpty() && intento.getMedium() >= 0) {
-                        perfecto = true;
-                    }
                 }
 
                 lanzados = hasta;
-                if (perfecto) {
-                    trabajo.mensaje = "Intento " + trabajo.mejorNumero
-                            + " es perfecto (medium 0): no queda nada que mejorar";
-                    break;
-                }
             }
 
             if (trabajo.intentos.isEmpty()) {
@@ -440,8 +428,11 @@ public class HorarioIATrabajoServicio {
                             + " intento(s)";
                 } else {
                     IntentoIA mejor = servicio.mejor(new ArrayList<>(trabajo.intentos.values()));
+                    // Se lanzaron TODOS los intentos planeados (ya no hay corte anticipado): el mensaje
+                    // resume el mejor de todos, con su medium, que es la estadistica que se compara.
                     trabajo.mensaje = "Listo: " + trabajo.intentos.size() + " intento(s), el mejor coloca "
                             + (mejor != null ? mejor.getHoras() : 0) + " h"
+                            + (mejor != null ? " (medium " + mejor.getMedium() + ")" : "")
                             + (mejor != null && !mejor.getPendientes().isEmpty()
                             ? " y deja " + mejor.getPendientes().size() + " pendientes" : "");
                 }
