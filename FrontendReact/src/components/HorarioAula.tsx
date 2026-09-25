@@ -387,12 +387,12 @@ const HorarioAula: React.FC = () => {
         )}
       </div>
 
-      {/* Matriz o mensajes vacíos */}
-      {cargandoHorario ? (
-        <div className="flex justify-center items-center h-48">
-          <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
-        </div>
-      ) : bloquesFilas.length > 0 && aulaActual ? (
+      {/* Matriz o mensajes vacíos.
+          Mismo cuidado que en la vista por maestro: si ya hay filas pintadas, la tabla NO se
+          desmonta mientras carga. Al quitarla la pagina encogia, el navegador recortaba el scroll
+          y al pulsar Anterior o Siguiente la vista saltaba al inicio. La vista por grupo nunca lo
+          hizo porque no oculta nada. El spinner centrado se reserva para la primera carga. */}
+      {bloquesFilas.length > 0 && aulaActual ? (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-400 dark:border-gray-700">
           {/* Header con info + navegación + total. Se queda PEGADO arriba mientras la tabla pasa
               por debajo (patrón de la caja de pines). Dos detalles que NO son opcionales:
@@ -465,8 +465,9 @@ const HorarioAula: React.FC = () => {
             </div>
           </div>
 
-          {/* Matriz (misma estructura que HorarioView) */}
-          <div className="overflow-x-auto">
+          {/* Matriz (misma estructura que HorarioView). Mientras carga se ATENUA en vez de
+              desaparecer: asi la altura de la pagina no cambia y el scroll se queda donde estaba. */}
+          <div className={`overflow-x-auto transition-opacity ${cargandoHorario ? 'opacity-40' : ''}`}>
             <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">
               <thead className="bg-gray-50 dark:bg-gray-700/50">
                 <tr>
@@ -495,6 +496,10 @@ const HorarioAula: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      ) : cargandoHorario ? (
+        <div className="flex justify-center items-center h-48">
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent"></div>
         </div>
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-12 text-center border border-gray-400 dark:border-gray-700">
