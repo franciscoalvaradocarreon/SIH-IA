@@ -401,21 +401,30 @@ public class HorarioIATrabajoServicio {
 
                     trabajo.mensaje = "Intento " + intento.getNumero() + " listo: "
                             + intento.getHoras() + "/" + intento.getHorasDemandadas() + " h";
-                    logger.info("Trabajo IA {} intento {}: {}/{} h, {} pendientes, {} problemas",
+                    logger.info("Trabajo IA {} intento {}: {}/{} h, {} pendientes, {} problemas, medium {}",
                             trabajo.id, intento.getNumero(), intento.getHoras(),
                             intento.getHorasDemandadas(), intento.getPendientes().size(),
-                            intento.getProblemas().size());
+                            intento.getProblemas().size(), intento.getMedium());
 
-                    // Basta con que UNO de la tanda coloque todo para no lanzar la siguiente.
-                    if (intento.getProblemas().isEmpty()
-                            && intento.getHoras() >= intento.getHorasDemandadas()) {
+                    // SOLO se corta con un intento PERFECTO. Antes bastaba con que colocara todas las
+                    // horas, y eso dejaba la busqueda a medias con huecos, arranques tarde y
+                    // adyacencias sobre la mesa: un horario "completo" puede seguir siendo malo
+                    // (medido: 183/188 materias, 20 de castigo de huecos y 9 adyacencias, medium -111,
+                    // con las horas todas colocadas).
+                    //
+                    // medium es 0 justo cuando no queda NADA que mejorar: sin horas pendientes, sin
+                    // sesiones largas pendientes, sin arranques tarde, sin huecos, sin adyacencias y
+                    // con la distribucion pedida (ver ReglasIA.medium). Con cualquier otra cosa se
+                    // siguen lanzando intentos hasta agotar los planeados.
+                    if (intento.getProblemas().isEmpty() && intento.getMedium() >= 0) {
                         perfecto = true;
                     }
                 }
 
                 lanzados = hasta;
                 if (perfecto) {
-                    trabajo.mensaje = "Intento " + trabajo.mejorNumero + " colocó todas las horas";
+                    trabajo.mensaje = "Intento " + trabajo.mejorNumero
+                            + " es perfecto (medium 0): no queda nada que mejorar";
                     break;
                 }
             }
