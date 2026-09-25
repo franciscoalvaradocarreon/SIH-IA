@@ -5,18 +5,11 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SIH - Sistema de Horarios</title>
-    <script>
-      (function () {
-        const storedTheme = localStorage.getItem('theme');
-        const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-        const theme = storedTheme || systemTheme;
-        if (theme === 'dark') {
-          document.documentElement.classList.add('dark');
-        } else {
-          document.documentElement.classList.remove('dark');
-        }
-      })();
-    </script>
+    <!-- Tema claro/oscuro antes de que cargue React, para que no parpadee en claro.
+         Va en un fichero aparte y NO en linea: una CSP con "script-src 'self'" (la inyectan
+         algunos antivirus con escudo web y extensiones del navegador) bloquea los scripts en
+         linea, y con el bloqueado el modo oscuro se perdia en cada refresco. -->
+    <script src="/theme.js"></script>
   </head>
   <body>
     <div id="root"></div>
