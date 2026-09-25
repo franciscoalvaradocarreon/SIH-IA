@@ -23,6 +23,18 @@ public interface CorridaIaDetalleRepositorio extends JpaRepository<CorridaIaDeta
            "ORDER BY d.asignacionId ASC, d.turnoHorarioId ASC")
     List<CorridaIaDetalle> listarPorCorrida(@Param("corridaId") Long corridaId);
 
+    /**
+     * Las filas de VARIAS corridas, en UNA consulta.
+     *
+     * <p>La usa el listado para comparar cada corrida con el horario vigente y saber cual esta
+     * aplicada. Cargarlas todas de golpe evita una consulta por corrida en una pantalla que puede
+     * tener una docena.
+     */
+    @Query("SELECT d FROM CorridaIaDetalle d " +
+           "WHERE d.corrida.corridaIaId IN :ids " +
+           "ORDER BY d.corrida.corridaIaId ASC, d.asignacionId ASC, d.turnoHorarioId ASC")
+    List<CorridaIaDetalle> listarPorCorridas(@Param("ids") Collection<Long> ids);
+
     /** Cuantas filas tiene guardadas una corrida. */
     @Query("SELECT COUNT(d) FROM CorridaIaDetalle d WHERE d.corrida.corridaIaId = :corridaId")
     long contarPorCorrida(@Param("corridaId") Long corridaId);

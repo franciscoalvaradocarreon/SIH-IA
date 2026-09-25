@@ -1856,7 +1856,9 @@ const ListaCorridas: React.FC<{
         Son opciones apartadas: no afectan al horario hasta que pulsas Aplicar. El motor considera mejor
         la corrida sin problemas, con más horas colocadas, con menos pendientes y, a igualdad, mejor
         score (medium). La columna Modo dice con qué banderas se generó cada una; «sin registrar» son
-        las guardadas antes de que se anotara ese dato.
+        las guardadas antes de que se anotara ese dato. La corrida marcada «en el horario» es la que
+        está puesta ahora mismo: la marca se comprueba contra el horario real, así que desaparece sola
+        si alguien lo toca a mano.
       </p>
 
       <AvisoAccion mensaje={mensaje} />
@@ -1888,7 +1890,17 @@ const ListaCorridas: React.FC<{
               {corridas.map(c => (
                 <tr key={c.id} className="border-b border-gray-100 last:border-0 dark:border-gray-700">
                   <td className="px-2 py-2">
-                    <span className="font-medium text-gray-900 dark:text-gray-100">{c.nombre}</span>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-medium text-gray-900 dark:text-gray-100">{c.nombre}</span>
+                      {/* Cual esta puesta en el horario ahora mismo. Se calcula comparando las filas
+                          con la version vigente, asi que la marca desaparece sola si el horario se
+                          toca a mano: no es una etiqueta que se quede pegada. */}
+                      {c.vigente && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-medium text-white">
+                          <MdCheckCircle /> en el horario
+                        </span>
+                      )}
+                    </span>
                     <span className="block text-[11px] text-gray-500 dark:text-gray-400">
                       {texto(c.creadoPor, '—')} · {texto(c.asesor, '—')}
                     </span>
@@ -1927,7 +1939,13 @@ const ListaCorridas: React.FC<{
                   </td>
                   <td className="px-2 py-2 text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {c.aplicable ? (
+                      {c.vigente ? (
+                        /* Ya es el horario, asi que no tiene sentido volver a aplicarla. Si alguien
+                           toca el horario a mano, vigente pasa a false y el boton vuelve solo. */
+                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          <MdCheckCircle /> Aplicada
+                        </span>
+                      ) : c.aplicable ? (
                         <button
                           onClick={() => onAplicar(c)}
                           disabled={aplicando === c.id}

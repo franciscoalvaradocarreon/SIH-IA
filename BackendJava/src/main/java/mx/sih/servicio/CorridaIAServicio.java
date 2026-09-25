@@ -8,8 +8,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.ia.IntentoIA;
@@ -17,9 +19,11 @@ import mx.sih.modelo.dto.CorridaIADTO;
 import mx.sih.modelo.entidad.CorridaIa;
 import mx.sih.modelo.entidad.CorridaIaDetalle;
 import mx.sih.modelo.entidad.Escuela;
+import mx.sih.modelo.entidad.Horario;
 import mx.sih.modelo.entidad.Semestre;
 import mx.sih.repositorio.CorridaIaDetalleRepositorio;
 import mx.sih.repositorio.CorridaIaRepositorio;
+import mx.sih.repositorio.HorarioRepositorio;
 
 /**
  * Guarda corridas del generador IA y las aplica al horario vigente.
@@ -56,13 +60,16 @@ public class CorridaIAServicio {
 
     private final CorridaIaRepositorio corridas;
     private final CorridaIaDetalleRepositorio detalles;
+    private final HorarioRepositorio horarioRepositorio;
     private final HorarioIAServicio horarioIAServicio;
 
     public CorridaIAServicio(CorridaIaRepositorio corridas,
                              CorridaIaDetalleRepositorio detalles,
+                             HorarioRepositorio horarioRepositorio,
                              HorarioIAServicio horarioIAServicio) {
         this.corridas = corridas;
         this.detalles = detalles;
+        this.horarioRepositorio = horarioRepositorio;
         this.horarioIAServicio = horarioIAServicio;
     }
 
@@ -154,7 +161,9 @@ public class CorridaIAServicio {
         logger.info("Corrida IA guardada: '{}' (id {}, {} bloques, {} h, semestre {})",
                 nombreLimpio, corrida.getCorridaIaId(), filas.size(), intento.getHoras(), semestreId);
 
-        return aDTO(corrida, filas.size());
+        // Recien guardada no puede ser ya el horario vigente: eso solo pasa al aplicarla, y quien lo
+        // comprueba es la lista (que es donde se muestra).
+        return aDTO(corrida, filas.size(), false);
     }
 
     // ============================================================
@@ -177,12 +186,70 @@ public class CorridaIAServicio {
         }
 
         Map<Long, Long> reales = contarBloquesReales(lista);
+        Set<Long> vigentes = corridasVigentes(escuelaId, semestreId, lista);
 
         List<CorridaIADTO> salida = new ArrayList<>(lista.size());
         for (CorridaIa c : lista) {
-            salida.add(aDTO(c, reales.getOrDefault(c.getCorridaIaId(), 0L)));
+            salida.add(aDTO(c, reales.getOrDefault(c.getCorridaIaId(), 0L),
+                    vigentes.contains(c.getCorridaIaId())));
         }
         return salida;
+    }
+
+    /**
+     * Cuales de esas corridas son EXACTAMENTE el horario vigente ahora mismo.
+     *
+     * <p>Se compara fila a fila contra la version 1 del horario, en vez de guardar una marca al
+     * aplicar. Cuesta un par de consultas, pero es lo unico que sigue diciendo la verdad si despues se
+     * toca el horario a mano: una marca solo diria "la ultima que aplique", aunque el horario ya no sea
+     * ese, y la pantalla estaria afirmando algo falso.
+     *
+     * <p>La comparacion es POR TURNO, que es justo el alcance que reescribe registrar(): las filas de
+     * la corrida tienen que ser exactamente las del turno, ni una de mas ni de menos.
+     */
+    private Set<Long> corridasVigentes(Long escuelaId, Long semestreId, List<CorridaIa> lista) {
+        // Claves del horario vigente, agrupadas por turno.
+        Map<Long, Set<String>> vigentePorTurno = new HashMap<>();
+        for (Horario h : horarioRepositorio.findByEscuelaIdAndSemestreId(escuelaId, semestreId)) {
+            if (h.getVersion() == null || h.getVersion() != 1 || h.getTurnoHorario() == null
+                    || h.getTurnoHorario().getTurno() == null || h.getAsignacion() == null) {
+                continue;
+            }
+            vigentePorTurno
+                    .computeIfAbsent(h.getTurnoHorario().getTurno().getTurnoId(), k -> new HashSet<>())
+                    .add(clave(h.getAsignacion().getAsignacionId(), h.getTurnoHorario().getId(),
+                            h.getMaestroId(), h.getAula() != null ? h.getAula().getAulaId() : null));
+        }
+        if (vigentePorTurno.isEmpty()) {
+            return Set.of();
+        }
+
+        // Claves de cada corrida de la lista, en UNA consulta.
+        List<Long> ids = new ArrayList<>(lista.size());
+        for (CorridaIa c : lista) {
+            ids.add(c.getCorridaIaId());
+        }
+        Map<Long, Set<String>> clavesPorCorrida = new HashMap<>();
+        for (CorridaIaDetalle d : detalles.listarPorCorridas(ids)) {
+            clavesPorCorrida
+                    .computeIfAbsent(d.getCorrida().getCorridaIaId(), k -> new HashSet<>())
+                    .add(clave(d.getAsignacionId(), d.getTurnoHorarioId(), d.getMaestroId(), d.getAulaId()));
+        }
+
+        Set<Long> vigentes = new HashSet<>();
+        for (CorridaIa c : lista) {
+            Set<String> suyas = clavesPorCorrida.get(c.getCorridaIaId());
+            if (suyas != null && !suyas.isEmpty() && c.getTurnoId() != null
+                    && suyas.equals(vigentePorTurno.getOrDefault(c.getTurnoId(), Set.of()))) {
+                vigentes.add(c.getCorridaIaId());
+            }
+        }
+        return vigentes;
+    }
+
+    /** Clave de una fila para comparar horarios: asignacion + bloque + maestro + aula. */
+    private static String clave(Long asignacionId, Long bloqueId, Long maestroId, Long aulaId) {
+        return asignacionId + "|" + bloqueId + "|" + maestroId + "|" + aulaId;
     }
 
     /**
@@ -364,7 +431,7 @@ public class CorridaIAServicio {
                 "No se pudo guardar la corrida por un problema de integridad de datos.", e);
     }
 
-    private static CorridaIADTO aDTO(CorridaIa c, long filasGuardadas) {
+    private static CorridaIADTO aDTO(CorridaIa c, long filasGuardadas, boolean vigente) {
         int problemas = c.getTotalProblemas() == null ? 0 : c.getTotalProblemas();
         boolean incompleta = c.getTotalFilas() != null && filasGuardadas != c.getTotalFilas();
 
@@ -406,6 +473,7 @@ public class CorridaIAServicio {
                 c.getTotalPendientes(),
                 c.getTotalProblemas(),
                 filasGuardadas,
+                vigente,
                 motivo == null,
                 motivo);
     }

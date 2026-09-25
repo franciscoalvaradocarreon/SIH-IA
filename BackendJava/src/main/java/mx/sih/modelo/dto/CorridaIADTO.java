@@ -55,6 +55,15 @@ public record CorridaIADTO(
          */
         long filasGuardadas,
 
+        /**
+         * true si el horario vigente de ese turno es EXACTAMENTE esta corrida.
+         *
+         * <p>Se comprueba al listar comparando las filas con la version 1 del horario, no con una marca
+         * guardada al aplicar: asi sigue siendo cierto aunque despues se toque el horario a mano, en
+         * cuyo caso ninguna corrida queda marcada (que es la verdad).
+         */
+        boolean vigente,
+
         /** false si tiene problemas duros o si el detalle quedo incompleto. */
         boolean aplicable,
 

@@ -259,6 +259,8 @@ export interface CorridaIA {
   totalProblemas: number;
   /** Bloques que hay guardados AHORA. Si no cuadra con totalFilas, la corrida esta incompleta. */
   filasGuardadas: number;
+  /** true si el horario vigente de ese turno es exactamente esta corrida. */
+  vigente: boolean;
   aplicable: boolean;
   /** Por que no se puede aplicar, listo para mostrar. null si si se puede. */
   motivoNoAplicable: string | null;
