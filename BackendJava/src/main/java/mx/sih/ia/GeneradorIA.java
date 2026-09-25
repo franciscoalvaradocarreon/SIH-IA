@@ -56,6 +56,15 @@ public class GeneradorIA {
     /** Cuántos ciclos extra seguidos sin mejora se toleran antes de declarar convergencia. */
     private static final int MAX_CICLOS_SIN_MEJORA = 5;
 
+    /**
+     * Tope de intentos de la jugada en cadena por par pegado.
+     *
+     * <p>Cada intento copia el estado entero (snapshot) y hace una búsqueda de hueco completa, así que
+     * se acota: esto corre dentro del bucle de separación y la ganancia tiene que salir a cuenta del
+     * tiempo que se le quite a lo demás.
+     */
+    private static final int MAX_INTENTOS_CADENA = 6;
+
     /** Un intento completo. */
     public IntentoIA generarIntento(DatosIA datos, int numero, int maxPasos, long semilla,
                                     int segundosMax, boolean asignarMaestros, boolean asignarAulas,
@@ -222,6 +231,19 @@ public class GeneradorIA {
     private static final class Sesion {
         final Asignacion asig;
         final long asigId;
+        /**
+         * Materia de la asignatura.
+         *
+         * <p>Existe porque la regla de adyacencia habla de "materias distintas", y una materia puede
+         * tener VARIAS asignaciones en el mismo grupo: 17 casos en el catalogo de este cliente, y en
+         * los 17 las dos asignaciones tienen el mismo maestro. Dos asignaciones de la misma materia
+         * puestas seguidas son una sesion doble, que es justo lo deseable.
+         *
+         * <p>Comparar por asignacion -como se hacia antes- las contaba como adyacencia, asi que el
+         * motor gastaba esfuerzo en separar lo que debe ir junto y la metrica salia inflada entre 1 y
+         * 3 pares por corrida.
+         */
+        final long matId;
         final int dur;
         final long gid;
         /** Maestro asignado. MUTABLE en el modo "maestros": el motor puede cambiarlo por otro del pool. */
@@ -241,6 +263,7 @@ public class GeneradorIA {
         Sesion(Asignacion a, int dur, Set<Long> stock, Set<Long> stockAulas, boolean jovenes) {
             this.asig = a;
             this.asigId = a.getAsignacionId();
+            this.matId = a.getMateria() != null ? a.getMateria().getMateriaId() : 0L;
             this.dur = dur;
             this.gid = a.getGrupo().getGrupoId();
             this.mid = a.getMaestro() != null ? a.getMaestro().getMaestroId() : 0L;
@@ -692,7 +715,7 @@ public class GeneradorIA {
                 }
                 Sesion a = occ[p];
                 Sesion b = occ[p + 1];
-                if (a != null && b != null && a.asigId != b.asigId && a.mid == b.mid) {
+                if (a != null && b != null && a.matId != b.matId && a.mid == b.mid) {
                     c += pesoAdyacencia;
                 }
             }
@@ -3298,7 +3321,11 @@ public class GeneradorIA {
                             if (par == null) {
                                 continue;
                             }
-                            if (separarPar(par.get(0), par.get(1)) || separarPar(par.get(1), par.get(0))) {
+                            // Primero el movimiento simple (una de las dos clases a otro hueco) y, si no
+                            // hay hueco, la jugada en cadena (sacar a un tercero para hacer sitio).
+                            if (separarPar(par.get(0), par.get(1)) || separarPar(par.get(1), par.get(0))
+                                    || separarParHaciendoSitio(par.get(0), par.get(1))
+                                    || separarParHaciendoSitio(par.get(1), par.get(0))) {
                                 enPasada++;
                             }
                         }
@@ -3349,7 +3376,7 @@ public class GeneradorIA {
                 }
                 Sesion a = occ[p];
                 Sesion b = occ[p + 1];
-                if (a != null && b != null && a.asigId != b.asigId && a.mid == b.mid) {
+                if (a != null && b != null && a.matId != b.matId && a.mid == b.mid) {
                     return List.of(a, b);
                 }
             }
@@ -3357,58 +3384,160 @@ public class GeneradorIA {
         }
 
         /**
-         * Separa un par pegado moviendo {@code s1} a OTRO día legal (donde grupo, maestro y aula
-         * estén libres y no se cree otra adyacencia). Las horas no cambian. Si no hay dónde, se
-         * revierte y devuelve false.
+         * ¿Cabe {@code s} en ese (día, ventana) EXACTO? Prueba su aula y los talleres del stock, y exige
+         * que no se cree otra adyacencia. Si cabe, la coloca y devuelve true.
+         *
+         * <p>Está extraído porque lo usan la separación normal y la jugada en cadena, y las dos tienen
+         * que decidir "¿cabe aquí?" con las mismas reglas.
+         */
+        boolean colocarEn(Sesion s, int d, Ventana v) {
+            // Una materia no puede repetir día (regla dura): si su asignación ya tiene sesión ese día,
+            // aquí no hay nada que buscar.
+            if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                return false;
+            }
+            if (!disponiblePorDisponibilidad(s, v)) {
+                return false;
+            }
+            // Además del bloque, se prueban los TALLERES del stock de la materia: en grupos amarrados a
+            // un aula compartida (p. ej. G1), el aula es justo lo que bloquea el movimiento aunque el
+            // maestro tenga toda la disponibilidad del mundo.
+            //
+            // Se prueban los del stock AUNQUE la bandera de talleres esté apagada, y es deliberado: esto
+            // es un rescate de ultimo recurso para despegar dos clases pegadas del mismo maestro, no la
+            // eleccion normal del aula. La bandera gobierna la eleccion normal (aulasCandidatas); si
+            // aqui se respetara, el par se quedaria pegado y la metrica de adyacencias subiria sin que
+            // el usuario hubiera pedido nada parecido.
+            List<Long> aulas = new ArrayList<>();
+            if (s.aid != 0) {
+                aulas.add(s.aid);
+            }
+            for (long al : s.stockAulas) {
+                if (!aulas.contains(al)) {
+                    aulas.add(al);
+                }
+            }
+            if (aulas.isEmpty()) {
+                aulas.add(0L);          // sin aula (stock vacío y asignación sin taller): como siempre
+            }
+
+            long aulaOrig = s.aid;
+            for (long al : aulas) {
+                s.aid = al;
+                boolean ok = true;
+                for (long bid : v.ids()) {
+                    if (ocupG.containsKey(clave(s.gid, bid)) || ocupM.containsKey(clave(s.mid, bid))
+                            || (s.aid != 0 && ocupA.containsKey(clave(s.aid, bid)))) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok) {
+                    continue;
+                }
+                if (creaAdyacencia(s, s.mid, d, v.pos())) {
+                    continue;
+                }
+                colocar(s, d, v);
+                return true;
+            }
+            s.aid = aulaOrig;
+            return false;
+        }
+
+        /** Primer sitio legal para {@code s} en cualquier día. La coloca; no la quita de donde esté. */
+        boolean colocarEnCualquierHueco(Sesion s) {
+            for (int d : dias) {
+                if (agotado()) {
+                    return false;
+                }
+                for (Ventana v : ventanasDe(s, d)) {
+                    if (colocarEn(s, d, v)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        /**
+         * Separa un par pegado moviendo {@code s1} a otro hueco legal (donde grupo, maestro y aula estén
+         * libres y no se cree otra adyacencia). Las horas no cambian. Si no hay dónde, se revierte y
+         * devuelve false.
          */
         boolean separarPar(Sesion s1, Sesion s2) {
             List<long[]> snap = snapshot();
             long[] orig = quitar(s1);
             long aulaOrig = s1.aid;
-            for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s1.asigId, d))) {
-                    continue;
-                }
-                for (Ventana v : ventanasDe(s1, d)) {
-                    if (!disponiblePorDisponibilidad(s1, v)) {
-                        continue;
-                    }
-                    // Además del bloque, se prueban los TALLERES del stock de la materia: en grupos
-                    // amarrados a un aula compartida (p. ej. G1), el aula es justo lo que bloquea el
-                    // movimiento aunque el maestro tenga toda la disponibilidad del mundo.
-                    //
-                    // Se prueban los del stock AUNQUE la bandera de talleres esté apagada, y es
-                    // deliberado: esto es un rescate de ultimo recurso para despegar dos clases
-                    // pegadas del mismo maestro, no la eleccion normal del aula. La bandera gobierna
-                    // la eleccion normal (aulasCandidatas); si aqui se respetara, el par se quedaria
-                    // pegado y la metrica de adyacencias subiria sin que el usuario hubiera pedido
-                    // nada parecido.
-                    for (long al : s1.stockAulas) {
-                        s1.aid = al;
-                        boolean ok = true;
-                        for (long bid : v.ids()) {
-                            if (ocupG.containsKey(clave(s1.gid, bid)) || ocupM.containsKey(clave(s1.mid, bid))
-                                    || (s1.aid != 0 && ocupA.containsKey(clave(s1.aid, bid)))) {
-                                ok = false;
-                                break;
-                            }
-                        }
-                        if (!ok) {
-                            continue;
-                        }
-                        if (creaAdyacencia(s1, s1.mid, d, v.pos())) {
-                            continue;
-                        }
-                        colocar(s1, d, v);
-                        return true;
-                    }
-                }
+            if (colocarEnCualquierHueco(s1)) {
+                return true;
             }
             s1.aid = aulaOrig;
             restaurar(s1, orig);
             if (orig == null) {
                 // no debería pasar (s1 estaba colocada), pero por si acaso se restaura todo
                 restaurarTodo(snap);
+            }
+            return false;
+        }
+
+        /**
+         * SEPARAR EL PAR HACIENDO SITIO (jugada en cadena).
+         *
+         * <p>{@link #separarPar} solo mueve una de las dos clases del par, así que fracasa cuando el
+         * maestro y el grupo no tienen ningún bloque libre en común. Medido en una corrida real: los
+         * cinco pares que quedaban tenían entre 23 y 36 bloques en común y CERO libres, porque el
+         * maestro está ocupado en todos ellos, muchas veces con el mismo grupo.
+         *
+         * <p>Esta jugada va un paso más allá: busca un bloque donde el par cabría si estuviera libre,
+         * saca de ahí a la clase que lo ocupa, la recoloca en otro sitio legal y mete al par en el hueco.
+         * Es un intercambio de tres, no de dos.
+         *
+         * <p>Va SIEMPRE dentro de un snapshot: si algo no sale, se restaura y no queda rastro. Y se
+         * acota el número de intentos, porque cada uno copia el estado entero y esto corre dentro del
+         * bucle de separación.
+         *
+         * @return true si consiguió separar el par
+         */
+        boolean separarParHaciendoSitio(Sesion s1, Sesion s2) {
+            int intentos = 0;
+            for (int d : dias) {
+                if (agotado() || intentos >= MAX_INTENTOS_CADENA) {
+                    break;
+                }
+                for (Ventana v : ventanasDe(s1, d)) {
+                    if (intentos >= MAX_INTENTOS_CADENA) {
+                        break;
+                    }
+                    if (!disponiblePorDisponibilidad(s1, v)) {
+                        continue;
+                    }
+                    // Quién ocupa ese hueco: las sesiones del grupo o del maestro en esos bloques. Solo
+                    // se intenta la cadena cuando bloquea UNA sola; con dos o más el intercambio se
+                    // enreda y la ganancia no compensa el coste.
+                    Set<Sesion> bloquean = new LinkedHashSet<>();
+                    for (long bid : v.ids()) {
+                        Sesion porGrupo = ocupG.get(clave(s1.gid, bid));
+                        Sesion porMaestro = ocupM.get(clave(s1.mid, bid));
+                        if (porGrupo != null && porGrupo != s1 && porGrupo != s2) {
+                            bloquean.add(porGrupo);
+                        }
+                        if (porMaestro != null && porMaestro != s1 && porMaestro != s2) {
+                            bloquean.add(porMaestro);
+                        }
+                    }
+                    if (bloquean.size() != 1) {
+                        continue;
+                    }
+                    Sesion x = bloquean.iterator().next();
+                    intentos++;
+                    List<long[]> snapX = snapshot();
+                    quitar(x);
+                    if (colocarEnCualquierHueco(x) && colocarEn(s1, d, v)) {
+                        return true;
+                    }
+                    restaurarTodo(snapX);
+                }
             }
             return false;
         }
@@ -3431,7 +3560,7 @@ public class GeneradorIA {
                 }
                 Sesion a = occ[p];
                 Sesion b = occ[p + 1];
-                if (a != null && b != null && a.asigId != b.asigId && a.mid == b.mid) {
+                if (a != null && b != null && a.matId != b.matId && a.mid == b.mid) {
                     n++;
                 }
             }
@@ -3447,7 +3576,7 @@ public class GeneradorIA {
             if (p > 0 && minutos(arr.get(p).getHoraInicio()) - minutos(arr.get(p - 1).getHoraFin())
                     <= ReglasIA.TOLERANCIA_ADYACENCIA_MIN) {
                 Sesion x = ocupG.get(clave(s.gid, arr.get(p - 1).getId()));
-                if (x != null && x != s && x.mid == m && x.asigId != s.asigId) {
+                if (x != null && x != s && x.mid == m && x.matId != s.matId) {
                     return true;
                 }
             }
@@ -3455,7 +3584,7 @@ public class GeneradorIA {
                     && minutos(arr.get(p + s.dur).getHoraInicio())
                     - minutos(arr.get(p + s.dur - 1).getHoraFin()) <= ReglasIA.TOLERANCIA_ADYACENCIA_MIN) {
                 Sesion y = ocupG.get(clave(s.gid, arr.get(p + s.dur).getId()));
-                if (y != null && y != s && y.mid == m && y.asigId != s.asigId) {
+                if (y != null && y != s && y.mid == m && y.matId != s.matId) {
                     return true;
                 }
             }
@@ -3530,7 +3659,7 @@ public class GeneradorIA {
                         }
                         Sesion a = occ[p];
                         Sesion b = occ[p + 1];
-                        if (a != null && b != null && a.asigId != b.asigId && a.mid == b.mid) {
+                        if (a != null && b != null && a.matId != b.matId && a.mid == b.mid) {
                             ady++;
                         }
                     }
