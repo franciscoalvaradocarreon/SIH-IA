@@ -57,6 +57,8 @@ services:
       - ./db/09_menu_reporte_maestros.sql:/docker-entrypoint-initdb.d/09_menu_reporte_maestros.sql:ro
       # Retirada del reporte viejo de materias por especialidad.
       - ./db/10_quitar_reporte_materias.sql:/docker-entrypoint-initdb.d/10_quitar_reporte_materias.sql:ro
+      # Copias del grupo (turno, especialidad, grado) en la tabla horario.
+      - ./db/11_horario_turno_especialidad.sql:/docker-entrypoint-initdb.d/11_horario_turno_especialidad.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]

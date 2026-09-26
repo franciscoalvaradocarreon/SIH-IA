@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { grupoService } from '../api/grupoService';
 import { turnoService } from '../api/turnoService';
 import { materiaService } from '../api/materiaService';
 import { horarioService } from '../api/horarioService';
 import { useAuth } from '../context/AuthContext';
-import type { Grupo, Horario, Materia, Turno } from '../types';
+import type { Horario, Materia, Turno } from '../types';
 import { MdPictureAsPdf, MdGridOn } from 'react-icons/md';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -26,14 +25,13 @@ import * as XLSX from 'xlsx';
  * plantel entero, así que la tabla sale ancha pero legible.
  *
  * De dónde sale cada dato:
- *   - Especialidad y grado: de los grupos (grupoService).
- *   - Materia gramo y apodo: del horario vigente (version = 1), que es el que se ve
- *     en pantalla. El apodo ya viene resuelto por el backend (maestroNombre usa el
- *     apodo y, si está vacío, el título + nombre completo: misma regla que el resto
- *     del sistema).
- *   - Horas: de la MATERIA (materias.horasSemana), no de la asignación. Se eligió
- *     así porque es un valor por materia y la tabla tiene una sola columna de horas;
- *     asignacion.horas cambia de un grupo a otro (en esta escuela, TICS va de 2 a 4).
+ *   - Todo del horario vigente (version = 1): cada fila ya trae turno, especialidad, grado y el
+ *     nombre del grupo, porque son columnas copiadas del grupo (db/11). Así el reporte no depende
+ *     de cruzar con la lista de grupos.
+ *   - El apodo del maestro también viene resuelto del backend.
+ *   - Horas: de la MATERIA (materias.horasSemana), no de la asignación. Se eligió así porque es un
+ *     valor por materia y la tabla tiene una sola columna de horas; asignacion.horas cambia de un
+ *     grupo a otro (en esta escuela, TICS va de 2 a 4).
  *
  * Salidas: pantalla (una tarjeta por especialidad), PDF con corte de hoja por
  * especialidad y Excel con una hoja por especialidad. Mismo patrón que el reporte
@@ -45,14 +43,7 @@ import * as XLSX from 'xlsx';
  */
 
 /** Nombre de la especialidad del grupo. La API la manda como TEXTO; se toleran las dos formas. */
-const especialidadDe = (g: Grupo | undefined): string => {
-  const esp = g?.especialidad as unknown;
-  if (typeof esp === 'string') return esp;
-  if (esp && typeof esp === 'object' && 'nombre' in esp) {
-    return String((esp as { nombre?: unknown }).nombre ?? '');
-  }
-  return '';
-};
+const SIN_ESPECIALIDAD = '(sin especialidad)';
 
 /** Una fila del bloque: una materia, con el apodo que le toca en cada grupo. */
 interface FilaBloque {
@@ -82,7 +73,6 @@ const nombreHoja = (texto: string): string =>
 
 const ReporteMaestrosPorEspecialidad: React.FC = () => {
   const { semestreActivo } = useAuth();
-  const [grupos, setGrupos] = useState<Grupo[]>([]);
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [materias, setMaterias] = useState<Materia[]>([]);
   const [horarios, setHorarios] = useState<Horario[]>([]);
@@ -94,13 +84,11 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
     (async () => {
       setLoading(true);
       try {
-        const [g, t, m, h] = await Promise.all([
-          grupoService.listar(0, 300, '', 0, semestreActivo.id),
+        const [t, m, h] = await Promise.all([
           turnoService.listar(0, 100, '', semestreActivo.id),
           materiaService.listar(0, 500, '', semestreActivo.id),
           horarioService.obtenerTodos(semestreActivo.id),
         ]);
-        setGrupos((g.data.content as Grupo[]).filter(x => x.activo));
         setTurnos(t.data.content.filter((x: Turno) => x.activo === true));
         setMaterias(m.data.content);
         setHorarios(h.data);
@@ -112,92 +100,77 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
     })();
   }, [semestreActivo?.id]);
 
-  /** Grupos del turno elegido (o todos). */
-  const gruposFiltrados = useMemo(
-    () => (turnoSeleccionado === 0 ? grupos : grupos.filter(g => g.turnoId === turnoSeleccionado)),
-    [grupos, turnoSeleccionado]
-  );
-
   /** Hasta que no se elija un turno no se habilitan las exportaciones (igual que el otro reporte). */
   const turnoListo = turnoSeleccionado > 0;
 
   /**
    * Arma la jerarquía completa: especialidad -> grado -> (materia x grupos).
-   * Se calcula de una vez y no por bloque, porque las exportaciones recorren lo mismo.
+   * Todo sale del horario vigente: cada fila ya trae turno, especialidad, grado y el nombre del
+   * grupo (columnas copiadas, db/11), así que no hace falta cruzar con la lista de grupos.
    */
   const secciones = useMemo<Seccion[]>(() => {
     const horasDe = new Map<string, number>();
     for (const m of materias) horasDe.set(m.clave, m.horasSemana);
 
-    // Solo el horario vigente: /horarios/todos devuelve todas las versiones.
-    const porGrupo = new Map<number, Horario[]>();
+    // especialidad -> grado -> { grupos y filas }. Los grupos salen de las propias filas: son las
+    // columnas que tendrá la tabla de ese bloque.
+    type Bloque = { grupos: Map<number, string>; filas: Map<string, FilaBloque> };
+    const arbol = new Map<string, Map<number, Bloque>>();
+
     for (const h of horarios) {
+      // /horarios/todos devuelve todas las versiones: solo vale la vigente.
       if (h.version !== 1) continue;
-      const arr = porGrupo.get(h.grupoId);
-      if (arr) arr.push(h);
-      else porGrupo.set(h.grupoId, [h]);
-    }
+      if (turnoSeleccionado !== 0 && h.turnoId !== turnoSeleccionado) continue;
 
-    // Especialidad -> grado -> grupos.
-    const porEspecialidad = new Map<string, Map<number, Grupo[]>>();
-    for (const g of gruposFiltrados) {
-      const esp = especialidadDe(g);
-      if (!esp) continue;
-      let porGrado = porEspecialidad.get(esp);
+      const esp = (h.especialidadNombre ?? '').trim() || SIN_ESPECIALIDAD;
+      const grado = h.grado ?? 0;
+
+      let porGrado = arbol.get(esp);
       if (!porGrado) {
-        porGrado = new Map<number, Grupo[]>();
-        porEspecialidad.set(esp, porGrado);
+        porGrado = new Map<number, Bloque>();
+        arbol.set(esp, porGrado);
       }
-      const arr = porGrado.get(g.grado);
-      if (arr) arr.push(g);
-      else porGrado.set(g.grado, [g]);
+      let bloque = porGrado.get(grado);
+      if (!bloque) {
+        bloque = { grupos: new Map(), filas: new Map() };
+        porGrado.set(grado, bloque);
+      }
+      bloque.grupos.set(h.grupoId, h.grupoNombre);
+
+      let fila = bloque.filas.get(h.materiaClave);
+      if (!fila) {
+        fila = {
+          clave: h.materiaClave,
+          materia: h.materiaNombre,
+          horas: horasDe.get(h.materiaClave) ?? 0,
+          maestros: {},
+        };
+        bloque.filas.set(h.materiaClave, fila);
+      }
+      // Una materia repartida entre dos maestros en el mismo grupo: los dos nombres, separados.
+      const previo = fila.maestros[h.grupoId];
+      fila.maestros[h.grupoId] = !previo
+        ? h.maestroNombre
+        : previo.includes(h.maestroNombre)
+          ? previo
+          : `${previo}, ${h.maestroNombre}`;
     }
 
+    // Se pasa a la forma que espera el render: grupos por nombre y materias por clave.
     const salida: Seccion[] = [];
-    for (const [esp, porGrado] of [...porEspecialidad.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    for (const [esp, porGrado] of [...arbol.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
       const bloques: BloqueGrado[] = [];
-
-      for (const [grado, gs] of [...porGrado.entries()].sort((a, b) => a[0] - b[0])) {
-        const gruposOrden = [...gs].sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-        // Una fila por materia; se van llenando las celdas de cada grupo.
-        const porClave = new Map<string, FilaBloque>();
-        for (const g of gruposOrden) {
-          for (const h of porGrupo.get(g.id) ?? []) {
-            let fila = porClave.get(h.materiaClave);
-            if (!fila) {
-              fila = {
-                clave: h.materiaClave,
-                materia: h.materiaNombre,
-                horas: horasDe.get(h.materiaClave) ?? 0,
-                maestros: {},
-              };
-              porClave.set(h.materiaClave, fila);
-            }
-            // Una materia repartida entre dos maestros en el mismo grupo: los dos apodos.
-            const previo = fila.maestros[g.id];
-            fila.maestros[g.id] = !previo
-              ? h.maestroNombre
-              : previo.includes(h.maestroNombre)
-                ? previo
-                : `${previo}, ${h.maestroNombre}`;
-          }
-        }
-
-        const filas = [...porClave.values()].sort((a, b) => a.clave.localeCompare(b.clave));
-        if (filas.length > 0) {
-          bloques.push({
-            grado,
-            grupos: gruposOrden.map(g => ({ id: g.id, nombre: g.nombre })),
-            filas,
-          });
-        }
+      for (const [grado, bloque] of [...porGrado.entries()].sort((a, b) => a[0] - b[0])) {
+        const grupos = [...bloque.grupos.entries()]
+          .map(([id, nombre]) => ({ id, nombre }))
+          .sort((a, b) => a.nombre.localeCompare(b.nombre));
+        const filas = [...bloque.filas.values()].sort((a, b) => a.clave.localeCompare(b.clave));
+        if (filas.length > 0) bloques.push({ grado, grupos, filas });
       }
-
       if (bloques.length > 0) salida.push({ nombre: esp, bloques });
     }
     return salida;
-  }, [gruposFiltrados, horarios, materias]);
+  }, [horarios, materias, turnoSeleccionado]);
 
   /** Encabezado común de un bloque: Materia, Horas y un campo por grupo. */
   const encabezado = (b: BloqueGrado): string[] => ['Materia', 'Horas', ...b.grupos.map(g => g.nombre)];

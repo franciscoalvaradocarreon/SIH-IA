@@ -757,6 +757,21 @@ public class HorarioServicio {
             dto.setSemestreId(h.getSemestre().getSemestreId());
             dto.setSemestreNombre(h.getSemestre().getNombre());
         }
+        // Turno, especialidad y grado: se leen del GRUPO, no de las columnas copiadas, para que la
+        // respuesta sea correcta aunque la fila la haya escrito una version anterior a db/11 (esas
+        // columnas podrian estar en NULL). El grupo ya se toca mas arriba en este metodo, asi que
+        // no anade ninguna consulta.
+        Grupo grupo = h.getGrupo();
+        if (grupo != null) {
+            dto.setGrado(grupo.getGrado());
+            if (grupo.getTurno() != null) {
+                dto.setTurnoId(grupo.getTurno().getTurnoId());
+            }
+            if (grupo.getEspecialidad() != null) {
+                dto.setEspecialidadId(grupo.getEspecialidad().getEspecialidadId());
+                dto.setEspecialidadNombre(grupo.getEspecialidad().getNombre());
+            }
+        }
         return dto;
     }
 
@@ -947,6 +962,8 @@ public class HorarioServicio {
             Horario nuevo = new Horario();
             nuevo.setEscuela(asignacion.getEscuela());
             nuevo.setGrupo(grupo);
+            // Turno, especialidad y grado del grupo (db/11), justo donde se fija el grupo.
+            nuevo.copiarDelGrupo();
             nuevo.setAsignacion(asignacion);
             nuevo.setTurnoHorario(bloque);
             nuevo.setAula(aula);

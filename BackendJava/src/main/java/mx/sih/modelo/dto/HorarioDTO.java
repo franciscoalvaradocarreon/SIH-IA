@@ -29,4 +29,11 @@ public class HorarioDTO {
     private Integer version;
     private Long semestreId;
     private String semestreNombre;
+
+    // Turno, especialidad y grado del grupo (columnas copiadas en horario, db/11). Se mandan ya
+    // resueltos para que las rejillas y los reportes no tengan que cruzar con la lista de grupos.
+    private Long turnoId;
+    private Long especialidadId;
+    private String especialidadNombre;
+    private Integer grado;
 }

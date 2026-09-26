@@ -1208,6 +1208,8 @@ public class HorarioIAServicio {
             Horario horario = new Horario();
             horario.setEscuela(escuela);
             horario.setGrupo(a.getGrupo());
+            // Turno, especialidad y grado del grupo (db/11), justo donde se fija el grupo.
+            horario.copiarDelGrupo();
             horario.setAsignacion(a);
             horario.setTurnoHorario(b);
             horario.setAula(a.getAula());

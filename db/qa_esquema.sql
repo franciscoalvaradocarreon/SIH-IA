@@ -90,9 +90,12 @@ SELECT '3. COLUMNA NULABLE', k.tabla || '.' || k.columna || ' permite NULL'
 
 -- Columnas que anaden las migraciones posteriores al volcado. Van en un bloque APARTE del de arriba
 -- a proposito: estas SI pueden ser NULL (una corrida guardada antes de que existiera el dato no
--- tiene forma de saberlo), asi que no pueden entrar en el chequeo de nulabilidad.
+-- tiene forma de saberlo, y las copias de horario de la 11 las escribe la aplicacion al insertar),
+-- asi que no pueden entrar en el chequeo de nulabilidad.
 WITH nuevas(tabla, columna) AS (
-  VALUES ('corrida_ia','asignar_maestros'), ('corrida_ia','asignar_aulas')
+  VALUES ('corrida_ia','asignar_maestros'), ('corrida_ia','asignar_aulas'),
+         -- db/11: copias del grupo en la propia fila de horario.
+         ('horario','turno_id'), ('horario','especialidad_id'), ('horario','grado')
 )
 INSERT INTO qa_problemas (seccion, detalle)
 SELECT '3. COLUMNA AUSENTE', n.tabla || '.' || n.columna
@@ -147,7 +150,12 @@ BEGIN
       -- de maestros por especialidad). Su entrada del menu tambien vive en la base.
       ('5h. Menu hacia el reporte retirado',
        'SELECT count(*) FROM sih.menu WHERE activo AND ruta = ''/reportes/materias-especialidad''',
-       'menu(s) activo(s) que apuntan al reporte de materias por especialidad, que ya no existe')
+       'menu(s) activo(s) que apuntan al reporte de materias por especialidad, que ya no existe'),
+      -- Migracion 11: horario guarda copias del grupo (turno, especialidad y grado). Son datos
+      -- repetidos a proposito, asi que aqui se vigila que no se queden viejos.
+      ('5i. Copias de horario desincronizadas',
+       'SELECT count(*) FROM sih.horario h JOIN sih.grupos g ON g.grupo_id = h.grupo_id WHERE h.turno_id IS DISTINCT FROM g.turno_id OR h.especialidad_id IS DISTINCT FROM g.especialidad_id OR h.grado IS DISTINCT FROM g.grado',
+       'clase(s) cuyo turno, especialidad o grado no coincide con el del grupo')
     ) v(titulo, sql, texto)
   LOOP
     n := NULL;

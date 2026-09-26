@@ -439,6 +439,15 @@ export interface Horario {
   version: number;
   semestreId?: number;
   semestreNombre?: string;
+  /**
+   * Turno, especialidad y grado del grupo de la clase. El backend los manda ya resueltos
+   * (columnas copiadas en horario, db/11) para no tener que cruzar con la lista de grupos.
+   * especialidadNombre puede venir null: hay grupos sin especialidad.
+   */
+  turnoId?: number;
+  especialidadId?: number;
+  especialidadNombre?: string | null;
+  grado?: number;
 }
 
 export interface ViolacionConstraint {
