@@ -33,7 +33,7 @@ import DisponibilidadMaestro from './components/DisponibilidadMaestro';
 import DisponibilidadMaestroForm from './components/DisponibilidadMaestroForm';
 import DisponibilidadGrupo from './components/DisponibilidadGrupo';
 import DisponibilidadGrupoForm from './components/DisponibilidadGrupoForm';
-import HorarioView from './components/HorarioView.tsx';
+import HorarioGrupo from './components/HorarioGrupo.tsx';
 import HorarioMaestroView from './components/HorarioMaestro.tsx';
 import HorarioIA from './components/HorarioIA';
 import HorarioManual from './components/HorarioManual';
@@ -152,9 +152,9 @@ function App() {
               <Route path="/horarios/disponibilidad-grupo/edit/:id" element={<DisponibilidadGrupoForm />} />
 
               {/* Horario View */}
-              <Route path="/horarios/view" element={<HorarioView />} />
-              <Route path="/horarios/maestro" element={<HorarioMaestroView />} />
-              <Route path="/horarios/aula" element={<HorarioAula />} />
+              <Route path="/vistas/grupo" element={<HorarioGrupo />} />
+              <Route path="/vistas/maestro" element={<HorarioMaestroView />} />
+              <Route path="/vistas/aula" element={<HorarioAula />} />
 
               {/* Generador de Horarios */}
               <Route path="/horarios/generador/ia" element={<HorarioIA />} />

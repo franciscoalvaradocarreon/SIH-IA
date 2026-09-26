@@ -465,7 +465,7 @@ const HorarioAula: React.FC = () => {
             </div>
           </div>
 
-          {/* Matriz (misma estructura que HorarioView). Mientras carga se ATENUA en vez de
+          {/* Matriz (misma estructura que HorarioGrupo). Mientras carga se ATENUA en vez de
               desaparecer: asi la altura de la pagina no cambia y el scroll se queda donde estaba. */}
           <div className={`overflow-x-auto transition-opacity ${cargandoHorario ? 'opacity-40' : ''}`}>
             <table className="min-w-full divide-y divide-gray-400 dark:divide-gray-700">

@@ -19,7 +19,7 @@ import {
   indexarHorarios,
 } from '../utils/horarioUtils';
 
-const HorarioView: React.FC = () => {
+const HorarioGrupo: React.FC = () => {
   const navigate = useNavigate();
   const { semestreActivo } = useAuth();
 
@@ -575,4 +575,4 @@ const HorarioView: React.FC = () => {
   );
 };
 
-export default HorarioView;
+export default HorarioGrupo;

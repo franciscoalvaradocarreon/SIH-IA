@@ -90,6 +90,9 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/10_quitar_reporte_materias.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/11_horario_turno_especialidad.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/12_reporte_cerebro.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/13_url_vista_grupo.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/14_url_vista_maestro.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/15_menu_vistas.sql
       - uses: actions/download-artifact@v4
         with:
           name: frontend-dist
@@ -145,6 +148,9 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/10_quitar_reporte_materias.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/11_horario_turno_especialidad.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/12_reporte_cerebro.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/13_url_vista_grupo.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/14_url_vista_maestro.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/15_menu_vistas.sql
 
       - name: QA del esquema (el veredicto es un gate)
         run: |

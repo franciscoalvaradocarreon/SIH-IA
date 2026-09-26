@@ -61,6 +61,12 @@ services:
       - ./db/11_horario_turno_especialidad.sql:/docker-entrypoint-initdb.d/11_horario_turno_especialidad.sql:ro
       # El reporte de maestros por especialidad pasa a llamarse Reporte Cerebro.
       - ./db/12_reporte_cerebro.sql:/docker-entrypoint-initdb.d/12_reporte_cerebro.sql:ro
+      # La vista por grupo cambia de URL (/horarios/view -> /vistas/grupo).
+      - ./db/13_url_vista_grupo.sql:/docker-entrypoint-initdb.d/13_url_vista_grupo.sql:ro
+      # La vista por maestro cambia de URL (/horarios/maestro -> /vistas/maestro).
+      - ./db/14_url_vista_maestro.sql:/docker-entrypoint-initdb.d/14_url_vista_maestro.sql:ro
+      # La vista por aula cambia de URL y se corrige el nombre "Vista Mestros".
+      - ./db/15_menu_vistas.sql:/docker-entrypoint-initdb.d/15_menu_vistas.sql:ro
 
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-User_app} -d ${DB_NAME:-SIH}"]
