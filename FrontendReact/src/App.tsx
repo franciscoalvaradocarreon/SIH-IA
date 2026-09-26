@@ -41,7 +41,7 @@ import SemestreForm from './components/SemestreForm.tsx';
 import Semestre from './components/Semestre.tsx';
 import HorarioAula from './components/HorarioAula.tsx';
 import ReporteHorariosGrupos from './components/ReporteHorarioGrupos.tsx';
-import ReporteMaestrosPorEspecialidad from './components/ReporteMaestrosPorEspecialidad';
+import ReporteCerebro from './components/ReporteCerebro';
 import RecuperarPassword from './components/RecuperarPassword.tsx';
 import RestablecerPassword from './components/RestablecerPassword.tsx';
 
@@ -162,7 +162,7 @@ function App() {
 
               {/* Reportes */}
               <Route path="/reportes/horario-grupos" element={<ReporteHorariosGrupos />} />
-              <Route path="/reportes/maestros-especialidad" element={<ReporteMaestrosPorEspecialidad />} />
+              <Route path="/reportes/maestros-especialidad" element={<ReporteCerebro />} />
 
               {/* Agrega más rutas aquí */}
             </Route>

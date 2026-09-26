@@ -78,7 +78,7 @@ interface Seccion {
 const nombreHoja = (texto: string): string =>
   (texto || 'Especialidad').slice(0, 31).replace(/[\\/?*[\]:]/g, '');
 
-const ReporteMaestrosPorEspecialidad: React.FC = () => {
+const ReporteCerebro: React.FC = () => {
   const { semestreActivo } = useAuth();
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [materias, setMaterias] = useState<Materia[]>([]);
@@ -401,4 +401,4 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
   );
 };
 
-export default ReporteMaestrosPorEspecialidad;
+export default ReporteCerebro;
