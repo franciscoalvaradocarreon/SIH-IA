@@ -52,6 +52,17 @@ const SIN_ESPECIALIDAD = '(sin especialidad)';
  */
 const ALTO_BLOQUE_MM = 85;
 
+/**
+ * Ancho fijo de las dos primeras columnas de la tabla en pantalla: Materia (w-80 = 320 px) y Horas
+ * (w-16 = 64 px), en clases estándar de Tailwind.
+ *
+ * Sin esto, cada bloque reparte sus columnas según el nombre de materia más largo que le toque, así
+ * que los bloques de una misma pantalla no cuadran entre sí y la materia se come el espacio de los
+ * grupos. Con la tabla en 'table-fixed' y estas dos fijadas, lo que sobra se reparte a partes
+ * iguales entre las columnas de grupo, que es lo que se busca.
+ */
+const ANCHO_COLUMNA: Record<number, string> = { 0: 'w-80', 1: 'w-16' };
+
 /** Una fila del bloque: una materia, con el apodo que le toca en cada grupo. */
 interface FilaBloque {
   clave: string;
@@ -354,13 +365,13 @@ const ReporteCerebro: React.FC = () => {
                 Grado de Semestre {b.grado}
               </h3>
               <div className="overflow-x-auto">
-                <table className="min-w-full text-sm border-collapse">
+                <table className="min-w-full text-sm border-collapse table-fixed">
                   <thead className="bg-gray-100 dark:bg-gray-700/50">
                     <tr>
                       {encabezado(b).map((t, i) => (
                         <th
                           key={i}
-                          className={`px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700 ${
+                          className={`px-3 py-2 font-semibold text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700 ${ANCHO_COLUMNA[i] ?? ''} ${
                             i === 1 ? 'text-center' : 'text-left'
                           }`}
                         >
@@ -375,9 +386,9 @@ const ReporteCerebro: React.FC = () => {
                         {renglon(f, b).map((v, i) => (
                           <td
                             key={i}
-                            className={`px-3 py-2 border border-gray-400 dark:border-gray-700 ${
+                            className={`px-3 py-2 border border-gray-400 dark:border-gray-700 ${ANCHO_COLUMNA[i] ?? ''} ${
                               i === 1 ? 'text-center text-gray-700 dark:text-gray-300' : 'text-gray-800 dark:text-gray-100'
-                            }`}
+                            } ${i === 0 ? 'break-words' : ''}`}
                           >
                             {v}
                           </td>
