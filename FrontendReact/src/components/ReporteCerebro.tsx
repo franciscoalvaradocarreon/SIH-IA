@@ -312,7 +312,7 @@ const ReporteCerebro: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Reporte Cerebro</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              Por especialidad, grado, materia, horas y quién la impartre grupo · {semestreActivo?.nombre}
+              Por especialidad, grado, materia, horas y quién la imparte por grupo · {semestreActivo?.nombre}
             </p>
           </div>
           <label className="flex flex-col text-sm text-gray-600 dark:text-gray-300">
