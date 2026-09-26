@@ -147,13 +147,15 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
         };
         bloque.filas.set(h.materiaClave, fila);
       }
-      // Una materia repartida entre dos maestros en el mismo grupo: los dos nombres, separados.
+      // Nombre corto del maestro de la fila: el apodo (o el nombre completo si no tiene). Es el que
+      // cabe en una celda de esta tabla, que tiene 1-3 columnas de grupo.
+      const nombre = h.maestroApodo?.trim() || h.maestroNombre;
       const previo = fila.maestros[h.grupoId];
       fila.maestros[h.grupoId] = !previo
-        ? h.maestroNombre
-        : previo.includes(h.maestroNombre)
+        ? nombre
+        : previo.includes(nombre)
           ? previo
-          : `${previo}, ${h.maestroNombre}`;
+          : `${previo}, ${nombre}`;
     }
 
     // Se pasa a la forma que espera el render: grupos por nombre y materias por clave.

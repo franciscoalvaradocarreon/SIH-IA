@@ -429,6 +429,8 @@ export interface Horario {
   materiaClave: string;
   maestroId: number;
   maestroNombre: string;
+  /** Nombre corto del maestro de la fila (apodo, o el nombre completo si no tiene). */
+  maestroApodo?: string | null;
   turnoHorarioId: number;
   diaSemana: number;
   horaInicio: string;

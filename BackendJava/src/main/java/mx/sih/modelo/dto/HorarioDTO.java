@@ -19,6 +19,9 @@ public class HorarioDTO {
     private String materiaClave;
     private Long maestroId;
     private String maestroNombre;
+    // Nombre corto del maestro de la fila (apodo, o el nombre completo si no tiene). Es el que usan
+    // las tablas apretadas, como el reporte de maestros por especialidad.
+    private String maestroApodo;
     private Long turnoHorarioId;
     private Integer diaSemana;
     private String horaInicio;

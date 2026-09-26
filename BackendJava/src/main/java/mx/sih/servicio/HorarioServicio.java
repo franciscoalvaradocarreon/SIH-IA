@@ -43,6 +43,7 @@ public class HorarioServicio {
     private final DisponibilidadMaestroRepositorio disponibilidadRepositorio;
     private final DisponibilidadGrupoRepositorio disponibilidadGrupoRepositorio;
     private final AulaRepositorio aulaRepositorio;
+    private final MaestroRepositorio maestroRepositorio;
 
     public HorarioServicio(AsignacionRepositorio asignacionRepositorio,
                            TurnoHorarioRepositorio turnoHorarioRepositorio,
@@ -51,7 +52,8 @@ public class HorarioServicio {
                            SemestreRepositorio semestreRepositorio,
                            DisponibilidadMaestroRepositorio disponibilidadRepositorio,
                            DisponibilidadGrupoRepositorio disponibilidadGrupoRepositorio,
-                           AulaRepositorio aulaRepositorio) {
+                           AulaRepositorio aulaRepositorio,
+                           MaestroRepositorio maestroRepositorio) {
         this.asignacionRepositorio = asignacionRepositorio;
         this.turnoHorarioRepositorio = turnoHorarioRepositorio;
         this.horarioRepositorio = horarioRepositorio;
@@ -60,6 +62,7 @@ public class HorarioServicio {
         this.disponibilidadRepositorio = disponibilidadRepositorio;
         this.disponibilidadGrupoRepositorio = disponibilidadGrupoRepositorio;
         this.aulaRepositorio = aulaRepositorio;
+        this.maestroRepositorio = maestroRepositorio;
     }
 
     private Long getEscuelaId() {
@@ -93,7 +96,9 @@ public class HorarioServicio {
         Semestre semestre = resolverSemestre(escuelaId, semestreIdParam);
         List<Horario> horarios = horarioRepositorio.findByGrupoIdAndSemestreId(
                 grupoId, escuelaId, semestre.getSemestreId());
-        return horarios.stream().map(this::toDTO).collect(Collectors.toList());
+        // Los maestros se cargan UNA vez por consulta, no por fila.
+        Map<Long, Maestro> maestrosDeFilas = maestrosDeLasFilas(horarios);
+        return horarios.stream().map(h -> toDTO(h, maestrosDeFilas)).collect(Collectors.toList());
     }
 
     public List<HorarioDTO> obtenerHorarioMaestro(Long maestroId, Long semestreIdParam) {
@@ -101,7 +106,9 @@ public class HorarioServicio {
         Semestre semestre = resolverSemestre(escuelaId, semestreIdParam);
         List<Horario> horarios = horarioRepositorio.findByMaestroIdAndSemestreId(
                 maestroId, escuelaId, semestre.getSemestreId());
-        return horarios.stream().map(this::toDTO).collect(Collectors.toList());
+        // Los maestros se cargan UNA vez por consulta, no por fila.
+        Map<Long, Maestro> maestrosDeFilas = maestrosDeLasFilas(horarios);
+        return horarios.stream().map(h -> toDTO(h, maestrosDeFilas)).collect(Collectors.toList());
     }
 
     public List<HorarioDTO> obtenerHorarioAula(Long aulaId, Long semestreIdParam) {
@@ -109,7 +116,9 @@ public class HorarioServicio {
         Semestre semestre = resolverSemestre(escuelaId, semestreIdParam);
         List<Horario> horarios = horarioRepositorio.findByAulaIdAndSemestreId(
                 aulaId, escuelaId, semestre.getSemestreId());
-        return horarios.stream().map(this::toDTO).collect(Collectors.toList());
+        // Los maestros se cargan UNA vez por consulta, no por fila.
+        Map<Long, Maestro> maestrosDeFilas = maestrosDeLasFilas(horarios);
+        return horarios.stream().map(h -> toDTO(h, maestrosDeFilas)).collect(Collectors.toList());
     }
 
     public List<HorarioDTO> obtenerTodosLosHorarios(Long semestreIdParam) {
@@ -117,7 +126,9 @@ public class HorarioServicio {
         Semestre semestre = resolverSemestre(escuelaId, semestreIdParam);
         List<Horario> horarios = horarioRepositorio.findByEscuelaIdAndSemestreId(
                 escuelaId, semestre.getSemestreId());
-        return horarios.stream().map(this::toDTO).collect(Collectors.toList());
+        // Los maestros se cargan UNA vez por consulta, no por fila.
+        Map<Long, Maestro> maestrosDeFilas = maestrosDeLasFilas(horarios);
+        return horarios.stream().map(h -> toDTO(h, maestrosDeFilas)).collect(Collectors.toList());
     }
 
     // ============================================================
@@ -735,7 +746,7 @@ public class HorarioServicio {
     // ============================================================
     // CONVERSIÓN
     // ============================================================
-    private HorarioDTO toDTO(Horario h) {
+    private HorarioDTO toDTO(Horario h, Map<Long, Maestro> maestros) {
         HorarioDTO dto = new HorarioDTO();
         dto.setId(h.getHorarioId());
         dto.setGrupoId(h.getGrupo().getGrupoId());
@@ -744,7 +755,13 @@ public class HorarioServicio {
         dto.setMateriaNombre(h.getAsignacion().getMateria().getNombre());
         dto.setMateriaClave(h.getAsignacion().getMateria().getClave());
         dto.setMaestroId(h.getMaestroId());
-        dto.setMaestroNombre(h.getAsignacion().getMaestro().getTituloNombreCompleto());
+        // El maestro de la CLASE es el de la fila (maestroId), no el de la asignacion: con la bandera
+        // "asignar maestros desde el stock" el motor puede poner a otro, y antes el nombre salia del
+        // titular mientras el id decia otra cosa. Si el id no esta en el mapa (dato viejo), se cae al
+        // de la asignacion para no dejar la celda vacia.
+        Maestro maestro = maestros.getOrDefault(h.getMaestroId(), h.getAsignacion().getMaestro());
+        dto.setMaestroNombre(maestro.getTituloNombreCompleto());
+        dto.setMaestroApodo(nombreCorto(maestro));
         dto.setTurnoHorarioId(h.getTurnoHorario().getId());
         dto.setDiaSemana(h.getTurnoHorario().getDiaSemana());
         dto.setHoraInicio(h.getTurnoHorario().getHoraInicio().toString());
@@ -773,6 +790,40 @@ public class HorarioServicio {
             }
         }
         return dto;
+    }
+
+    /**
+     * Maestros de esas filas, por id, en UNA consulta. El horario se lee en bloque (cientos de
+     * filas): resolver el maestro fila a fila seria una consulta por fila.
+     */
+    private Map<Long, Maestro> maestrosDeLasFilas(List<Horario> horarios) {
+        Set<Long> ids = new HashSet<>();
+        for (Horario h : horarios) {
+            if (h.getMaestroId() != null) {
+                ids.add(h.getMaestroId());
+            }
+        }
+        Map<Long, Maestro> porId = new HashMap<>();
+        if (ids.isEmpty()) {
+            return porId;
+        }
+        for (Maestro m : maestroRepositorio.findAllById(ids)) {
+            porId.put(m.getMaestroId(), m);
+        }
+        return porId;
+    }
+
+    /**
+     * Nombre corto del maestro: el apodo y, si esta vacio, el nombre completo. Es la MISMA regla que
+     * el tablero manual en el frontend y que el reporte de la base (db/08), para que todas las
+     * pantallas digan lo mismo.
+     */
+    private static String nombreCorto(Maestro maestro) {
+        if (maestro == null) {
+            return null;
+        }
+        String apodo = maestro.getApodo();
+        return (apodo != null && !apodo.isBlank()) ? apodo.trim() : maestro.getTituloNombreCompleto();
     }
 
     // ============================================================
@@ -1205,9 +1256,7 @@ public class HorarioServicio {
         }
         String maestro = "sin maestro";
         if (asignacion.getMaestro() != null) {
-            String apodo = asignacion.getMaestro().getApodo();
-            maestro = (apodo != null && !apodo.isBlank())
-                    ? apodo : asignacion.getMaestro().getTituloNombreCompleto();
+            maestro = nombreCorto(asignacion.getMaestro());
         }
         return claveMateria(asignacion) + " (" + maestro + ")";
     }
