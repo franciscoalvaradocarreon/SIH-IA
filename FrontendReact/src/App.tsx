@@ -162,7 +162,7 @@ function App() {
 
               {/* Reportes */}
               <Route path="/reportes/horario-grupos" element={<ReporteHorariosGrupos />} />
-              <Route path="/reportes/maestros-especialidad" element={<ReporteCerebro />} />
+              <Route path="/reportes/cerebro" element={<ReporteCerebro />} />
 
               {/* Agrega más rutas aquí */}
             </Route>

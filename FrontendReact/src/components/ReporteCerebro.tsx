@@ -10,7 +10,7 @@ import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
 
 /**
- * REPORTE DE MAESTROS POR ESPECIALIDAD Y GRADO.
+ * REPORTE CEREBRO: MAESTROS POR ESPECIALIDAD Y GRADO.
  *
  * Por cada especialidad y, dentro de ella, por cada grado de semestre, una tabla:
  *
@@ -294,7 +294,7 @@ const ReporteCerebro: React.FC = () => {
       <div className="no-print bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-400 dark:border-gray-700">
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Maestros por especialidad</h1>
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Reporte Cerebro</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               Por especialidad y grado: materia, horas y quién la da en cada grupo · {semestreActivo?.nombre}
             </p>

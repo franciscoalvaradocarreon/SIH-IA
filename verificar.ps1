@@ -70,7 +70,7 @@ $raizApp = Codigo '/'
 Chequeo 'Sirve la aplicacion en /' ($raizApp -eq '200') "http $raizApp"
 $html = ((& curl.exe -s --max-time 10 "$Url/" 2>$null) -join '')
 Chequeo 'El index referencia el bundle' ($html -match '/assets/index-')
-$rutaSpa = Codigo '/reportes/maestros-especialidad'
+$rutaSpa = Codigo '/reportes/cerebro'
 Chequeo 'Fallback de SPA (ruta profunda)' ($rutaSpa -eq '200') "http $rutaSpa"
 $api = Codigo '/api/menu'
 Chequeo 'El API pide autenticacion (401)' ($api -eq '401') "http $api"

@@ -89,6 +89,7 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/09_menu_reporte_maestros.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/10_quitar_reporte_materias.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/11_horario_turno_especialidad.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/12_reporte_cerebro.sql
       - uses: actions/download-artifact@v4
         with:
           name: frontend-dist
@@ -143,6 +144,7 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/09_menu_reporte_maestros.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/10_quitar_reporte_materias.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/11_horario_turno_especialidad.sql
+          psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f db/12_reporte_cerebro.sql
 
       - name: QA del esquema (el veredicto es un gate)
         run: |
