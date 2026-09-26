@@ -33,9 +33,9 @@ import * as XLSX from 'xlsx';
  *     valor por materia y la tabla tiene una sola columna de horas; asignacion.horas cambia de un
  *     grupo a otro (en esta escuela, TICS va de 2 a 4).
  *
- * Salidas: pantalla (una tarjeta por especialidad), PDF con corte de hoja por
- * especialidad y Excel con una hoja por especialidad. Mismo patrón que el reporte
- * "Horario por grupo".
+ * Salidas: pantalla (una tarjeta por especialidad), PDF en CARTA VERTICAL con corte de hoja por
+ * especialidad (dos bloques por hoja; una especialidad de tres grados ocupa dos) y Excel con una
+ * hoja por especialidad. Mismo patrón que el reporte "Horario por grupo".
  *
  * Sustituye al reporte "Materias x Especialidad": daba los mismos datos pero en
  * vertical y sin agrupar por grado. Ese reporte ya no existe y la migración 10 apaga
@@ -44,6 +44,13 @@ import * as XLSX from 'xlsx';
 
 /** Nombre de la especialidad del grupo. La API la manda como TEXTO; se toleran las dos formas. */
 const SIN_ESPECIALIDAD = '(sin especialidad)';
+
+/**
+ * Alto que hay que reservar por bloque en el PDF, en mm: encabezado + 9 materias a 8pt + la
+ * separación con el siguiente. Se usa para decidir si el bloque cabe en lo que queda de hoja.
+ * Medido con las librerías reales: un bloque de 9 materias ocupa 72,5 mm.
+ */
+const ALTO_BLOQUE_MM = 85;
 
 /** Una fila del bloque: una materia, con el apodo que le toca en cada grupo. */
 interface FilaBloque {
@@ -186,7 +193,10 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
 
   const exportarPDF = () => {
     if (!turnoListo) return;
-    const doc = new jsPDF({ orientation: 'landscape' });
+    // Carta (215,9 x 279,4 mm) y VERTICAL: este reporte tiene pocas columnas (materia, horas y
+    // 1-3 grupos), asi que lo que necesita es alto, no ancho. Con 3 grupos y margenes de 14 mm la
+    // tabla mide 183 mm, que entra de sobra en los 187,9 mm utiles.
+    const doc = new jsPDF({ orientation: 'portrait', format: 'letter' });
     const altoPagina = doc.internal.pageSize.getHeight();
 
     secciones.forEach((sec, idx) => {
@@ -200,7 +210,9 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
 
       let y = 26;
       for (const b of sec.bloques) {
-        if (y > altoPagina - 40) {
+        // Se reserva el alto del bloque ENTERO: si no cabe, se empieza hoja antes del título del
+        // grado. Sin esto, autoTable partiria la tabla y el título quedaría solo al pie de la hoja.
+        if (y + ALTO_BLOQUE_MM > altoPagina - 14) {
           doc.addPage();
           y = 20;
         }
@@ -211,13 +223,29 @@ const ReporteMaestrosPorEspecialidad: React.FC = () => {
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(0, 0, 0);
 
+        // Anchos fijos por columna: Materia 76 mm, Horas 14 mm y 31 mm por grupo. Sin fijarlos,
+        // un bloque de un solo grupo se estiraria hasta el borde y quedaria desproporcionado.
+        const anchos: Record<number, { cellWidth: number; halign?: 'center' }> = {
+          0: { cellWidth: 76 },
+          1: { cellWidth: 14, halign: 'center' },
+        };
+        b.grupos.forEach((_, i) => {
+          anchos[i + 2] = { cellWidth: 31 };
+        });
+
         autoTable(doc, {
           startY: y + 3,
           head: [encabezado(b)],
           body: b.filas.map(f => renglon(f, b)),
+          // Margen en los CUATRO lados y tabla del ancho de sus columnas. Los dos detalles importan:
+          // sin el margen de abajo, autoTable reserva 40 mm y parte el bloque antes de tiempo; y con
+          // el ancho por defecto ('auto') la tabla se estira al ancho de la hoja, avisa de que no
+          // caben 5 mm y desperdicia el espacio sobrante.
+          margin: { left: 14, right: 14, top: 14, bottom: 14 },
+          tableWidth: 'wrap',
           styles: { fontSize: 8, cellPadding: 2 },
           headStyles: { fillColor: [30, 64, 175], halign: 'center' },
-          columnStyles: { 0: { cellWidth: 80 }, 1: { cellWidth: 16, halign: 'center' } },
+          columnStyles: anchos,
         });
         y = (doc as any).lastAutoTable.finalY + 14;
       }
