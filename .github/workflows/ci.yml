@@ -46,6 +46,10 @@ jobs:
   backend:
     name: Backend (Spring Boot + Postgres)
     runs-on: ubuntu-latest
+    # El WAR lleva el front dentro, asi que este trabajo espera al del front y se baja
+    # su artefacto: la misma jugada que hacen el Dockerfile y el release.yml. Antes no
+    # lo hacia y el WAR que publica el CI salia con el front que estuviera versionado.
+    needs: [frontend]
     services:
       postgres:
         image: postgres:17
@@ -84,6 +88,17 @@ jobs:
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/08_reporte_maestro_por_materia.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/09_menu_reporte_maestros.sql
           psql -h localhost -U postgres -d SIH -v ON_ERROR_STOP=1 -q -f ../db/10_quitar_reporte_materias.sql
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: FrontendReact/dist
+
+      - name: Meter el front en el WAR (igual que el Dockerfile)
+        run: |
+          rm -rf src/main/resources/static
+          mkdir -p src/main/resources/static
+          cp -r ../FrontendReact/dist/. src/main/resources/static/
+
       - name: Compilar y correr pruebas
         run: mvn -B clean verify
       - name: Empaquetar el programa (WAR ejecutable)

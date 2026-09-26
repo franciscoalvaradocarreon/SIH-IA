@@ -19,6 +19,12 @@ BackendJava/logs/
 BackendJava/uploads/
 BackendJava/*.log
 BackendJava/*.pid
+# El front compilado NO se versiona aqui. Lo meten dentro del WAR el Dockerfile, el
+# CI y el release.yml, cada uno con su propio build del front. Si se versiona, el
+# WAR del CI sale con el front de la ultima vez que alguien lo copio a mano, que es
+# justo lo que pasaba: produccion servia el front nuevo y el artefacto del CI, uno
+# de hace meses.
+BackendJava/src/main/resources/static/
 
 # Frontend React
 FrontendReact/node_modules/
