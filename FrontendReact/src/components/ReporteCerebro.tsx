@@ -53,17 +53,18 @@ const SIN_ESPECIALIDAD = '(sin especialidad)';
 const ALTO_BLOQUE_MM = 85;
 
 /**
- * Anchos fijos de la tabla en pantalla, en clases estándar de Tailwind.
+ * Anchos fijos de la tabla en pantalla.
  *
- * Todas las columnas miden lo mismo (w-40 = 160 px) y la de Materia es un 50% más ancha
- * (w-60 = 240 px, que es exactamente 1,5 veces 160 px).
+ * Base: w-40 = 160 px para Horas y cada columna de grupo. Materia: w-[30rem] = 480 px, el doble de
+ * los 240 px que tenia (w-60). Se usa un valor a medida porque la escala de Tailwind se queda en
+ * w-96 = 384 px.
  *
  * Con TODOS los anchos fijados y la tabla en 'table-fixed' —y SIN 'min-w-full'— la tabla mide lo
  * que suman sus columnas: igual en todos los bloques y sin repartos que dependan del nombre de
  * materia más largo. En pantallas estrechas, el contenedor con overflow-x-auto deja desplazarla.
  */
 const ANCHO_BASE = 'w-40';
-const ANCHO_MATERIA = 'w-60';
+const ANCHO_MATERIA = 'w-[30rem]';
 
 /** Ancho de cada columna: la 0 (Materia) es la ancha; el resto, la base. */
 const anchoColumna = (i: number): string => (i === 0 ? ANCHO_MATERIA : ANCHO_BASE);
