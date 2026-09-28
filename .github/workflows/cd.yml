@@ -106,10 +106,41 @@ jobs:
           fi
 
           echo "=== 1) Actualizar el repositorio y traer la imagen ==="
-          ssh_sih "cd ~/SIH-IA && git pull && docker compose pull app"
+          # La imagen se pide por TAG EXACTO cuando el Release nos dice cual (v1.1.12).
+          # El Release publica dos etiquetas: el tag de git y 'latest'; pedir ':latest'
+          # justo despues de publicarla obliga a que el registro ya sirva el manifiesto
+          # nuevo, asi que se desplegaria algo distinto de lo que luego se verifica.
+          # Pidiendo el tag, lo que se baja es exactamente lo que se va a comprobar.
+          # Solo se cae a ':latest' cuando el despliegue se lanza a mano sin version.
+          REPO_IMAGEN="ghcr.io/franciscoalvaradocarreon/sih-ia"
+          if [ -n "$ESPERADA" ]; then
+            IMAGEN="${REPO_IMAGEN}:${ESPERADA}"
+          else
+            IMAGEN="${REPO_IMAGEN}:latest"
+          fi
+          echo "  imagen a desplegar: $IMAGEN"
+
+          ssh_sih "cd ~/SIH-IA && git pull"
+
+          # El pull se reintenta. Un fallo de red del runner a mitad de la descarga
+          # abortaba el despliegue completo (paso en v1.1.12: 83 s y a mano) porque
+          # 'set -e' corta el guion. Un fallo transitorio no debe tumbar un despliegue.
+          for intento in 1 2 3; do
+            if ssh_sih "cd ~/SIH-IA && IMAGEN_APP='$IMAGEN' docker compose pull app"; then
+              break
+            fi
+            if [ "$intento" = "3" ]; then
+              echo "::error::No se pudo descargar la imagen $IMAGEN tras 3 intentos."
+              exit 1
+            fi
+            echo "  el pull fallo (intento $intento), reintentando en 15 s..."
+            sleep 15
+          done
 
           echo "=== 2) Reiniciar SOLO la aplicacion (la base y los uploads no se tocan) ==="
-          ssh_sih "cd ~/SIH-IA && docker compose up -d --no-build app"
+          # IMAGEN_APP se pasa por entorno, que tiene prioridad sobre el .env del
+          # servidor: asi el contenedor queda apuntando al tag que se verifico.
+          ssh_sih "cd ~/SIH-IA && IMAGEN_APP='$IMAGEN' docker compose up -d --no-build app"
 
           echo "=== 3) Verificar que responde la version publicada ==="
           # La aplicacion tarda ~20 s en arrancar: se reintenta hasta 2 minutos.
