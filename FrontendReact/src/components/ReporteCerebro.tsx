@@ -340,7 +340,7 @@ const ReporteCerebro: React.FC = () => {
       }
     });
 
-    doc.save(`maestros_especialidad_${semestreActivo?.nombre ?? 'semestre'}.pdf`);
+    doc.save(`reporte_cerebro_${semestreActivo?.nombre ?? 'semestre'}.pdf`);
   };
 
   const exportarExcel = () => {
@@ -366,7 +366,7 @@ const ReporteCerebro: React.FC = () => {
       XLSX.utils.book_append_sheet(wb, hoja, nombreHoja(sec.nombre));
     }
 
-    XLSX.writeFile(wb, `maestros_especialidad_${semestreActivo?.nombre ?? 'semestre'}.xlsx`);
+    XLSX.writeFile(wb, `reporte_cerebro_${semestreActivo?.nombre ?? 'semestre'}.xlsx`);
   };
 
   if (loading) {
