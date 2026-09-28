@@ -1,9 +1,11 @@
 package mx.sih.controlador;
 
 import jakarta.validation.Valid;
+import mx.sih.modelo.dto.ImportarMaestrosDTO;
 import mx.sih.modelo.dto.MaestroCrearDTO;
 import mx.sih.modelo.dto.MaestroDTO;
 import mx.sih.modelo.dto.MaestroDetalleDTO;
+import mx.sih.modelo.dto.ResultadoImportacionMaestrosDTO;
 import mx.sih.servicio.MaestroServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -46,6 +48,24 @@ public class MaestroControlador {
     public ResponseEntity<MaestroDTO> crearMaestro(@Valid @ModelAttribute MaestroCrearDTO dto) {
         MaestroDTO creado = maestroServicio.crearMaestro(dto);
         return ResponseEntity.status(201).body(creado);
+    }
+
+    /**
+     * Trae al semestre de destino los maestros de otro semestre de la misma escuela.
+     *
+     * OJO: este controlador NO tiene @PreAuthorize a nivel de clase (a diferencia de
+     * EspecialidadControlador), asi que la anotacion va aqui explicitamente. Sin ella, cualquier
+     * usuario autenticado — incluido el rol de solo lectura — podria escribir en la base.
+     *
+     * Consume JSON (no multipart) porque no se sube ningun archivo: las fotos se copian en el
+     * servidor a partir de las que ya existen.
+     */
+    @PostMapping(value = "/importar", consumes = "application/json")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
+    public ResponseEntity<ResultadoImportacionMaestrosDTO> importarMaestros(
+            @Valid @RequestBody ImportarMaestrosDTO dto) {
+        ResultadoImportacionMaestrosDTO resultado = maestroServicio.importarMaestros(dto);
+        return ResponseEntity.ok(resultado);
     }
 
     @PutMapping(value = "/{id}", consumes = "multipart/form-data")

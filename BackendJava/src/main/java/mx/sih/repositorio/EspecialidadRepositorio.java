@@ -107,4 +107,23 @@ public interface EspecialidadRepositorio extends JpaRepository<Especialidad, Lon
     @Query("SELECT COUNT(e) FROM Especialidad e WHERE e.turno.turnoId = :turnoId")
     long countByTurnoId(@Param("turnoId") Long turnoId);
 
+    /**
+     * Todas las especialidades de una escuela en un semestre, SIN paginar.
+     *
+     * Lo usa la importacion desde otro semestre: ahi hacen falta todas, porque se copian enteras.
+     * El listado de la pantalla sigue usando la version paginada (buscarPorEscuelaYFiltros).
+     *
+     * Se hace JOIN FETCH a semestre y a turno porque el servicio necesita el NOMBRE del turno para
+     * reencontrarlo en el semestre de destino: sin el fetch seria un N+1, y peor, dentro del bucle
+     * de copiado.
+     */
+    @Query("SELECT e FROM Especialidad e " +
+           "JOIN FETCH e.semestre s " +
+           "JOIN FETCH e.turno t " +
+           "WHERE s.escuela.escuelaId = :escuelaId " +
+           "AND s.semestreId = :semestreId " +
+           "ORDER BY e.nombre ASC")
+    List<Especialidad> findByEscuelaIdAndSemestreId(@Param("escuelaId") Long escuelaId,
+                                                    @Param("semestreId") Long semestreId);
+
 }

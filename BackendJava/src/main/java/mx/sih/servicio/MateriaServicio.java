@@ -1,9 +1,14 @@
 package mx.sih.servicio;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import mx.sih.excepcion.NegocioExcepcion;
+import mx.sih.modelo.dto.ImportarMateriasDTO;
 import mx.sih.modelo.dto.MateriaCrearDTO;
 import mx.sih.modelo.dto.MateriaDTO;
 import mx.sih.modelo.dto.MateriaDetalleDTO;
+import mx.sih.modelo.dto.ResultadoImportacionMateriasDTO;
 import mx.sih.modelo.entidad.Escuela;
 import mx.sih.modelo.entidad.Materia;
 import mx.sih.modelo.entidad.Semestre;
@@ -202,8 +207,133 @@ public class MateriaServicio {
     }
 
     // ============================================================
+    // IMPORTACION DESDE OTRO SEMESTRE
+    // ============================================================
+
+    /**
+     * Trae las materias de OTRO semestre de la misma escuela al semestre de destino.
+     *
+     * SOLO la tabla de materias: nombre, clave, descripcion, creditos, color, horas y estado. No se
+     * copia ninguna otra tabla (asignaciones y horarios son de cada semestre y no se tocan).
+     *
+     * El detalle que manda aqui, igual que en especialidades y maestros: sih.materias.semestre_id y
+     * sih.materias.turno_id son NOT NULL y el turno tiene que ser del MISMO semestre que la materia
+     * (ver validarCoherenciaSemestreTurno). Cada materia que se trae necesita encontrar SU turno en
+     * el semestre de destino, y se busca por NOMBRE: el turno_id es de otro semestre.
+     *
+     * Decisiones:
+     *
+     *  1. Se traen TODAS las materias del semestre de origen.
+     *  2. Si el destino NO tiene un turno con ese nombre, la materia se SALTA y se informa. Nunca se
+     *     inventa un turno ni se apunta a uno de otro semestre.
+     *  3. Si el destino YA tiene esa CLAVE en ese turno, se SALTA y se informa. La clave es lo que
+     *     identifica a una materia (la unicidad de la tabla es escuela+semestre+turno+clave), no el
+     *     nombre: dos materias pueden llamarse distinto con la misma clave o al reves.
+     *  4. El estado (activo/inactivo) se copia tal cual, para no revivir materias que estaban dadas
+     *     de baja en el semestre de origen.
+     *  5. Todo va en UNA transaccion: si algo falla a mitad, no queda un semestre copiado a medias.
+     */
+    @Transactional
+    public ResultadoImportacionMateriasDTO importarMaterias(ImportarMateriasDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        if (dto.getSemestreOrigenId().equals(dto.getSemestreDestinoId())) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreOrigenId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de origen"));
+        Semestre destino = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreDestinoId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de destino"));
+
+        // El TURNO que el usuario tiene seleccionado en la pantalla manda el alcance: solo se traen
+        // las materias del turno del ORIGEN que se llame igual.
+        Turno turnoDestino = resolverTurnoDeLaImportacion(dto.getTurnoId(), destino, escuelaId);
+        String nombreTurno = turnoDestino.getNombre().trim().toUpperCase(Locale.ROOT);
+
+        List<Materia> fuente = materiaRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, origen.getSemestreId())
+                .stream()
+                .filter(m -> m.getTurno() != null
+                        && m.getTurno().getNombre() != null
+                        && m.getTurno().getNombre().trim().toUpperCase(Locale.ROOT).equals(nombreTurno))
+                .toList();
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El turno '" + turnoDestino.getNombre()
+                    + "' del semestre '" + origen.getNombre()
+                    + "' no tiene materias que traer");
+        }
+
+        int copiadas = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (Materia original : fuente) {
+            String etiqueta = original.getNombre() + " (" + original.getClave() + ")";
+
+            if (materiaRepositorio.existsByClaveAndSemestreIdAndTurnoId(
+                    original.getClave(),
+                    destino.getSemestreId(),
+                    turnoDestino.getTurnoId())) {
+                omitidos.add(etiqueta + " (la clave ya existia en '" + turnoDestino.getNombre() + "')");
+                continue;
+            }
+
+            Materia copia = new Materia();
+            copia.setNombre(original.getNombre());
+            copia.setClave(original.getClave());
+            copia.setDescripcion(original.getDescripcion());
+            copia.setCreditos(original.getCreditos());
+            copia.setColorHex(original.getColorHex());
+            copia.setHorasSemana(original.getHorasSemana());
+            copia.setActivo(original.getActivo());
+
+            Escuela escuela = new Escuela();
+            escuela.setEscuelaId(escuelaId);
+            copia.setEscuela(escuela);
+            copia.setSemestre(destino);
+            copia.setTurno(turnoDestino);
+
+            materiaRepositorio.save(copia);
+            copiadas++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(copiadas)
+                .append(copiadas == 1 ? " materia" : " materias")
+                .append(" del turno '").append(turnoDestino.getNombre())
+                .append("' desde '").append(origen.getNombre()).append("'.");
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size()).append(": ")
+                    .append(String.join("; ", omitidos)).append(".");
+        }
+
+        return new ResultadoImportacionMateriasDTO(copiadas, omitidos, mensaje.toString());
+    }
+
+    // ============================================================
     // HELPERS
     // ============================================================
+
+    /**
+     * Resuelve el turno de destino de una importacion desde otro semestre.
+     *
+     * El turno lo elige el usuario en la pantalla y TIENE que ser del semestre de destino: sin esta
+     * comprobacion se podria importar hacia un turno de otro semestre y romper la coherencia
+     * semestre-turno que valida crearMateria.
+     */
+    private Turno resolverTurnoDeLaImportacion(Long turnoId, Semestre destino, Long escuelaId) {
+        Turno turno = turnoRepositorio.findByIdAndEscuelaId(turnoId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion(
+                        "Turno no encontrado o no pertenece a esta escuela"));
+        if (turno.getSemestre() == null
+                || !turno.getSemestre().getSemestreId().equals(destino.getSemestreId())) {
+            throw new NegocioExcepcion("El turno '" + turno.getNombre()
+                    + "' no pertenece al semestre '" + destino.getNombre() + "'");
+        }
+        return turno;
+    }
 
     private void validarCoherenciaSemestreTurno(Semestre semestre, Turno turno) {
         if (turno.getSemestre() == null) {

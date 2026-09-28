@@ -3,6 +3,8 @@ package mx.sih.controlador;
 import jakarta.validation.Valid;
 import mx.sih.modelo.dto.EspecialidadCrearDTO;
 import mx.sih.modelo.dto.EspecialidadDTO;
+import mx.sih.modelo.dto.ImportarEspecialidadesDTO;
+import mx.sih.modelo.dto.ResultadoImportacionEspecialidadesDTO;
 import mx.sih.servicio.EspecialidadServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -51,6 +53,21 @@ public class EspecialidadControlador {
             @Valid @RequestBody EspecialidadCrearDTO dto) {
         EspecialidadDTO creada = especialidadServicio.crearEspecialidad(dto);
         return ResponseEntity.status(201).body(creada);
+    }
+
+    /**
+     * Trae al semestre de destino las especialidades de otro semestre de la misma escuela.
+     *
+     * Va en /importar y no en / para no chocar con el POST de crear: la ruta es literal y Spring la
+     * resuelve antes que cualquier /{id} (aqui no hay POST con id, pero se mantiene el mismo patron
+     * que TurnoControlador).
+     */
+    @PostMapping("/importar")
+    public ResponseEntity<ResultadoImportacionEspecialidadesDTO> importarEspecialidades(
+            @Valid @RequestBody ImportarEspecialidadesDTO dto) {
+        ResultadoImportacionEspecialidadesDTO resultado =
+                especialidadServicio.importarEspecialidades(dto);
+        return ResponseEntity.ok(resultado);
     }
 
     @PutMapping("/{id}")

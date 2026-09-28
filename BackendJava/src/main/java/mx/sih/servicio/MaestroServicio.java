@@ -1,10 +1,15 @@
 package mx.sih.servicio;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import mx.sih.excepcion.NegocioExcepcion;
+import mx.sih.modelo.dto.ImportarMaestrosDTO;
 import mx.sih.modelo.dto.MaestroCrearDTO;
 import mx.sih.modelo.dto.MaestroDTO;
 import mx.sih.modelo.dto.MaestroDetalleDTO;
+import mx.sih.modelo.dto.ResultadoImportacionMaestrosDTO;
 import mx.sih.modelo.entidad.Escuela;
 import mx.sih.modelo.entidad.Maestro;
 import mx.sih.modelo.entidad.Semestre;
@@ -236,6 +241,126 @@ public class MaestroServicio {
     }
 
     // ============================================================
+    // IMPORTACION DESDE OTRO SEMESTRE
+    // ============================================================
+
+    /**
+     * Trae los maestros de OTRO semestre de la misma escuela al semestre de destino.
+     *
+     * SOLO la tabla de maestros: datos de la persona y su turno. No se copia ninguna otra tabla; en
+     * particular NO se copian asignaciones ni disponibilidad, que son de cada semestre y se manejan
+     * en sus propias pantallas.
+     *
+     * El detalle que manda aqui, igual que en especialidades: sih.maestros.semestre_id y
+     * sih.maestros.turno_id son NOT NULL y el turno tiene que ser del MISMO semestre que el maestro
+     * (ver validarCoherenciaSemestreTurno). Asi que cada maestro que se trae necesita encontrar SU
+     * turno en el semestre de destino, y se busca por NOMBRE: el turno_id es de otro semestre.
+     *
+     * Decisiones:
+     *
+     *  1. Se traen TODOS los maestros del semestre de origen: en la pantalla se elige el semestre,
+     *     no maestro por maestro.
+     *  2. Si el destino NO tiene un turno con ese nombre, el maestro se SALTA y se informa. Nunca se
+     *     inventa un turno ni se apunta a uno de otro semestre.
+     *  3. Si el destino YA tiene a ese maestro (mismo nombre y apellidos) en ese turno, se SALTA y se
+     *     informa: no se sobrescribe ni se duplica. Es la misma unicidad que valida crearMaestro y
+     *     que impone el indice unico de la tabla.
+     *  4. La FOTO se copia a un archivo nuevo. Si las dos filas compartieran la misma URL, borrar un
+     *     maestro borraria la foto del otro (eliminarMaestro borra el archivo del disco).
+     *  5. Todo va en UNA transaccion: si algo falla a mitad, no queda un semestre copiado a medias.
+     */
+    @Transactional
+    public ResultadoImportacionMaestrosDTO importarMaestros(ImportarMaestrosDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        if (dto.getSemestreOrigenId().equals(dto.getSemestreDestinoId())) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreOrigenId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de origen"));
+        Semestre destino = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreDestinoId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de destino"));
+
+        // El TURNO que el usuario tiene seleccionado en la pantalla manda el alcance: solo se traen
+        // los maestros del turno del ORIGEN que se llame igual.
+        Turno turnoDestino = resolverTurnoDeLaImportacion(dto.getTurnoId(), destino, escuelaId);
+        String nombreTurno = turnoDestino.getNombre().trim().toUpperCase(Locale.ROOT);
+
+        List<Maestro> fuente = maestroRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, origen.getSemestreId())
+                .stream()
+                .filter(m -> m.getTurno() != null
+                        && m.getTurno().getNombre() != null
+                        && m.getTurno().getNombre().trim().toUpperCase(Locale.ROOT).equals(nombreTurno))
+                .toList();
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El turno '" + turnoDestino.getNombre()
+                    + "' del semestre '" + origen.getNombre()
+                    + "' no tiene maestros que traer");
+        }
+
+        int copiados = 0;
+        int fotosCopiadas = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (Maestro original : fuente) {
+            String nombreCompleto = original.getNombreCompleto();
+
+            if (maestroRepositorio.existsByNombreApellidosAndSemestreIdAndTurnoId(
+                    original.getNombre(), original.getApellidos(),
+                    destino.getSemestreId(), turnoDestino.getTurnoId())) {
+                omitidos.add(nombreCompleto + " (ya existia en '" + turnoDestino.getNombre() + "')");
+                continue;
+            }
+
+            Maestro copia = new Maestro();
+            copia.setNombre(original.getNombre());
+            copia.setApellidos(original.getApellidos());
+            copia.setEmail(original.getEmail());
+            copia.setTelefono(original.getTelefono());
+            copia.setTitulo(original.getTitulo());
+            copia.setApodo(original.getApodo());
+            copia.setActivo(original.getActivo());
+
+            Escuela escuela = new Escuela();
+            escuela.setEscuelaId(escuelaId);
+            copia.setEscuela(escuela);
+            copia.setSemestre(destino);
+            copia.setTurno(turnoDestino);
+
+            // La foto se duplica en disco. Si no se puede copiar (archivo borrado, formato raro),
+            // copiarArchivo devuelve null y el maestro se trae igual, solo que sin foto.
+            String fotoCopiada = archivoServicio.copiarArchivo(original.getFotoUrl(), "maestro_");
+            if (fotoCopiada != null) {
+                copia.setFotoUrl(fotoCopiada);
+                fotosCopiadas++;
+            }
+
+            maestroRepositorio.save(copia);
+            copiados++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(copiados)
+                .append(copiados == 1 ? " maestro" : " maestros")
+                .append(" del turno '").append(turnoDestino.getNombre())
+                .append("' desde '").append(origen.getNombre()).append("'.");
+        if (fotosCopiadas > 0) {
+            mensaje.append(" Se copiaron ").append(fotosCopiadas)
+                    .append(fotosCopiadas == 1 ? " foto." : " fotos.");
+        }
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size()).append(": ")
+                    .append(String.join("; ", omitidos)).append(".");
+        }
+
+        return new ResultadoImportacionMaestrosDTO(copiados, omitidos, mensaje.toString());
+    }
+
+    // ============================================================
     // HELPERS
     // ============================================================
 
@@ -255,6 +380,25 @@ public class MaestroServicio {
                     "' pertenece al semestre '" + turno.getSemestre().getNombre() +
                     "', no a '" + semestre.getNombre() + "'");
         }
+    }
+
+    /**
+     * Resuelve el turno de destino de una importacion desde otro semestre.
+     *
+     * El turno lo elige el usuario en la pantalla y TIENE que ser del semestre de destino: sin esta
+     * comprobacion se podria importar hacia un turno de otro semestre y romper la coherencia
+     * semestre-turno que valida crearMaestro.
+     */
+    private Turno resolverTurnoDeLaImportacion(Long turnoId, Semestre destino, Long escuelaId) {
+        Turno turno = turnoRepositorio.findByIdAndEscuelaId(turnoId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion(
+                        "Turno no encontrado o no pertenece a esta escuela"));
+        if (turno.getSemestre() == null
+                || !turno.getSemestre().getSemestreId().equals(destino.getSemestreId())) {
+            throw new NegocioExcepcion("El turno '" + turno.getNombre()
+                    + "' no pertenece al semestre '" + destino.getNombre() + "'");
+        }
+        return turno;
     }
 
     private MaestroDTO toDTO(Maestro maestro) {

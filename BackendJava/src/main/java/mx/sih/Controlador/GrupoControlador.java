@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import mx.sih.modelo.dto.GrupoCrearDTO;
 import mx.sih.modelo.dto.GrupoDTO;
 import mx.sih.modelo.dto.GrupoDetalleDTO;
+import mx.sih.modelo.dto.ImportarGruposDTO;
+import mx.sih.modelo.dto.ResultadoImportacionGruposDTO;
 import mx.sih.servicio.GrupoServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -47,6 +49,19 @@ public class GrupoControlador {
     public ResponseEntity<GrupoDTO> crearGrupo(@Valid @RequestBody GrupoCrearDTO dto) {
         GrupoDTO creado = grupoServicio.crearGrupo(dto);
         return ResponseEntity.status(201).body(creado);
+    }
+
+    /**
+     * Trae al semestre de destino los grupos de otro semestre de la misma escuela.
+     *
+     * No lleva @PreAuthorize propio: la clase ya exige ADMIN o COORDINADOR, que es lo correcto para
+     * una operacion que escribe.
+     */
+    @PostMapping("/importar")
+    public ResponseEntity<ResultadoImportacionGruposDTO> importarGrupos(
+            @Valid @RequestBody ImportarGruposDTO dto) {
+        ResultadoImportacionGruposDTO resultado = grupoServicio.importarGrupos(dto);
+        return ResponseEntity.ok(resultado);
     }
 
     @PutMapping("/{id}")

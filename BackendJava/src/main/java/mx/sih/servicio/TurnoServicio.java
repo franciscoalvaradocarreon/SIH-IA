@@ -2,6 +2,8 @@ package mx.sih.servicio;
 
 import mx.sih.excepcion.MensajeErrorUtil;
 import mx.sih.excepcion.NegocioExcepcion;
+import mx.sih.modelo.dto.ImportarTurnosDTO;
+import mx.sih.modelo.dto.ResultadoImportacionTurnosDTO;
 import mx.sih.modelo.dto.TurnoCrearDTO;
 import mx.sih.modelo.dto.TurnoDTO;
 import mx.sih.modelo.entidad.Escuela;
@@ -23,6 +25,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 public class TurnoServicio {
@@ -123,6 +128,77 @@ public class TurnoServicio {
         return toDTO(guardado);
     }
 
+    /**
+     * Trae los turnos de OTRO semestre de la misma escuela al semestre de destino.
+     *
+     * SOLO la tabla de turnos: nombre, descripcion y estado. No se copia ninguna otra tabla. La
+     * rejilla de bloques (turno_horario) es otro catalogo — la pantalla "Turno-Horario" — y tendra su
+     * propio boton cuando toque.
+     *
+     * Decisiones:
+     *
+     *  1. Se traen TODOS los turnos del semestre de origen: en la pantalla se elige el semestre, no
+     *     turno por turno.
+     *  2. Si el destino YA tiene un turno con ese nombre, se SALTA y se informa en `omitidos`. No se
+     *     sobrescribe ni se duplica: el usuario pidio "traer lo que falta", no "reemplazar lo que hay".
+     *  3. El nombre es unico por (escuela, semestre, nombre), asi que copiar un "MATUTINO" de un
+     *     semestre a otro es valido.
+     *  4. Todo va en UNA transaccion: si algo falla a mitad, no queda un semestre copiado a medias.
+     */
+    @Transactional
+    public ResultadoImportacionTurnosDTO importarTurnos(ImportarTurnosDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        if (dto.getSemestreOrigenId().equals(dto.getSemestreDestinoId())) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreOrigenId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de origen"));
+        Semestre destino = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreDestinoId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de destino"));
+
+        List<Turno> fuente = turnoRepositorio.findByEscuelaIdAndSemestreId(
+                escuelaId, origen.getSemestreId());
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El semestre '" + origen.getNombre() + "' no tiene turnos que traer");
+        }
+
+        int turnosCopiados = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (Turno original : fuente) {
+            if (turnoRepositorio.existsByEscuelaIdAndSemestreIdAndNombreIgnoreCase(
+                    escuelaId, destino.getSemestreId(), original.getNombre())) {
+                omitidos.add(original.getNombre());
+                continue;
+            }
+
+            Turno copia = new Turno();
+            copia.setEscuela(original.getEscuela());
+            copia.setNombre(original.getNombre());
+            copia.setDescripcion(original.getDescripcion());
+            copia.setActivo(original.getActivo());
+            copia.setSemestre(destino);
+            turnoRepositorio.save(copia);
+            turnosCopiados++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(turnosCopiados)
+                .append(turnosCopiados == 1 ? " turno" : " turnos")
+                .append(" desde '").append(origen.getNombre()).append("'.");
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size())
+                    .append(omitidos.size() == 1 ? " turno que ya existia: " : " turnos que ya existian: ")
+                    .append(String.join(", ", omitidos)).append(".");
+        }
+
+        return new ResultadoImportacionTurnosDTO(turnosCopiados, omitidos, mensaje.toString());
+    }
+
     @Transactional
     public TurnoDTO actualizarTurno(Long id, TurnoCrearDTO dto) {
         Long escuelaId = getEscuelaId();
@@ -134,9 +210,15 @@ public class TurnoServicio {
             throw new NegocioExcepcion("No tiene acceso a este turno");
         }
 
+        // El nombre es unico por (escuela, SEMESTRE, nombre), igual que al crear. La consulta tiene
+        // que mirar el semestre del turno que se edita: si mira toda la escuela, renombrar un turno
+        // a un nombre que existe en OTRO semestre se rechaza por error.
+        Long semestreId = turno.getSemestre() != null ? turno.getSemestre().getSemestreId() : null;
         if (!turno.getNombre().equalsIgnoreCase(dto.getNombre()) &&
-            turnoRepositorio.existsByEscuelaIdAndNombreIgnoreCaseAndIdNot(escuelaId, dto.getNombre(), id)) {
-            throw new NegocioExcepcion("Ya existe otro turno con el nombre: " + dto.getNombre() + " en esta escuela");
+            turnoRepositorio.existsByEscuelaIdAndSemestreIdAndNombreIgnoreCaseAndIdNot(
+                    escuelaId, semestreId, dto.getNombre(), id)) {
+            throw new NegocioExcepcion("Ya existe otro turno con el nombre: " + dto.getNombre()
+                    + " en esta escuela para ese semestre");
         }
 
         turno.setNombre(dto.getNombre().trim().toUpperCase());

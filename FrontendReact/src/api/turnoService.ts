@@ -23,6 +23,21 @@ export const turnoService = {
   crear: (data: TurnoForm) => {
     return api.post<Turno>('/turnos', data);
   },
+
+  /**
+   * Trae al semestre de destino los turnos de otro semestre.
+   *
+   * SOLO los turnos: la rejilla de bloques de horario es otro catalogo (Turno-Horario).
+   * Los turnos cuyo nombre ya exista en el destino NO se tocan: vuelven en `omitidos` para poder
+   * avisarlo en pantalla.
+   */
+  importar: (semestreOrigenId: number, semestreDestinoId: number) => {
+    return api.post<{
+      turnosCopiados: number;
+      omitidos: string[];
+      mensaje: string;
+    }>('/turnos/importar', { semestreOrigenId, semestreDestinoId });
+  },
  
   actualizar: (id: number, data: TurnoForm) => {
     return api.put<Turno>(`/turnos/${id}`, data);

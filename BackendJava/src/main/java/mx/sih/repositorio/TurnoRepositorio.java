@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -48,12 +49,26 @@ public interface TurnoRepositorio extends JpaRepository<Turno, Long> {
             @Param("semestreId") Long semestreId,
             @Param("nombre") String nombre);
 
+    /**
+     * La misma comprobacion, pero al ACTUALIZAR: excluye el propio turno (si no, se encontraria a si
+     * mismo y no dejaria guardar ningun cambio).
+     *
+     * Es la que usa actualizarTurno. Antes esa validacion miraba TODA la escuela, sin semestre, asi
+     * que renombrar un turno a un nombre que existia en OTRO semestre se rechazaba con "ya existe
+     * otro turno con el nombre ... en esta escuela", aunque en su semestre no hubiera ninguno.
+     */
     @Query("SELECT CASE WHEN COUNT(t) > 0 THEN true ELSE false END " +
            "FROM Turno t WHERE t.escuela.escuelaId = :escuelaId " +
-           "AND LOWER(t.nombre) = LOWER(:nombre) AND t.turnoId != :id")
-    boolean existsByEscuelaIdAndNombreIgnoreCaseAndIdNot(@Param("escuelaId") Long escuelaId,
-                                                          @Param("nombre") String nombre,
-                                                          @Param("id") Long id);
+           "AND LOWER(t.nombre) = LOWER(:nombre) " +
+           "AND ((:semestreId IS NULL AND t.semestre IS NULL) " +
+           "     OR (t.semestre IS NOT NULL AND t.semestre.semestreId = :semestreId)) " +
+           "AND t.turnoId != :id")
+    boolean existsByEscuelaIdAndSemestreIdAndNombreIgnoreCaseAndIdNot(
+            @Param("escuelaId") Long escuelaId,
+            @Param("semestreId") Long semestreId,
+            @Param("nombre") String nombre,
+            @Param("id") Long id);
+
     @Query("SELECT t FROM Turno t " +
            "JOIN FETCH t.escuela e " +
            "LEFT JOIN FETCH t.semestre s " +
@@ -87,5 +102,19 @@ public interface TurnoRepositorio extends JpaRepository<Turno, Long> {
            "WHERE t.turnoId = :id AND e.escuelaId = :escuelaId")
     Optional<Turno> findByIdAndEscuelaId(@Param("id") Long id,
                                           @Param("escuelaId") Long escuelaId);
+
+    /**
+     * Todos los turnos de una escuela en un semestre, SIN paginar.
+     *
+     * Lo usa la importacion desde otro semestre: ahi hacen falta todos, porque se copian enteros
+     * (con sus bloques de horario). El listado de la pantalla sigue usando la version paginada.
+     */
+    @Query("SELECT t FROM Turno t " +
+           "JOIN FETCH t.escuela e " +
+           "LEFT JOIN FETCH t.semestre s " +
+           "WHERE e.escuelaId = :escuelaId AND s.semestreId = :semestreId " +
+           "ORDER BY t.nombre ASC")
+    List<Turno> findByEscuelaIdAndSemestreId(@Param("escuelaId") Long escuelaId,
+                                             @Param("semestreId") Long semestreId);
 
 }

@@ -108,4 +108,24 @@ public interface AulaRepositorio extends JpaRepository<Aula, Long> {
     /** Cuenta aulas que referencian a un turno. */
     @Query("SELECT COUNT(a) FROM Aula a WHERE a.turno.turnoId = :turnoId")
     long countByTurnoId(@Param("turnoId") Long turnoId);
+
+    /**
+     * TODAS las aulas de una escuela en un semestre, SIN paginar y sin filtrar por estado.
+     *
+     * Lo usa la importacion desde otro semestre: ahi hacen falta todas (tambien las inactivas, para
+     * copiarlas tal cual). El listado de la pantalla sigue usando la version paginada
+     * (buscarPorEscuelaYFiltros).
+     *
+     * El JOIN FETCH a turno es obligatorio: el servicio necesita el NOMBRE del turno para
+     * reencontrarlo en el semestre de destino, y sin el fetch seria un N+1 dentro del bucle.
+     */
+    @Query("SELECT a FROM Aula a " +
+           "JOIN FETCH a.escuela e " +
+           "JOIN FETCH a.semestre s " +
+           "JOIN FETCH a.turno t " +
+           "WHERE e.escuelaId = :escuelaId " +
+           "AND s.semestreId = :semestreId " +
+           "ORDER BY a.edificio ASC, a.piso ASC, a.nombre ASC")
+    List<Aula> findByEscuelaIdAndSemestreId(@Param("escuelaId") Long escuelaId,
+                                            @Param("semestreId") Long semestreId);
 }

@@ -1,6 +1,8 @@
 package mx.sih.controlador;
 
 import jakarta.validation.Valid;
+import mx.sih.modelo.dto.ImportarTurnosDTO;
+import mx.sih.modelo.dto.ResultadoImportacionTurnosDTO;
 import mx.sih.modelo.dto.TurnoCrearDTO;
 import mx.sih.modelo.dto.TurnoDTO;
 import mx.sih.servicio.TurnoServicio;
@@ -49,6 +51,19 @@ public class TurnoControlador {
     public ResponseEntity<TurnoDTO> crearTurno(@Valid @RequestBody TurnoCrearDTO dto) {
         TurnoDTO creado = turnoServicio.crearTurno(dto);
         return ResponseEntity.status(201).body(creado);
+    }
+
+    /**
+     * Trae los turnos de otro semestre de la escuela (con sus bloques de horario) al semestre de
+     * destino. Es para no teclear cada semestre la misma rejilla de bloques.
+     *
+     * Responde 200 con el resumen: cuantos turnos y bloques se copiaron y cuales se saltaron porque
+     * ya existia uno con ese nombre en el destino.
+     */
+    @PostMapping("/importar")
+    public ResponseEntity<ResultadoImportacionTurnosDTO> importarTurnos(
+            @Valid @RequestBody ImportarTurnosDTO dto) {
+        return ResponseEntity.ok(turnoServicio.importarTurnos(dto));
     }
 
     @PutMapping("/{id}")

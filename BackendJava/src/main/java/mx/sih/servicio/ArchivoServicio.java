@@ -119,6 +119,72 @@ public class ArchivoServicio {
         return urlBase + nombreArchivo;
     }
 
+    /**
+     * Copia una imagen ya guardada a un archivo NUEVO y devuelve su URL pública.
+     *
+     * Lo usa la importación de maestros desde otro semestre. Si las dos filas apuntaran a la MISMA
+     * URL, borrar un maestro borraría la foto del otro, porque {@link #eliminarArchivo(String)} se
+     * lleva el archivo del disco. Copiando el archivo, cada maestro tiene el suyo.
+     *
+     * La imagen se re-codifica igual que en guardarArchivo (no se copian los bytes a ciegas): el
+     * archivo nuevo pasa por las mismas validaciones que una subida normal.
+     *
+     * Devuelve null si la URL no es válida, el archivo ya no existe o no es una imagen permitida:
+     * una foto rota en una fila vieja NO debe tumbar la importación completa.
+     *
+     * Nota: el nombre y la URL pública se generan aquí otra vez, con las mismas reglas que en
+     * guardarArchivo. Se prefirió repetir esas pocas líneas antes que tocar el método de subida,
+     * que es la parte crítica de seguridad y ya está probada.
+     */
+    public String copiarArchivo(String urlOrigen, String prefijo) {
+        if (urlOrigen == null || urlOrigen.isBlank()) {
+            return null;
+        }
+        try {
+            String nombreOrigen = urlOrigen.substring(urlOrigen.lastIndexOf("/") + 1);
+            if (nombreOrigen.isBlank() || nombreOrigen.contains("..")) {
+                return null;
+            }
+            Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path origen = base.resolve(nombreOrigen).normalize();
+            if (!origen.startsWith(base) || !Files.isRegularFile(origen)) {
+                return null;
+            }
+
+            byte[] contenido = Files.readAllBytes(origen);
+
+            String formato = detectarFormato(contenido);
+            if (formato == null || !FORMATOS_PERMITIDOS.contains(formato)) {
+                return null;
+            }
+            BufferedImage imagen = leerYValidar(contenido);
+
+            String extension = EXTENSION_POR_FORMATO.get(formato);
+            String prefijoLimpio = (prefijo == null || prefijo.isBlank()) ? "archivo_" : prefijo;
+            String nombreNuevo = prefijoLimpio
+                    + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
+                    + "_" + UUID.randomUUID().toString().substring(0, 8)
+                    + "." + extension;
+
+            Path destino = base.resolve(nombreNuevo).normalize();
+            if (!destino.startsWith(base)) {
+                return null;
+            }
+
+            Files.createDirectories(base);
+            escribirImagen(imagen, destino, extension);
+
+            String urlBase = uploadUrl.startsWith("/") ? uploadUrl : "/" + uploadUrl;
+            if (!urlBase.endsWith("/")) {
+                urlBase = urlBase + "/";
+            }
+            return urlBase + nombreNuevo;
+
+        } catch (IOException | NegocioExcepcion e) {
+            return null;
+        }
+    }
+
     /** Elimina el archivo asociado a una URL pública. Devuelve false si no existe o la URL no es válida. */
     public boolean eliminarArchivo(String url) {
         if (url == null || url.isEmpty()) {

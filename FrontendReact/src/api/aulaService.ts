@@ -32,6 +32,22 @@ export const aulaService = {
     cambiarEstado: (id: number, activo: boolean) =>
         api.patch(`/aulas/${id}/estado?activo=${activo}`),
 
+    /**
+     * Trae al semestre de destino las aulas de OTRO SEMESTRE, pero SOLO las del turno seleccionado:
+     * se copian las del turno del origen que se llama igual. Como cada turno lo trabaja gente
+     * distinta, traer el semestre entero haria aparecer datos que nadie pidio.
+     *
+     * SOLO las aulas. Las que ya existan (mismo nombre en ese turno) NO se tocan: vuelven en
+     * `omitidos`.
+     */
+    importar: (semestreOrigenId: number, semestreDestinoId: number, turnoId: number) => {
+        return api.post<{
+            aulasCopiadas: number;
+            omitidos: string[];
+            mensaje: string;
+        }>('/aulas/importar', { semestreOrigenId, semestreDestinoId, turnoId });
+    },
+
     eliminar: (id: number) =>
         api.delete(`/aulas/${id}`)
 };

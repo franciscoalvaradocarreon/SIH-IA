@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { turnoService } from '../api/turnoService';
+import { semestreService } from '../api/semestreService';
 import { useAuth } from '../context/AuthContext';
-import type { Turno } from '../types';
+import type { Semestre, Turno } from '../types';
 import ErrorScreen from '../utils/ErrorScreen';
 import {
   MdAdd, MdEdit, MdDelete, MdSearch, MdCheckCircle, MdCancel,
-  MdRefresh, MdAccessTime, MdWarning, MdClass
+  MdRefresh, MdAccessTime, MdWarning, MdContentCopy
 } from 'react-icons/md';
 
 const TurnoList: React.FC = () => {
@@ -34,6 +35,14 @@ const TurnoList: React.FC = () => {
   }>({ abierto: false, turno: null });
 
   const [eliminando, setEliminando] = useState(false);
+
+  // Traer turnos de otro semestre: el modal pide el semestre de origen y ensena el resumen.
+  const [modalImportar, setModalImportar] = useState(false);
+  const [semestres, setSemestres] = useState<Semestre[]>([]);
+  const [semestreOrigen, setSemestreOrigen] = useState<number>(0);
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportacion, setResultadoImportacion] = useState<string | null>(null);
+  const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
   const [errorPantalla, setErrorPantalla] = useState<{
     titulo?: string;
@@ -79,6 +88,41 @@ const TurnoList: React.FC = () => {
 
   const handleRecargar = () => {
     cargarTurnos();
+  };
+
+  /** Abre el modal de importacion y carga los semestres de la escuela (menos el activo). */
+  const abrirImportar = async () => {
+    setResultadoImportacion(null);
+    setErrorImportacion(null);
+    setSemestreOrigen(0);
+    setModalImportar(true);
+    try {
+      const res = await semestreService.listarTodos();
+      setSemestres((res.data as Semestre[]).filter(s => s.id !== semestreActivo?.id));
+    } catch (error) {
+      console.error('Error al cargar semestres:', error);
+      setErrorImportacion('No se pudieron cargar los semestres.');
+    }
+  };
+
+  /**
+   * Trae los turnos del semestre elegido al semestre ACTIVO. El resumen que devuelve el backend se
+   * ensena tal cual: dice cuantos turnos se copiaron y cuales se saltaron por nombre repetido.
+   */
+  const confirmarImportar = async () => {
+    if (!semestreActivo?.id || !semestreOrigen) return;
+    setImportando(true);
+    setErrorImportacion(null);
+    try {
+      const res = await turnoService.importar(semestreOrigen, semestreActivo.id);
+      setResultadoImportacion(res.data.mensaje);
+      cargarTurnos();
+    } catch (error: any) {
+      console.error('Error al traer turnos:', error);
+      setErrorImportacion(error.response?.data?.message || 'No se pudieron traer los turnos.');
+    } finally {
+      setImportando(false);
+    }
   };
 
   const irANuevo = () => {
@@ -168,10 +212,7 @@ const TurnoList: React.FC = () => {
     }
   };
 
-  const limpiarFiltroSemestre = () => {
-    setSemestreFiltro(undefined);
-    setPage(0);
-  };
+  // (aqui estaba limpiarFiltroSemestre, que no se usaba en ningun sitio y el type-check marcaba.)
 
   if (loading && turnos.length === 0) {
     return (
@@ -223,6 +264,15 @@ const TurnoList: React.FC = () => {
           >
             <MdAdd className="text-xl" />
             Nuevo Turno
+          </button>
+          <button
+            onClick={abrirImportar}
+            disabled={!semestreActivo?.id}
+            title="Trae los turnos de otro semestre"
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg shadow-md transition disabled:opacity-50"
+          >
+            <MdContentCopy className="text-xl" />
+            Traer de otro semestre
           </button>
         </div>
       </div>
@@ -460,6 +510,87 @@ const TurnoList: React.FC = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: traer los turnos de otro semestre (con sus bloques de horario) */}
+      {modalImportar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
+              Traer turnos de otro semestre
+            </h3>
+
+            {resultadoImportacion ? (
+              <>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">{resultadoImportacion}</p>
+                <button
+                  onClick={() => setModalImportar(false)}
+                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Se traen <strong>todos</strong> los turnos del semestre que elijas. Solo los turnos: la
+                  rejilla de bloques (dias, horas y descansos) se maneja en el catalogo Turno-Horario.
+                  Los turnos que ya existan con el mismo nombre en el semestre activo se saltan: no se
+                  sobrescribe nada.
+                </p>
+
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Semestre de origen
+                </label>
+                <select
+                  value={semestreOrigen}
+                  onChange={e => setSemestreOrigen(Number(e.target.value))}
+                  disabled={importando}
+                  className="w-full px-4 py-2.5 mb-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+                >
+                  <option value={0}>Selecciona un semestre...</option>
+                  {semestres.map(s => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Se traeran al semestre activo: <strong>{semestreActivo?.nombre ?? '-'}</strong>
+                </p>
+
+                {errorImportacion && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mb-4">{errorImportacion}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setModalImportar(false)}
+                    disabled={importando}
+                    className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarImportar}
+                    disabled={importando || !semestreOrigen}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {importando ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Trayendo...
+                      </>
+                    ) : (
+                      <>
+                        <MdContentCopy className="text-lg" />
+                        Traer
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

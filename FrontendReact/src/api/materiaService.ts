@@ -41,6 +41,22 @@ export const materiaService = {
   cambiarEstado: (id: number, activo: boolean) =>
     api.patch(`/materias/${id}/estado?activo=${activo}`),
 
+  /**
+   * Trae al semestre de destino las materias de OTRO SEMESTRE, pero SOLO las del turno
+   * seleccionado: se copian las del turno del origen que se llama igual. Como cada turno lo trabaja
+   * gente distinta, traer el semestre entero haria aparecer datos que nadie pidio.
+   *
+   * SOLO las materias. Las que ya existan (misma CLAVE en ese turno) NO se tocan: vuelven en
+   * `omitidos`.
+   */
+  importar: (semestreOrigenId: number, semestreDestinoId: number, turnoId: number) => {
+    return api.post<{
+      materiasCopiadas: number;
+      omitidos: string[];
+      mensaje: string;
+    }>('/materias/importar', { semestreOrigenId, semestreDestinoId, turnoId });
+  },
+
   // Eliminar (baja lógica)
   eliminar: (id: number) =>
     api.delete(`/materias/${id}`)

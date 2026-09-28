@@ -2,12 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { especialidadService } from '../api/especialidadService';
 import { turnoService } from '../api/turnoService';
-import type { Especialidad, Turno } from '../types';
+import { semestreService } from '../api/semestreService';
+import type { Especialidad, Semestre, Turno } from '../types';
 import { useAuth } from '../context/AuthContext';
 import ErrorScreen from '../utils/ErrorScreen';
 import {
   MdAdd, MdEdit, MdDelete, MdSearch, MdCategory,
-  MdRefresh, MdWarning, MdSchedule
+  MdRefresh, MdWarning, MdSchedule, MdContentCopy
 } from 'react-icons/md';
 
 const Especialidades: React.FC = () => {
@@ -29,10 +30,13 @@ const Especialidades: React.FC = () => {
   const [page, setPage] = useState(pageInicial);
   const [size] = useState(12);
   const [busqueda, setBusqueda] = useState(busquedaInicial);
-  const [turnoId, setTurnoId] = useState<number>(turnoInicial);  // 🔥 NUEVO
-  const [turnos, setTurnos] = useState<Turno[]>([]);              // 🔥 NUEVO
-  const [loading, setLoading] = useState(true);
-  const [timeoutId, setTimeoutId] = useState<NodeJS.Timeout | null>(null);
+  const [turnoId, setTurnoId] = useState<number>(turnoInicial);  // 0 = ningun turno elegido
+  const [turnos, setTurnos] = useState<Turno[]>([]);
+  // Sin turno elegido NO se consulta ni se muestra nada: la especialidad siempre pertenece a un
+  // turno, asi que "todas las especialidades del semestre" no es una vista util (mezcla turnos).
+  const turnoListo = turnoId > 0;
+  const [loading, setLoading] = useState(turnoInicial > 0);
+  const [timeoutId, setTimeoutId] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   // Estados para modal de confirmación y pantalla de error
   const [modalEliminar, setModalEliminar] = useState<{
@@ -41,6 +45,14 @@ const Especialidades: React.FC = () => {
   }>({ abierto: false, especialidad: null });
 
   const [eliminando, setEliminando] = useState(false);
+
+  // Traer especialidades de otro semestre: el modal pide el semestre de origen y ensena el resumen.
+  const [modalImportar, setModalImportar] = useState(false);
+  const [semestres, setSemestres] = useState<Semestre[]>([]);
+  const [semestreOrigen, setSemestreOrigen] = useState<number>(0);
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportacion, setResultadoImportacion] = useState<string | null>(null);
+  const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
   const [errorPantalla, setErrorPantalla] = useState<{
     titulo?: string;
@@ -66,7 +78,17 @@ const Especialidades: React.FC = () => {
   }, [loading, busqueda]);
 
   // 🔥 Cargar turnos cuando cambia el semestre activo
+  //
+  // Al CAMBIAR de semestre se limpia el turno elegido: los turnos son de cada semestre, asi que
+  // conservar el turno anterior dejaria seleccionado un turno que ya no existe (o, peor, uno de
+  // otro semestre). En el primer render no se limpia, para no perder el turno que venga en la URL.
+  const semestrePrevioRef = useRef<number | undefined>(semestreActivo?.id);
   useEffect(() => {
+    if (semestrePrevioRef.current !== semestreActivo?.id) {
+      semestrePrevioRef.current = semestreActivo?.id;
+      setTurnoId(0);
+      setPage(0);
+    }
     cargarTurnos();
   }, [semestreActivo?.id]);
 
@@ -121,6 +143,16 @@ const Especialidades: React.FC = () => {
   };
 
   const cargarEspecialidades = async () => {
+    // Sin turno elegido no se pide nada al backend: la tabla queda vacia y en su lugar se muestra
+    // el aviso de "selecciona un turno".
+    if (!turnoListo) {
+      setEspecialidades([]);
+      setTotal(0);
+      setLoading(false);
+      actualizarURL();   // quita el ?turno= de la URL al deseleccionar
+      return;
+    }
+
     setLoading(true);
     try {
       const semestreId = semestreActivo?.id;
@@ -129,7 +161,7 @@ const Especialidades: React.FC = () => {
         size,
         busqueda,
         semestreId,
-        turnoId > 0 ? turnoId : undefined   // 🔥 NUEVO: solo enviar si > 0
+        turnoId
       );
       setEspecialidades(res.data.content);
       setTotal(res.data.totalElements);
@@ -171,6 +203,43 @@ const Especialidades: React.FC = () => {
     setPage(0);
     cargarTurnos();          // 🔥 NUEVO: refrescar turnos por si cambiaron
     cargarEspecialidades();
+  };
+
+  /** Abre el modal de importacion y carga los semestres de la escuela (menos el activo). */
+  const abrirImportar = async () => {
+    setResultadoImportacion(null);
+    setErrorImportacion(null);
+    setSemestreOrigen(0);
+    setModalImportar(true);
+    try {
+      const res = await semestreService.listarTodos();
+      setSemestres((res.data as Semestre[]).filter(s => s.id !== semestreActivo?.id));
+    } catch (error) {
+      console.error('Error al cargar semestres:', error);
+      setErrorImportacion('No se pudieron cargar los semestres.');
+    }
+  };
+
+  /**
+   * Trae las especialidades del semestre elegido al semestre ACTIVO. El resumen que devuelve el
+   * backend se ensena tal cual: dice cuantas se copiaron y cuales se saltaron (porque ya existian o
+   * porque el semestre activo no tiene el turno al que pertenecian).
+   */
+  const confirmarImportar = async () => {
+    if (!semestreActivo?.id || !semestreOrigen || !turnoListo) return;
+    setImportando(true);
+    setErrorImportacion(null);
+    try {
+      const res = await especialidadService.importar(semestreOrigen, semestreActivo.id, turnoId);
+      setResultadoImportacion(res.data.mensaje);
+      cargarTurnos();
+      cargarEspecialidades();
+    } catch (error: any) {
+      console.error('Error al traer especialidades:', error);
+      setErrorImportacion(error.response?.data?.message || 'No se pudieron traer las especialidades.');
+    } finally {
+      setImportando(false);
+    }
   };
 
   const irANuevo = () => {
@@ -317,6 +386,17 @@ const Especialidades: React.FC = () => {
             <MdAdd className="text-xl" />
             Nueva Especialidad
           </button>
+          <button
+            onClick={abrirImportar}
+            disabled={!semestreActivo?.id || !turnoListo}
+            title={turnoListo
+              ? 'Trae las especialidades del turno seleccionado desde otro semestre'
+              : 'Selecciona primero un turno'}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <MdContentCopy className="text-xl" />
+            Traer de otro semestre
+          </button>
         </div>
       </div>
 
@@ -345,18 +425,19 @@ const Especialidades: React.FC = () => {
           </p>
         </div>
 
-        {/* 🔥 Filtro por turno */}
+        {/* 🔥 Filtro por turno: es obligatorio, sin turno no se muestra nada */}
         <div>
           <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             <MdSchedule className="inline mr-1" />
-            Filtrar por Turno
+            Turno *
           </label>
           <select
             value={turnoId}
             onChange={handleTurnoChange}
-            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            disabled={turnos.length === 0}
+            className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
           >
-            <option value={0}>Todos los turnos</option>
+            <option value={0}>Selecciona un turno...</option>
             {turnos.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.nombre}
@@ -371,7 +452,20 @@ const Especialidades: React.FC = () => {
         </div>
       </div>
 
-      {loading ? (
+      {!turnoListo ? (
+        /* Sin turno elegido no se muestra ninguna especialidad */
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-400 dark:border-gray-700 px-4 py-12">
+          <div className="flex flex-col items-center gap-2 text-center">
+            <MdSchedule className="text-5xl text-gray-300 dark:text-gray-600" />
+            <p className="text-gray-600 dark:text-gray-300 font-medium">
+              Selecciona un turno para ver sus especialidades
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Cada especialidad pertenece a un turno, por eso el listado se muestra por turno.
+            </p>
+          </div>
+        </div>
+      ) : loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent"></div>
         </div>
@@ -499,6 +593,88 @@ const Especialidades: React.FC = () => {
             </div>
           </div>
         </>
+      )}
+
+      {/* Modal: traer las especialidades de otro semestre */}
+      {modalImportar && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-4">
+              Traer especialidades de otro semestre
+            </h3>
+
+            {resultadoImportacion ? (
+              <>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">{resultadoImportacion}</p>
+                <button
+                  onClick={() => setModalImportar(false)}
+                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Se traen <strong>solo las especialidades del turno seleccionado</strong> (
+                  {turnos.find(t => t.id === turnoId)?.nombre ?? '-'}) del semestre que elijas. Los
+                  demas turnos no se tocan, porque cada turno lo trabaja gente distinta. Las que ya
+                  existan aqui se saltan: no se sobrescribe nada.
+                </p>
+
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Semestre de origen
+                </label>
+                <select
+                  value={semestreOrigen}
+                  onChange={e => setSemestreOrigen(Number(e.target.value))}
+                  disabled={importando}
+                  className="w-full px-4 py-2.5 mb-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+                >
+                  <option value={0}>Selecciona un semestre...</option>
+                  {semestres.map(s => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Se traeran al turno <strong>{turnos.find(t => t.id === turnoId)?.nombre ?? '-'}</strong>{' '}
+                  del semestre activo: <strong>{semestreActivo?.nombre ?? '-'}</strong>
+                </p>
+
+                {errorImportacion && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mb-4">{errorImportacion}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setModalImportar(false)}
+                    disabled={importando}
+                    className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarImportar}
+                    disabled={importando || !semestreOrigen}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {importando ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Trayendo...
+                      </>
+                    ) : (
+                      <>
+                        <MdContentCopy className="text-lg" />
+                        Traer
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Modal de confirmación de eliminación */}

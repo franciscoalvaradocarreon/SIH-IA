@@ -4,6 +4,8 @@ import jakarta.validation.Valid;
 import mx.sih.modelo.dto.AulaCrearDTO;
 import mx.sih.modelo.dto.AulaDTO;
 import mx.sih.modelo.dto.AulaDetalleDTO;
+import mx.sih.modelo.dto.ImportarAulasDTO;
+import mx.sih.modelo.dto.ResultadoImportacionAulasDTO;
 import mx.sih.servicio.AulaServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,6 +45,19 @@ public class AulaControlador {
     public ResponseEntity<AulaDTO> crearAula(@Valid @RequestBody AulaCrearDTO dto) {
         AulaDTO creada = aulaServicio.crearAula(dto);
         return ResponseEntity.status(201).body(creada);
+    }
+
+    /**
+     * Trae al semestre de destino las aulas de otro semestre de la misma escuela.
+     *
+     * No lleva @PreAuthorize propio: la clase ya exige ADMIN o COORDINADOR, que es lo correcto para
+     * una operacion que escribe.
+     */
+    @PostMapping("/importar")
+    public ResponseEntity<ResultadoImportacionAulasDTO> importarAulas(
+            @Valid @RequestBody ImportarAulasDTO dto) {
+        ResultadoImportacionAulasDTO resultado = aulaServicio.importarAulas(dto);
+        return ResponseEntity.ok(resultado);
     }
 
     @PutMapping("/{id}")

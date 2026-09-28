@@ -37,6 +37,22 @@ import type { Maestro, MaestroForm } from '../types';
   cambiarEstado: (id: number, activo: boolean) =>
     api.patch(`/maestros/${id}/estado?activo=${activo}`),
 
+  /**
+   * Trae al semestre de destino los maestros de OTRO SEMESTRE, pero SOLO los del turno
+   * seleccionado: se copian los del turno del origen que se llama igual. Como cada turno lo trabaja
+   * gente distinta, traer el semestre entero haria aparecer datos que nadie pidio.
+   *
+   * SOLO los maestros (las fotos se copian en el servidor). Los que ya existan en ese turno NO se
+   * tocan: vuelven en `omitidos` con el motivo.
+   */
+  importar: (semestreOrigenId: number, semestreDestinoId: number, turnoId: number) => {
+    return api.post<{
+      maestrosCopiados: number;
+      omitidos: string[];
+      mensaje: string;
+    }>('/maestros/importar', { semestreOrigenId, semestreDestinoId, turnoId });
+  },
+
   eliminar: (id: number) =>
     api.delete(`/maestros/${id}`)
 };

@@ -1,4 +1,3 @@
-// src/components/HorarioMaestro.tsx
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { horarioService } from '../api/horarioService';
 import { maestroService } from '../api/maestroService';

@@ -1,9 +1,11 @@
 package mx.sih.controlador;
 
 import jakarta.validation.Valid;
+import mx.sih.modelo.dto.ImportarMateriasDTO;
 import mx.sih.modelo.dto.MateriaCrearDTO;
 import mx.sih.modelo.dto.MateriaDTO;
 import mx.sih.modelo.dto.MateriaDetalleDTO;
+import mx.sih.modelo.dto.ResultadoImportacionMateriasDTO;
 import mx.sih.servicio.MateriaServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -49,6 +51,20 @@ public class MateriaControlador {
     public ResponseEntity<MateriaDTO> crearMateria(@Valid @RequestBody MateriaCrearDTO dto) {
         MateriaDTO creada = materiaServicio.crearMateria(dto);
         return ResponseEntity.status(201).body(creada);
+    }
+
+    /**
+     * Trae al semestre de destino las materias de otro semestre de la misma escuela.
+     *
+     * La anotacion @PreAuthorize se repite aqui aunque la clase ya tenga isAuthenticated(): la de
+     * clase solo exige estar autenticado, y esto escribe en la base.
+     */
+    @PostMapping("/importar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
+    public ResponseEntity<ResultadoImportacionMateriasDTO> importarMaterias(
+            @Valid @RequestBody ImportarMateriasDTO dto) {
+        ResultadoImportacionMateriasDTO resultado = materiaServicio.importarMaterias(dto);
+        return ResponseEntity.ok(resultado);
     }
 
     @PutMapping("/{id}")

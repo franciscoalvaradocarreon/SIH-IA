@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -117,4 +118,24 @@ Page<Maestro> buscarPorEscuelaYTexto(@Param("escuelaId") Long escuelaId,
     /** Cuenta maestros que referencian a un turno. */
     @Query("SELECT COUNT(m) FROM Maestro m WHERE m.turno.turnoId = :turnoId")
     long countByTurnoId(@Param("turnoId") Long turnoId);
+
+    /**
+     * Todos los maestros de una escuela en un semestre, SIN paginar.
+     *
+     * Lo usa la importacion desde otro semestre: ahi hacen falta todos, porque se copian enteros.
+     * El listado de la pantalla sigue usando la version paginada
+     * (findByEscuelaIdAndBusquedaAndSemestreId).
+     *
+     * El JOIN FETCH a turno es obligatorio: el servicio necesita el NOMBRE del turno para
+     * reencontrarlo en el semestre de destino, y sin el fetch seria un N+1 dentro del bucle.
+     */
+    @Query("SELECT m FROM Maestro m " +
+           "JOIN FETCH m.escuela e " +
+           "JOIN FETCH m.semestre s " +
+           "JOIN FETCH m.turno t " +
+           "WHERE e.escuelaId = :escuelaId " +
+           "AND s.semestreId = :semestreId " +
+           "ORDER BY m.apellidos ASC, m.nombre ASC")
+    List<Maestro> findByEscuelaIdAndSemestreId(@Param("escuelaId") Long escuelaId,
+                                               @Param("semestreId") Long semestreId);
 }

@@ -1,10 +1,16 @@
 package mx.sih.servicio;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.modelo.dto.GrupoCrearDTO;
 import mx.sih.modelo.dto.GrupoDTO;
 import mx.sih.modelo.dto.GrupoDetalleDTO;
+import mx.sih.modelo.dto.ImportarGruposDTO;
+import mx.sih.modelo.dto.ResultadoImportacionGruposDTO;
 import mx.sih.modelo.entidad.*;
 import mx.sih.repositorio.*;
 import mx.sih.seguridad.contexto.EscuelaContexto;
@@ -251,6 +257,168 @@ public class GrupoServicio {
 
         // 3. Sin dependencias: eliminar
         grupoRepositorio.delete(grupo);
+    }
+
+    // ============================================================
+    // IMPORTACION DESDE OTRO SEMESTRE
+    // ============================================================
+
+    /**
+     * Trae los grupos de OTRO semestre de la misma escuela al semestre de destino.
+     *
+     * SOLO la tabla de grupos: nombre, grado, capacidad y estado. No se copia ninguna otra tabla
+     * (las asignaciones, la disponibilidad y los horarios son de cada semestre y no se tocan).
+     *
+     * Aqui hay DOS cosas que resolver en el destino, porque el grupo cuelga de las dos:
+     *
+     *  1. El TURNO (NOT NULL): se busca por NOMBRE en el semestre de destino. Si no existe, el grupo
+     *     se salta.
+     *  2. La ESPECIALIDAD (opcional): se busca por NOMBRE **dentro de ese mismo turno del destino**,
+     *     porque una especialidad pertenece a un turno concreto. Si el grupo tenia especialidad y el
+     *     turno equivalente del destino no tiene ninguna con ese nombre, el grupo se SALTA: copiarlo
+     *     sin especialidad cambiaria el dato en silencio (y el indice unico lo permitiria, porque en
+     *     SQL los NULL no chocan). Normalmente eso significa "trae primero las especialidades".
+     *
+     * Decisiones:
+     *
+     *  1. Se traen TODOS los grupos del semestre de origen, de todos sus turnos.
+     *  2. Si el destino ya tiene ese grupo (mismo nombre, mismo turno y misma especialidad) se SALTA
+     *     y se informa. Es el alcance exacto del indice unico de la tabla.
+     *  3. El estado (activo/inactivo) se copia tal cual.
+     *  4. Todo va en UNA transaccion: si algo falla a mitad, no queda un semestre copiado a medias.
+     */
+    @Transactional
+    public ResultadoImportacionGruposDTO importarGrupos(ImportarGruposDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        if (dto.getSemestreOrigenId().equals(dto.getSemestreDestinoId())) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreOrigenId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de origen"));
+        Semestre destino = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreDestinoId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de destino"));
+
+        // El TURNO que el usuario tiene seleccionado en la pantalla manda el alcance: solo se traen
+        // los grupos del turno del ORIGEN que se llame igual.
+        Turno turnoDestino = resolverTurnoDeLaImportacion(dto.getTurnoId(), destino, escuelaId);
+        String nombreTurno = turnoDestino.getNombre().trim().toUpperCase(Locale.ROOT);
+
+        List<Grupo> fuente = grupoRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, origen.getSemestreId())
+                .stream()
+                .filter(g -> g.getTurno() != null
+                        && g.getTurno().getNombre() != null
+                        && g.getTurno().getNombre().trim().toUpperCase(Locale.ROOT).equals(nombreTurno))
+                .toList();
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El turno '" + turnoDestino.getNombre()
+                    + "' del semestre '" + origen.getNombre()
+                    + "' no tiene grupos que traer");
+        }
+
+        // Especialidades del DESTINO EN ESE TURNO, por nombre en mayusculas: una especialidad solo
+        // vale para el turno al que pertenece, y como la importacion ya esta acotada a un turno,
+        // basta con indexarlas por nombre.
+        Map<String, Especialidad> especialidadesDestino = new HashMap<>();
+        for (Especialidad esp : especialidadRepositorio.findByEscuelaIdAndSemestreId(
+                escuelaId, destino.getSemestreId())) {
+            if (esp.getNombre() != null
+                    && esp.getTurno() != null
+                    && esp.getTurno().getTurnoId().equals(turnoDestino.getTurnoId())) {
+                especialidadesDestino.putIfAbsent(
+                        esp.getNombre().trim().toUpperCase(Locale.ROOT), esp);
+            }
+        }
+
+        int copiados = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (Grupo original : fuente) {
+            String etiqueta = original.getNombre() + " (" + original.getGrado() + "o)";
+
+            // La especialidad es opcional: si el grupo no tiene, la copia tampoco.
+            Especialidad especialidadDestino = null;
+            if (original.getEspecialidad() != null) {
+                String nombreEspecialidad = original.getEspecialidad().getNombre();
+                if (nombreEspecialidad == null || nombreEspecialidad.isBlank()) {
+                    omitidos.add(etiqueta + " (en el origen tiene una especialidad sin nombre)");
+                    continue;
+                }
+                especialidadDestino = especialidadesDestino.get(
+                        nombreEspecialidad.trim().toUpperCase(Locale.ROOT));
+                if (especialidadDestino == null) {
+                    omitidos.add(etiqueta + " (el turno '" + turnoDestino.getNombre()
+                            + "' del destino no tiene la especialidad '"
+                            + nombreEspecialidad.trim() + "')");
+                    continue;
+                }
+            }
+
+            Long especialidadDestinoId = (especialidadDestino == null)
+                    ? null
+                    : especialidadDestino.getEspecialidadId();
+
+            if (grupoRepositorio.existeGrupoEnSemestreTurnoYEspecialidad(
+                    escuelaId, destino.getSemestreId(), turnoDestino.getTurnoId(),
+                    original.getNombre(), especialidadDestinoId)) {
+                omitidos.add(etiqueta + " (ya existia en '" + turnoDestino.getNombre()
+                        + "'" + (especialidadDestino == null
+                                ? " sin especialidad)"
+                                : " / " + especialidadDestino.getNombre() + ")"));
+                continue;
+            }
+
+            Grupo copia = new Grupo();
+            copia.setNombre(original.getNombre());
+            copia.setGrado(original.getGrado());
+            copia.setCapacidad(original.getCapacidad());
+            copia.setActivo(original.getActivo());
+
+            Escuela escuela = new Escuela();
+            escuela.setEscuelaId(escuelaId);
+            copia.setEscuela(escuela);
+            copia.setSemestre(destino);
+            copia.setTurno(turnoDestino);
+            copia.setEspecialidad(especialidadDestino);
+
+            grupoRepositorio.save(copia);
+            copiados++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(copiados)
+                .append(copiados == 1 ? " grupo" : " grupos")
+                .append(" del turno '").append(turnoDestino.getNombre())
+                .append("' desde '").append(origen.getNombre()).append("'.");
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size()).append(": ")
+                    .append(String.join("; ", omitidos)).append(".");
+        }
+
+        return new ResultadoImportacionGruposDTO(copiados, omitidos, mensaje.toString());
+    }
+
+    /**
+     * Resuelve el turno de destino de una importacion desde otro semestre.
+     *
+     * El turno lo elige el usuario en la pantalla y TIENE que ser del semestre de destino: sin esta
+     * comprobacion se podria importar hacia un turno de otro semestre y romper la coherencia
+     * semestre-turno que valida crearGrupo.
+     */
+    private Turno resolverTurnoDeLaImportacion(Long turnoId, Semestre destino, Long escuelaId) {
+        Turno turno = turnoRepositorio.findByIdAndEscuelaId(turnoId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion(
+                        "Turno no encontrado o no pertenece a esta escuela"));
+        if (turno.getSemestre() == null
+                || !turno.getSemestre().getSemestreId().equals(destino.getSemestreId())) {
+            throw new NegocioExcepcion("El turno '" + turno.getNombre()
+                    + "' no pertenece al semestre '" + destino.getNombre() + "'");
+        }
+        return turno;
     }
 
     private GrupoDTO toDTO(Grupo grupo) {

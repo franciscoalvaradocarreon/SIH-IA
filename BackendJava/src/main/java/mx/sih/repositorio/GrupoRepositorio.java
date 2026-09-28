@@ -176,4 +176,51 @@ public interface GrupoRepositorio extends JpaRepository<Grupo, Long> {
     @Query("SELECT COUNT(g) FROM Grupo g WHERE g.turno.turnoId = :turnoId")
     long countByTurnoId(@Param("turnoId") Long turnoId);
 
+    /**
+     * TODOS los grupos de una escuela en un semestre, SIN paginar y sin filtrar por estado.
+     *
+     * Lo usa la importacion desde otro semestre: ahi hacen falta todos (tambien los inactivos, para
+     * copiarlos tal cual). El listado de la pantalla sigue usando la version paginada
+     * (findByEscuelaYFiltros / findByEscuelaIdAndBusquedaAndSemestreId).
+     *
+     * Se hace JOIN FETCH a turno y semestre porque el servicio los necesita para reencontrar el
+     * turno equivalente en el destino, y LEFT JOIN FETCH a especialidad porque es opcional.
+     */
+    @Query("SELECT g FROM Grupo g " +
+           "JOIN FETCH g.escuela e " +
+           "JOIN FETCH g.semestre s " +
+           "JOIN FETCH g.turno t " +
+           "LEFT JOIN FETCH g.especialidad esp " +
+           "WHERE e.escuelaId = :escuelaId " +
+           "AND s.semestreId = :semestreId " +
+           "ORDER BY g.grado ASC, g.nombre ASC")
+    List<Grupo> findByEscuelaIdAndSemestreId(@Param("escuelaId") Long escuelaId,
+                                             @Param("semestreId") Long semestreId);
+
+    /**
+     * ¿Existe YA un grupo con ese nombre en ese (semestre, turno, especialidad)?
+     *
+     * Es EXACTAMENTE el alcance del indice unico de la tabla:
+     * (escuela_id, semestre_id, especialidad_id, turno_id, nombre). La especialidad puede ser null
+     * (un grupo sin especialidad es valido), y en SQL dos NULL no son iguales, asi que el caso
+     * "sin especialidad" se comprueba aparte con IS NULL.
+     *
+     * OJO: no sirve existsByEscuelaIdAndNombreAndEspecialidad, que es el que usa crearGrupo: ese
+     * NO mira semestre ni turno, asi que al importar encontraria los grupos del semestre de ORIGEN
+     * y diria que ya existen. Aqui la pregunta es solo por el semestre de destino.
+     */
+    @Query("SELECT CASE WHEN COUNT(g) > 0 THEN true ELSE false END " +
+           "FROM Grupo g " +
+           "WHERE g.escuela.escuelaId = :escuelaId " +
+           "AND g.semestre.semestreId = :semestreId " +
+           "AND g.turno.turnoId = :turnoId " +
+           "AND LOWER(g.nombre) = LOWER(:nombre) " +
+           "AND ((:especialidadId IS NULL AND g.especialidad IS NULL) " +
+           "     OR g.especialidad.especialidadId = :especialidadId)")
+    boolean existeGrupoEnSemestreTurnoYEspecialidad(@Param("escuelaId") Long escuelaId,
+                                                    @Param("semestreId") Long semestreId,
+                                                    @Param("turnoId") Long turnoId,
+                                                    @Param("nombre") String nombre,
+                                                    @Param("especialidadId") Long especialidadId);
+
 }

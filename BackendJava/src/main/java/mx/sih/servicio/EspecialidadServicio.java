@@ -4,6 +4,8 @@ import mx.sih.excepcion.MensajeErrorUtil;
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.modelo.dto.EspecialidadCrearDTO;
 import mx.sih.modelo.dto.EspecialidadDTO;
+import mx.sih.modelo.dto.ImportarEspecialidadesDTO;
+import mx.sih.modelo.dto.ResultadoImportacionEspecialidadesDTO;
 import mx.sih.modelo.entidad.Especialidad;
 import mx.sih.modelo.entidad.Semestre;
 import mx.sih.modelo.entidad.Turno;
@@ -11,6 +13,9 @@ import mx.sih.repositorio.EspecialidadRepositorio;
 import mx.sih.repositorio.SemestreRepositorio;
 import mx.sih.repositorio.TurnoRepositorio;
 import static mx.sih.seguridad.contexto.EscuelaContexto.getEscuelaId;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -138,6 +143,91 @@ public class EspecialidadServicio {
         }
     }
 
+    /**
+     * Trae las especialidades de OTRO semestre de la misma escuela al semestre de destino.
+     *
+     * SOLO la tabla de especialidades: el nombre y el turno al que pertenece. No se copia ninguna
+     * otra tabla (los grupos, los horarios y las asignaciones son otra cosa y no se tocan).
+     *
+     * El detalle que manda aqui: sih.especialidad.turno_id es NOT NULL y el turno TIENE que ser del
+     * mismo semestre que la especialidad (ver validarCoherenciaSemestreTurno). O sea que cada
+     * especialidad que se trae necesita encontrar SU turno en el semestre de destino, y se busca por
+     * NOMBRE: es el unico dato que identifica un turno entre semestres, porque el turno_id es de
+     * otro semestre y no sirve.
+     *
+     * Decisiones:
+     *
+     *  1. Se traen TODAS las especialidades del semestre de origen: en la pantalla se elige el
+     *     semestre, no especialidad por especialidad.
+     *  2. Si el destino NO tiene un turno con ese nombre, la especialidad se SALTA y se informa.
+     *     Nunca se inventa un turno ni se apunta a un turno de otro semestre: eso romperia la
+     *     coherencia semestre-turno (y el listado por semestre mostraria basura).
+     *  3. Si el destino YA tiene esa especialidad en ese turno, se SALTA y se informa. No se
+     *     sobrescribe ni se duplica: se pidio "traer lo que falta", no "reemplazar lo que hay".
+     *  4. Todo va en UNA transaccion: si algo falla a mitad, no queda un semestre copiado a medias.
+     */
+    @Transactional
+    public ResultadoImportacionEspecialidadesDTO importarEspecialidades(ImportarEspecialidadesDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        if (dto.getSemestreOrigenId().equals(dto.getSemestreDestinoId())) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = resolverSemestre(dto.getSemestreOrigenId(), escuelaId);
+        Semestre destino = resolverSemestre(dto.getSemestreDestinoId(), escuelaId);
+
+        // El TURNO que el usuario tiene seleccionado en la pantalla manda el alcance: solo se traen
+        // las especialidades del turno del ORIGEN que se llame igual.
+        Turno turnoDestino = resolverTurnoDeLaImportacion(dto.getTurnoId(), destino, escuelaId);
+        String nombreTurno = turnoDestino.getNombre().trim().toUpperCase(Locale.ROOT);
+
+        List<Especialidad> fuente = especialidadRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, origen.getSemestreId())
+                .stream()
+                .filter(e -> e.getTurno() != null
+                        && e.getTurno().getNombre() != null
+                        && e.getTurno().getNombre().trim().toUpperCase(Locale.ROOT).equals(nombreTurno))
+                .toList();
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El turno '" + turnoDestino.getNombre()
+                    + "' del semestre '" + origen.getNombre()
+                    + "' no tiene especialidades que traer");
+        }
+
+        int copiadas = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (Especialidad original : fuente) {
+            String nombre = original.getNombre();
+
+            if (especialidadRepositorio.existsBySemestreTurnoNombre(
+                    destino.getSemestreId(), turnoDestino.getTurnoId(), nombre)) {
+                omitidos.add(nombre + " (ya existia en '" + turnoDestino.getNombre() + "')");
+                continue;
+            }
+
+            Especialidad copia = new Especialidad();
+            copia.setNombre(nombre);
+            copia.setSemestre(destino);
+            copia.setTurno(turnoDestino);
+            especialidadRepositorio.save(copia);
+            copiadas++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(copiadas)
+                .append(copiadas == 1 ? " especialidad" : " especialidades")
+                .append(" del turno '").append(turnoDestino.getNombre())
+                .append("' desde '").append(origen.getNombre()).append("'.");
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size()).append(": ")
+                    .append(String.join("; ", omitidos)).append(".");
+        }
+
+        return new ResultadoImportacionEspecialidadesDTO(copiadas, omitidos, mensaje.toString());
+    }
+
     // ============================================================
     // HELPERS PRIVADOS
     // ============================================================
@@ -174,6 +264,25 @@ public class EspecialidadServicio {
                     "' pertenece al semestre '" + turno.getSemestre().getNombre() +
                     "', no a '" + semestre.getNombre() + "'");
         }
+    }
+
+    /**
+     * Resuelve el turno de destino de una importacion desde otro semestre.
+     *
+     * El turno lo elige el usuario en la pantalla y TIENE que ser del semestre de destino: sin esta
+     * comprobacion se podria importar hacia un turno de otro semestre y romper la coherencia
+     * semestre-turno que valida crearEspecialidad.
+     */
+    private Turno resolverTurnoDeLaImportacion(Long turnoId, Semestre destino, Long escuelaId) {
+        Turno turno = turnoRepositorio.findByIdAndEscuelaId(turnoId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion(
+                        "Turno no encontrado o no pertenece a esta escuela"));
+        if (turno.getSemestre() == null
+                || !turno.getSemestre().getSemestreId().equals(destino.getSemestreId())) {
+            throw new NegocioExcepcion("El turno '" + turno.getNombre()
+                    + "' no pertenece al semestre '" + destino.getNombre() + "'");
+        }
+        return turno;
     }
 
     private EspecialidadDTO toDTO(Especialidad especialidad) {
