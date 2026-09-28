@@ -261,7 +261,14 @@ public class HorarioIAServicio {
 
         // ── ventanas legales por asignación y sesiones ──
         Map<Long, Integer> ventanasPorAsignacion = new HashMap<>();
-        Map<Long, Integer> sesionesPorAsignacion = new HashMap<>();
+        /**
+         * Sesiones por MATERIA DEL GRUPO, no por asignación: la regla dura es "una sesión por día" y un
+         * grupo puede tener la misma materia repartida en dos asignaciones (la teoría en su aula y la
+         * práctica en el taller). Contando por asignación, este chequeo diría que todo cabe mientras las
+         * dos asignaciones compiten por los mismos días.
+         */
+        Map<String, Integer> sesionesPorMateriaDelGrupo = new HashMap<>();
+        Map<String, String> etiquetaDeMateriaDelGrupo = new HashMap<>();
         int totalSesiones = 0;
         int totalVentanas = 0;
         int horasDemandadas = 0;
@@ -270,7 +277,9 @@ public class HorarioIAServicio {
                 continue;
             }
             List<Integer> duraciones = GeneradorIA.duracionesDe(a);
-            sesionesPorAsignacion.merge(a.getAsignacionId(), duraciones.size(), Integer::sum);
+            String claveMateria = claveDeMateriaDelGrupo(a);
+            sesionesPorMateriaDelGrupo.merge(claveMateria, duraciones.size(), Integer::sum);
+            etiquetaDeMateriaDelGrupo.putIfAbsent(claveMateria, etiqueta(a));
             totalSesiones += duraciones.size();
             horasDemandadas += a.getHoras() == null ? 0 : a.getHoras();
             int ventanas = 0;
@@ -329,11 +338,10 @@ public class HorarioIAServicio {
 
         // 4) más sesiones que días (la regla dura es una sesión por materia y día)
         List<String> demasiadasSesiones = new ArrayList<>();
-        for (Asignacion a : datos.asignaciones()) {
-            int sesiones = sesionesPorAsignacion.getOrDefault(a.getAsignacionId(), 0);
-            if (sesiones > diasDisponibles) {
-                demasiadasSesiones.add(etiqueta(a) + ": " + sesiones + " sesiones para "
-                        + diasDisponibles + " días");
+        for (Map.Entry<String, Integer> e : sesionesPorMateriaDelGrupo.entrySet()) {
+            if (e.getValue() > diasDisponibles) {
+                demasiadasSesiones.add(etiquetaDeMateriaDelGrupo.get(e.getKey()) + ": "
+                        + e.getValue() + " sesiones para " + diasDisponibles + " días");
             }
         }
         chequeos.add(new ValidacionIADTO.ChequeoIA("Sesiones contra días del turno",
@@ -1288,6 +1296,17 @@ public class HorarioIAServicio {
 
     private static long minutos(java.time.LocalTime h) {
         return h == null ? -1 : h.getHour() * 60L + h.getMinute();
+    }
+
+    /**
+     * Clave (grupo, materia) para contar sesiones y días: la regla dura "una sesión por día" mira la
+     * MATERIA, no la asignación, así que las dos asignaciones de una misma materia (teoría + taller)
+     * tienen que caer en la misma cuenta.
+     */
+    private static String claveDeMateriaDelGrupo(Asignacion a) {
+        long grupo = a.getGrupo() != null ? a.getGrupo().getGrupoId() : 0L;
+        long materia = a.getMateria() != null ? a.getMateria().getMateriaId() : 0L;
+        return grupo + "|" + materia;
     }
 
     private static String etiqueta(Asignacion a) {

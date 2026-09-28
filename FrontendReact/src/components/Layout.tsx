@@ -72,14 +72,28 @@ const Layout: React.FC = () => {
         scrolleaba por dentro; el que scrollea es la ventana. Al no ser contenedor de scroll, el
         sticky de la caja de pines se pega a la ventana, que es donde el usuario se desplaza.
       */}
+      {/*
+        El fondo translucido con desenfoque va en el ::before y NO en <main>.
+
+        backdrop-filter (igual que filter o transform) convierte al elemento en el
+        "containing block" de sus descendientes: mientras el desenfoque estuvo en <main>,
+        TODOS los modales de la aplicacion (position: fixed) se posicionaban respecto a
+        <main> —que crece con la pagina— en vez de respecto a la ventana. Por eso salian
+        al principio de la pagina y, con una pagina larga, fuera de la vista.
+
+        En el ::before el desenfoque se ve exactamente igual y no afecta a nadie mas.
+        El -z-10 lo deja debajo del contenido (un ::before absoluto, sin z negativo, se
+        pintaria ENCIMA) y va con pointer-events-none para no interceptar clics.
+      */}
       <main className="
         flex-1 p-6 relative z-10 
         m-4 rounded-2xl 
-        bg-white/40 dark:bg-gray-900/40
-        backdrop-blur-md
         shadow-lg 
         border border-white/30 dark:border-gray-700/30
         text-gray-800 dark:text-gray-100
+        before:pointer-events-none before:absolute before:inset-0 before:-z-10
+        before:rounded-2xl before:content-['']
+        before:bg-white/40 dark:before:bg-gray-900/40 before:backdrop-blur-md
       ">
         <Outlet />
       </main>

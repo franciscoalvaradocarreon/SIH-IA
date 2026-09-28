@@ -44,8 +44,10 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>las sesiones NACEN del patrón (ver {@link #duracionesDe}): "1,1,1,1,2" son cuatro sesiones de
  *       1 h y una de 2 h, y el motor decide en qué día cae cada una y cuál lleva la doble;</li>
- *   <li>la regla dura es una SESIÓN por materia y día (mapa {@code asigDia}), nunca una hora por día:
- *       la sesión de 2 h ocupa dos bloques del MISMO día y eso no la viola;</li>
+ *   <li>la regla dura es una SESIÓN por materia y día (mapa {@code materiaDia}, clave grupo+materia),
+ *       nunca una hora por día: la sesión de 2 h ocupa dos bloques del MISMO día y eso no la viola.
+ *       Al mirar la MATERIA y no la asignación, tampoco se repite el día cuando el grupo tiene esa
+ *       materia en dos asignaciones (teoría en su aula y práctica en el taller);</li>
  *   <li>el acercamiento al patrón se puntúa como regla blanda ({@link ReglasIA#PESO_DISTRIBUCION}),
  *       así que si el patrón no cabe entero el motor prefiere desviarse antes que dejar horas
  *       pendientes.</li>
@@ -363,12 +365,19 @@ public class GeneradorIA {
         final Map<Long, Sesion> ocupM = new HashMap<>();
         final Map<Long, Sesion> ocupA = new HashMap<>();
         /**
-         * REGLA DURA "una SESIÓN por día y materia": clave (asignación, día) → sesión colocada ese
-         * día. Se mide por SESIONES, no por horas: una sesión de 2 h ocupa dos bloques del mismo día
-         * (es lo que pide un patrón "1,1,1,1,2") y aquí deja UNA sola entrada. Es lo que impide dos
-         * sesiones del mismo patrón el mismo día, no dos bloques del mismo día.
+         * REGLA DURA "una SESIÓN por día y materia": clave (GRUPO, MATERIA, día) → sesión colocada
+         * ese día. Se mide por SESIONES, no por horas: una sesión de 2 h ocupa dos bloques del mismo
+         * día (es lo que pide un patrón "1,1,1,1,2") y aquí deja UNA sola entrada.
+         *
+         * <p>La clave es por MATERIA y no por asignación a propósito: un grupo puede tener la misma
+         * materia repartida en DOS asignaciones (la teoría en su aula y la práctica en el taller, que
+         * es como el plantel captura "Tecnologías de la Información": 2 h con "1,1" en AULA A7 y 4 h
+         * con "2,2" en T. COMP 2). Con la clave por asignación cada una cumplía su patrón por
+         * separado y el grupo acababa viendo la materia dos veces el mismo día (medido en 1°G:
+         * lunes 1 h, martes 2 h y VIERNES 1 h + 2 h). Por materia, las sesiones de las dos
+         * asignaciones tampoco pueden coincidir de día.
          */
-        final Map<Long, Sesion> asigDia = new HashMap<>();
+        final Map<Long, Sesion> materiaDia = new HashMap<>();
 
         final Random rnd;
         final int demanda;
@@ -518,8 +527,24 @@ public class GeneradorIA {
             return id * 1_000_000L + bloqueId;
         }
 
-        static long claveDia(long asignacionId, int dia) {
-            return asignacionId * 10L + dia;
+        /**
+         * Clave de la REGLA DURA "una sesión por día": identifica la MATERIA del grupo en ese día.
+         *
+         * <p>La clave es (GRUPO, MATERIA, día), no (asignación, día): un grupo puede tener la misma
+         * materia repartida en DOS asignaciones —la teoría en su aula y la práctica en el taller, que
+         * es como el plantel captura "Tecnologías de la Información": 2 h con patrón "1,1" en AULA A7
+         * y 4 h con "2,2" en T. COMP 2—. Con la clave por asignación cada una cumplía su patrón por
+         * separado y el grupo acababa viendo la materia dos veces el mismo día; por materia, las
+         * sesiones de las dos asignaciones tampoco pueden coincidir de día.
+         *
+         * <p>Se arma con los campos que la sesión ya trae ({@code gid} y {@code matId}), así que no
+         * cuesta ninguna consulta extra: esta clave se evalúa en cada paso de la búsqueda.
+         *
+         * <p>El multiplicador 1_000_000 es el tope de ids que admite: con ids de materia por debajo de
+         * un millón, dos pares distintos no pueden dar la misma clave (y el día va en las unidades).
+         */
+        long claveMateriaDia(Sesion s, int dia) {
+            return (s.gid * 1_000_000L + s.matId) * 10L + dia;
         }
 
         /** Turno del grupo (0 si no se pudo resolver: entonces no tendrá bloques ni ventanas). */
@@ -655,7 +680,7 @@ public class GeneradorIA {
             Map<Long, Integer> carga = cands.size() > 1 ? cargaDeAulas(cands, s) : Map.of();
             long aulaActual = s.aid;
             for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                     continue;
                 }
                 for (Ventana v : ventanasDe(s, d)) {
@@ -733,7 +758,7 @@ public class GeneradorIA {
                     ocupA.put(clave(s.aid, bid), s);
                 }
             }
-            asigDia.put(claveDia(s.asigId, dia), s);
+            materiaDia.put(claveMateriaDia(s, dia), s);
         }
 
         /**
@@ -754,7 +779,7 @@ public class GeneradorIA {
                     ocupA.remove(clave(s.aid, bid));
                 }
             }
-            asigDia.remove(claveDia(s.asigId, s.dia));
+            materiaDia.remove(claveMateriaDia(s, s.dia));
             s.dia = null;
             s.pos = -1;
             s.ids = List.of();
@@ -817,7 +842,7 @@ public class GeneradorIA {
             ocupG.clear();
             ocupM.clear();
             ocupA.clear();
-            asigDia.clear();
+            materiaDia.clear();
             Set<String> avisos = new LinkedHashSet<>();
             for (Sesion s : sesiones) {
                 if (!s.colocada()) {
@@ -860,10 +885,10 @@ public class GeneradorIA {
                         }
                     }
                 }
-                if (asigDia.containsKey(claveDia(s.asigId, s.dia))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, s.dia))) {
                     avisos.add("la materia " + s.asigId + " tiene dos sesiones el día " + s.dia);
                 }
-                asigDia.put(claveDia(s.asigId, s.dia), s);
+                materiaDia.put(claveMateriaDia(s, s.dia), s);
             }
             return new ArrayList<>(avisos);
         }
@@ -1075,7 +1100,7 @@ public class GeneradorIA {
             // cada destino lleva también lo que ese destino acerca o aleja del patrón.
             int patronAntes = desvioPatron(s.asigId);
             for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                     continue;
                 }
                 for (Ventana v : ventanasDe(s, d)) {
@@ -1665,7 +1690,7 @@ public class GeneradorIA {
                     if (rescatada) {
                         break;
                     }
-                    if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                    if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                         continue;
                     }
                     for (Ventana v : ventanasDe(s, d)) {
@@ -1738,7 +1763,7 @@ public class GeneradorIA {
                 if (!s.colocada()) {
                     continue;
                 }
-                boolean choca = ad.contains(claveDia(s.asigId, s.dia));
+                boolean choca = ad.contains(claveMateriaDia(s, s.dia));
                 if (!choca) {
                     for (long bid : s.ids) {
                         if (g.contains(clave(s.gid, bid)) || m.contains(clave(s.mid, bid))
@@ -1753,7 +1778,7 @@ public class GeneradorIA {
                     quitadas++;
                     continue;
                 }
-                ad.add(claveDia(s.asigId, s.dia));
+                ad.add(claveMateriaDia(s, s.dia));
                 for (long bid : s.ids) {
                     g.add(clave(s.gid, bid));
                     m.add(clave(s.mid, bid));
@@ -1878,7 +1903,7 @@ public class GeneradorIA {
          * tenga ya otra sesión ese día.
          */
         boolean sigueSiendoValida(Sesion s, int dia, Ventana v) {
-            if (asigDia.containsKey(claveDia(s.asigId, dia))) {
+            if (materiaDia.containsKey(claveMateriaDia(s, dia))) {
                 return false;
             }
             for (long bid : v.ids()) {
@@ -1898,7 +1923,7 @@ public class GeneradorIA {
                 return false;
             }
             for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                     continue;
                 }
                 for (Ventana v : ventanasDe(s, d)) {
@@ -2062,7 +2087,7 @@ public class GeneradorIA {
                     continue;
                 }
                 for (int d : dias) {
-                    if (asigDia.containsKey(claveDia(p.asigId, d))) {
+                    if (materiaDia.containsKey(claveMateriaDia(p, d))) {
                         continue;
                     }
                     for (Ventana v : ventanasDe(p, d)) {
@@ -2207,7 +2232,7 @@ public class GeneradorIA {
                     // orden arbitrario quemaba el tiempo en las caras.
                     List<Candidata> candidatas = new ArrayList<>();
                     for (int d : dias) {
-                        if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                        if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                             continue;
                         }
                         for (Ventana v : ventanasDe(s, d)) {
@@ -2362,7 +2387,7 @@ public class GeneradorIA {
          * la sesion fuera del tablero): se recibe para no volver a medirlo en cada ventana probada.
          */
         Ventana mejorVentanaConMaestro(Sesion s, long t, int d, int antes) {
-            if (asigDia.containsKey(claveDia(s.asigId, d))) {
+            if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                 return null;
             }
             Set<Long> g = dispG.get(s.gid);
@@ -2495,7 +2520,7 @@ public class GeneradorIA {
                 aulas.add(0L);          // sin aula (stock vacío y asignación sin taller): como siempre
             }
             for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                     continue;
                 }
                 if (colocarConMaestro(s, t, aulas, d)) {
@@ -2672,7 +2697,7 @@ public class GeneradorIA {
             }
             int n = 0;
             for (int d : dias) {
-                if (asigDia.containsKey(claveDia(s.asigId, d))) {
+                if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                     continue;
                 }
                 for (Ventana v : ventanasDe(s, d)) {
@@ -3393,7 +3418,7 @@ public class GeneradorIA {
         boolean colocarEn(Sesion s, int d, Ventana v) {
             // Una materia no puede repetir día (regla dura): si su asignación ya tiene sesión ese día,
             // aquí no hay nada que buscar.
-            if (asigDia.containsKey(claveDia(s.asigId, d))) {
+            if (materiaDia.containsKey(claveMateriaDia(s, d))) {
                 return false;
             }
             if (!disponiblePorDisponibilidad(s, v)) {
@@ -3718,7 +3743,7 @@ public class GeneradorIA {
             Set<Long> m = dispM.getOrDefault(s.mid, Set.of());
             List<String> detalles = new ArrayList<>();
             for (int d : dias) {
-                boolean diaUsado = asigDia.containsKey(claveDia(s.asigId, d));
+                boolean diaUsado = materiaDia.containsKey(claveMateriaDia(s, d));
                 for (Ventana v : ventanasDe(s, d)) {
                     boolean disponible = true;
                     for (long bid : v.ids()) {
