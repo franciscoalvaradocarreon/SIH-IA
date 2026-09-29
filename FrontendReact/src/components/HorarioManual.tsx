@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { horarioService } from '../api/horarioService';
 import type { EstadisticasHorario } from '../api/horarioService';
+import { horarioIAService } from '../api/horarioIAService';
 import { turnoService } from '../api/turnoService';
 import { grupoService } from '../api/grupoService';
 import { maestroService } from '../api/maestroService';
@@ -22,27 +23,58 @@ import {
 /**
  * Tarjetita del recuadro de estadísticas. El color avisa sin necesidad de leer el número:
  * verde cuando está bien, ámbar cuando hay algo que mirar y rojo cuando es un problema.
+ * `junto` es el texto pequeño que va al lado del número (por ejemplo, los apodos de los maestros
+ * con adyacencias), para no tener que bajar a una lista aparte.
  */
 const Estadistica: React.FC<{
   etiqueta: string;
   valor: string;
   detalle?: string;
+  junto?: string;
+  /** Texto del tooltip cuando `junto` viene recortado (por ejemplo, la lista completa de apodos). */
+  titleCompleto?: string;
   tono?: 'ok' | 'ojo' | 'mal';
-}> = ({ etiqueta, valor, detalle, tono = 'ok' }) => {
+}> = ({ etiqueta, valor, detalle, junto, titleCompleto, tono = 'ok' }) => {
   const color = tono === 'mal'
     ? 'text-red-600 dark:text-red-400'
     : tono === 'ojo'
       ? 'text-amber-600 dark:text-amber-400'
       : 'text-gray-800 dark:text-gray-100';
   return (
-    <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40">
+    <div
+      className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40"
+      title={titleCompleto ?? (junto ? `${etiqueta}: ${valor} — ${junto}` : undefined)}
+    >
       <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
         {etiqueta}
       </div>
-      <div className={`text-lg font-bold ${color}`}>{valor}</div>
+      <div className="flex items-baseline gap-1.5">
+        <span className={`text-lg font-bold ${color}`}>{valor}</span>
+        {junto && (
+          <span className="truncate text-[11px] font-medium text-gray-600 dark:text-gray-300">
+            {junto}
+          </span>
+        )}
+      </div>
       {detalle && <div className="text-[11px] text-gray-500 dark:text-gray-400">{detalle}</div>}
     </div>
   );
+};
+
+/**
+ * Apodos de los maestros con adyacencias, para ponerlos al lado del número en su tarjeta.
+ *
+ * Se usa el MISMO criterio que los renglones del tablero: el apodo y, si no tiene, el nombre. Se
+ * recorta a `maximo` para que la tarjeta no se desborde (el tooltip lleva la lista completa).
+ */
+const apodosDeAdyacencias = (stats: EstadisticasHorario, maximo = 4): string => {
+  const lista = (stats.adyacenciasPorMaestro ?? [])
+    .map((a) => (a.apodo ?? '').trim() || (a.maestro ?? '').trim())
+    .filter((x) => x.length > 0);
+  if (lista.length <= maximo) {
+    return lista.join(' · ');
+  }
+  return `${lista.slice(0, maximo).join(' · ')} y ${lista.length - maximo} más`;
 };
 
 /**
@@ -151,6 +183,14 @@ const HorarioManual: React.FC = () => {
    */
   const [stats, setStats] = useState<EstadisticasHorario | null>(null);
 
+  // Guardar el horario actual como corrida (respaldo de los movimientos manuales).
+  const [modalCorrida, setModalCorrida] = useState(false);
+  const [nombreCorrida, setNombreCorrida] = useState('');
+  const [notasCorrida, setNotasCorrida] = useState('');
+  const [guardandoCorrida, setGuardandoCorrida] = useState(false);
+  const [resultadoCorrida, setResultadoCorrida] = useState<string | null>(null);
+  const [errorCorrida, setErrorCorrida] = useState<string | null>(null);
+
   // ── Borrador local ──
   const [cambios, setCambios] = useState<CambioBorrador[]>([]);
   const [arrastrando, setArrastrando] = useState<Arrastre | null>(null);
@@ -192,6 +232,46 @@ const HorarioManual: React.FC = () => {
       setStats(null);
     }
   }, [semestreActivo?.id, turnoId]);
+
+  /**
+   * Abre el modal para guardar el horario actual como corrida, con un nombre por defecto con la fecha
+   * (el nombre es obligatorio porque así se elige después en la lista de corridas).
+   */
+  const abrirGuardarCorrida = () => {
+    const d = new Date();
+    const dos = (n: number) => String(n).padStart(2, '0');
+    setNombreCorrida(
+      `Edición manual ${dos(d.getDate())}/${dos(d.getMonth() + 1)} ${dos(d.getHours())}:${dos(d.getMinutes())}`
+    );
+    setNotasCorrida('');
+    setResultadoCorrida(null);
+    setErrorCorrida(null);
+    setModalCorrida(true);
+  };
+
+  /**
+   * Guarda el horario VIGENTE como corrida. NO toca el horario: solo crea la corrida (con su detalle y
+   * sus métricas) para poder volver a ella desde la lista de corridas de Gen. Horario IA.
+   */
+  const confirmarGuardarCorrida = async () => {
+    if (!semestreActivo?.id || !turnoId || !nombreCorrida.trim()) return;
+    setGuardandoCorrida(true);
+    setErrorCorrida(null);
+    try {
+      const r = await horarioIAService.guardarCorridaDesdeHorario(
+        semestreActivo.id, turnoId, nombreCorrida.trim(), notasCorrida.trim() || undefined
+      );
+      setResultadoCorrida(
+        `Guardada como corrida «${r.data.nombre}» (${r.data.totalFilas} bloques, ${r.data.horas} h). ` +
+          'Puedes volver a ella en Gen. Horario IA → Corridas guardadas → Aplicar.'
+      );
+    } catch (e: any) {
+      console.error('Error al guardar la corrida:', e);
+      setErrorCorrida(e.response?.data?.message || 'No se pudo guardar el horario como corrida.');
+    } finally {
+      setGuardandoCorrida(false);
+    }
+  };
 
   const cargarTablero = useCallback(async () => {
     if (!semestreActivo?.id || !turnoId) { setLoading(false); return; }
@@ -835,7 +915,7 @@ const HorarioManual: React.FC = () => {
               Tablero manual de horarios
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-              Renglones = maestros · columnas = días y horas. Cada pin es una hora de clase: arrástralo
+              Renglones = maestros · columnas = días y horas. Pin = hora clase: arrástralo
               de la caja a un hueco, muévelo de casilla o devuélvelo a la caja. Nada se guarda hasta
               pulsar Guardar.
             </p>
@@ -854,6 +934,14 @@ const HorarioManual: React.FC = () => {
               className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-white transition hover:bg-blue-700"
             >
               <MdRefresh /> Actualizar
+            </button>
+            <button
+              onClick={abrirGuardarCorrida}
+              disabled={!turnoId}
+              title="Guarda el horario actual como una corrida, para poder volver a él desde Gen. Horario IA"
+              className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <MdSave /> Guardar como corrida
             </button>
           </div>
         </div>
@@ -1018,7 +1106,7 @@ const HorarioManual: React.FC = () => {
               <Estadistica
                 etiqueta="Pendientes"
                 valor={`${stats.horasPendientes} h`}
-                detalle={`${stats.pendientes.length} materia(s)`}
+                detalle={`${stats.pendientes?.length ?? 0} materia(s)`}
                 tono={stats.horasPendientes > 0 ? 'ojo' : 'ok'}
               />
               <Estadistica
@@ -1042,7 +1130,16 @@ const HorarioManual: React.FC = () => {
               <Estadistica
                 etiqueta="Adyacencias"
                 valor={String(stats.adyacencias)}
-                detalle="mismo maestro pegado"
+                junto={apodosDeAdyacencias(stats)}
+                titleCompleto={`Adyacencias (${stats.adyacencias}): ${apodosDeAdyacencias(
+                  stats,
+                  Number.POSITIVE_INFINITY
+                )}`}
+                detalle={
+                  (stats.adyacenciasPorMaestro?.length ?? 0) > 0
+                    ? `${stats.adyacenciasPorMaestro?.length ?? 0} maestro(s)`
+                    : 'mismo maestro pegado'
+                }
                 tono={stats.adyacencias > 0 ? 'ojo' : 'ok'}
               />
               <Estadistica
@@ -1052,24 +1149,105 @@ const HorarioManual: React.FC = () => {
               />
             </div>
 
-            {stats.pendientes.length > 0 && (
-              <ul className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-400">
-                {stats.pendientes.slice(0, 4).map((p) => (
-                  <li key={p.asignacionId}>
-                    <span className="font-medium text-amber-700 dark:text-amber-400">
-                      Faltan {p.faltan} h
-                    </span>{' '}
-                    · {p.grupo} · {p.materia} ({p.colocadas}/{p.contratadas})
-                  </li>
-                ))}
-                {stats.pendientes.length > 4 && <li>… y {stats.pendientes.length - 4} más</li>}
-              </ul>
-            )}
-
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{stats.mensaje}</p>
+            {/*
+              Los apodos de quienes tienen adyacencias van al lado del número (tarjeta de arriba),
+              así que aquí no se repite nada. Este campo es más nuevo que el resto del recuadro: se lee
+              con valor por defecto para que un backend que todavía no lo devuelva no rompa la pantalla.
+            */}
           </>
         )}
       </div>
+
+      {/* Modal: guardar el horario actual como corrida (respaldo de los cambios manuales) */}
+      {modalCorrida && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4">
+          <div className="my-auto w-full max-w-lg rounded-xl border border-gray-400 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-lg bg-emerald-100 p-2 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400">
+                <MdSave className="text-2xl" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                Guardar el horario como corrida
+              </h3>
+            </div>
+
+            {resultadoCorrida ? (
+              <>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{resultadoCorrida}</p>
+                <button
+                  onClick={() => setModalCorrida(false)}
+                  className="mt-5 w-full rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white transition hover:bg-blue-700"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+                  Se guarda el horario <strong>tal como está ahora</strong> como una corrida más (con sus
+                  bloques, maestros, aulas y sus estadísticas). No cambia nada del horario: sirve para
+                  poder volver a él si alguien aplica otra corrida.
+                </p>
+
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Nombre de la corrida
+                </label>
+                <input
+                  type="text"
+                  value={nombreCorrida}
+                  onChange={(e) => setNombreCorrida(e.target.value)}
+                  disabled={guardandoCorrida}
+                  maxLength={80}
+                  className="mb-3 w-full rounded-lg border border-gray-400 bg-white px-4 py-2.5 text-gray-900 transition focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                />
+
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Notas (opcional)
+                </label>
+                <textarea
+                  value={notasCorrida}
+                  onChange={(e) => setNotasCorrida(e.target.value)}
+                  disabled={guardandoCorrida}
+                  rows={3}
+                  maxLength={400}
+                  placeholder="Por ejemplo: ajustes de Pedro y Reynol del miércoles"
+                  className="mb-4 w-full rounded-lg border border-gray-400 bg-white px-4 py-2.5 text-gray-900 transition focus:border-transparent focus:ring-2 focus:ring-blue-500 disabled:opacity-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                />
+
+                {errorCorrida && (
+                  <p className="mb-4 text-sm text-red-600 dark:text-red-400">{errorCorrida}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setModalCorrida(false)}
+                    disabled={guardandoCorrida}
+                    className="flex-1 rounded-lg border border-gray-400 px-4 py-2.5 text-gray-700 transition hover:bg-gray-50 disabled:opacity-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarGuardarCorrida}
+                    disabled={guardandoCorrida || !nombreCorrida.trim()}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {guardandoCorrida ? (
+                      <>
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                        Guardando...
+                      </>
+                    ) : (
+                      <>
+                        <MdSave className="text-lg" /> Guardar
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Caja de pines sin colocar (origen y destino) ── */}
       <div

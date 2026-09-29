@@ -42,6 +42,15 @@ export interface EstadisticasHorario {
     contratadas: number;
     faltan: number;
   }>;
+  /** Desglose de las adyacencias: qué maestro las tiene, cuántas y en qué grupos. */
+  adyacenciasPorMaestro: Array<{
+    maestroId: number;
+    maestro: string;
+    /** Apodo con el que se le conoce; vacío si no tiene. */
+    apodo: string;
+    pares: number;
+    grupos: string;
+  }>;
   mensaje: string;
 }
 

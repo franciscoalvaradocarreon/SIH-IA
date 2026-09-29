@@ -71,6 +71,12 @@ public class EstadisticasHorarioDTO {
     /** Materias a las que les faltan horas (las que mas faltan primero). */
     private List<Pendiente> pendientes = new ArrayList<>();
 
+    /**
+     * Desglose de las adyacencias por maestro: quien las tiene, cuantas y en que grupos. Es lo que
+     * permite ir a arreglarlas (la adyacencia es mismo maestro + mismo grupo + materias distintas).
+     */
+    private List<AdyacenciaPorMaestro> adyacenciasPorMaestro = new ArrayList<>();
+
     /** Frase lista para el recuadro. */
     private String mensaje;
 
@@ -86,5 +92,21 @@ public class EstadisticasHorarioDTO {
         private int colocadas;
         private int contratadas;
         private int faltan;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AdyacenciaPorMaestro {
+        private Long maestroId;
+        /** Nombre completo ("Victor Manuel Blanco Carvajal"). */
+        private String maestro;
+        /** Apodo con el que se le conoce ("Blanco"); si no tiene, queda vacio. */
+        private String apodo;
+        /** Pares pegados de ese maestro (materias distintas) en el mismo grupo. */
+        private int pares;
+        /** Grupos donde ocurren, separados por coma. */
+        private String grupos;
     }
 }

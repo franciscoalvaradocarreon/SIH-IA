@@ -422,6 +422,16 @@ export const horarioIAService = {
   corridas: (semestreId: number) =>
     api.get<CorridaIA[]>('/horario-ia/corridas', { params: { semestreId } }),
 
+  /**
+   * Guarda el horario VIGENTE como una corrida mas.
+   *
+   * Es el respaldo de los movimientos manuales: lo que se guarda es lo que ya esta en el horario, y
+   * despues se reaplica desde la lista de corridas como cualquier otra.
+   */
+  guardarCorridaDesdeHorario: (semestreId: number, turnoId: number, nombre: string, notas?: string) =>
+    api.post<CorridaIA>('/horario-ia/corridas/desde-horario', { nombre, notas },
+      { params: { semestreId, turnoId } }),
+
   /** Aplica una corrida guardada al horario VIGENTE: reemplaza el de los grupos del alcance. */
   aplicarCorrida: (id: number) =>
     api.post<ResumenAplicadoIA>(`/horario-ia/corridas/${id}/aplicar`),

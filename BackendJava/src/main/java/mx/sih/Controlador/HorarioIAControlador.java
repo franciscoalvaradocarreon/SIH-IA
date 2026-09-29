@@ -178,6 +178,23 @@ public class HorarioIAControlador {
     }
 
     /**
+     * Guarda el horario VIGENTE como una corrida más (respaldo de los movimientos del tablero manual).
+     *
+     * Va aparte del POST de guardar un intento porque aquí no hay intento: lo que se guarda es lo que
+     * ya está en la tabla `horario`. Después se reaplica como cualquier otra corrida.
+     */
+    @PostMapping("/corridas/desde-horario")
+    public ResponseEntity<CorridaIADTO> guardarHorarioComoCorrida(
+            @RequestParam Long semestreId,
+            @RequestParam Long turnoId,
+            @RequestBody(required = false) SolicitudGuardarCorridaDTO solicitud,
+            Authentication autenticacion) {
+        SolicitudGuardarCorridaDTO s = solicitud != null ? solicitud : new SolicitudGuardarCorridaDTO();
+        return ResponseEntity.ok(corridas.guardarDesdeHorario(EscuelaContexto.getEscuelaId(),
+                semestreId, turnoId, s.getNombre(), s.getNotas(), usuario(autenticacion)));
+    }
+
+    /**
      * Aplica una corrida guardada al horario VIGENTE. Reemplaza el horario de los grupos del alcance:
      * es la operación destructiva, aunque se puede corregir aplicando otra corrida o restaurando la
      * copia de seguridad diaria.

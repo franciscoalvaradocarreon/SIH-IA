@@ -7,6 +7,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,6 +18,7 @@ import mx.sih.ia.ReglasIA;
 import mx.sih.modelo.dto.EstadisticasHorarioDTO;
 import mx.sih.modelo.entidad.Asignacion;
 import mx.sih.modelo.entidad.Horario;
+import mx.sih.modelo.entidad.Maestro;
 import mx.sih.modelo.entidad.Semestre;
 import mx.sih.modelo.entidad.Turno;
 import mx.sih.modelo.entidad.TurnoHorario;
@@ -214,6 +216,23 @@ public class EstadisticasHorarioServicio {
         int huecos = 0;
         int castigoHuecos = 0;
         int adyacencias = 0;
+        // Desglose de adyacencias por maestro (id -> pares y grupos donde ocurren).
+        Map<Long, Integer> paresPorMaestro = new LinkedHashMap<>();
+        Map<Long, Set<String>> gruposPorMaestro = new LinkedHashMap<>();
+        Map<Long, String> nombreDeMaestro = new HashMap<>();
+        Map<Long, String> apodoDeMaestro = new HashMap<>();
+        Map<Long, String> nombreDeGrupo = new HashMap<>();
+        for (Horario h : filas) {
+            nombreDeGrupo.putIfAbsent(h.getGrupo().getGrupoId(), nombre(h.getGrupo().getNombre()));
+            if (h.getMaestroId() != null && h.getAsignacion().getMaestro() != null) {
+                // El maestro viene en el JOIN FETCH de la asignacion: no hace falta otra consulta.
+                Maestro maestro = h.getAsignacion().getMaestro();
+                nombreDeMaestro.putIfAbsent(h.getMaestroId(), nombreCompleto(
+                        maestro.getNombre(), maestro.getApellidos()));
+                apodoDeMaestro.putIfAbsent(h.getMaestroId(),
+                        maestro.getApodo() == null ? "" : maestro.getApodo().trim());
+            }
+        }
 
         for (Long grupoId : grupos) {
             Map<Integer, List<Horario>> delGrupo = porGrupoDia.getOrDefault(grupoId, Map.of());
@@ -269,6 +288,11 @@ public class EstadisticasHorarioServicio {
                             && !antes.getAsignacion().getMateria().getMateriaId()
                                     .equals(despues.getAsignacion().getMateria().getMateriaId())) {
                         adyacencias++;
+                        Long maestroId = antes.getMaestroId();
+                        paresPorMaestro.merge(maestroId, 1, Integer::sum);
+                        gruposPorMaestro.computeIfAbsent(maestroId, k -> new LinkedHashSet<>())
+                                .add(nombreDeGrupo.getOrDefault(grupoId,
+                                        nombre(antes.getGrupo().getNombre())));
                     }
                 }
             }
@@ -335,6 +359,18 @@ public class EstadisticasHorarioServicio {
         dto.setExcedeHoras(excedeHoras);
         dto.setProblemas(problemas);
         dto.setPendientes(pendientes);
+        // Desglose de adyacencias: primero el maestro con mas pares pegados.
+        List<EstadisticasHorarioDTO.AdyacenciaPorMaestro> adyacenciasPorMaestro = new ArrayList<>();
+        paresPorMaestro.forEach((maestroId, pares) -> adyacenciasPorMaestro.add(
+                new EstadisticasHorarioDTO.AdyacenciaPorMaestro(
+                        maestroId,
+                        nombreDeMaestro.getOrDefault(maestroId, "maestro " + maestroId),
+                        apodoDeMaestro.getOrDefault(maestroId, ""),
+                        pares,
+                        String.join(", ", gruposPorMaestro.getOrDefault(maestroId, Set.of())))));
+        adyacenciasPorMaestro.sort(
+                Comparator.comparingInt(EstadisticasHorarioDTO.AdyacenciaPorMaestro::getPares).reversed());
+        dto.setAdyacenciasPorMaestro(adyacenciasPorMaestro);
         dto.setMensaje(mensaje(dto, totalPendientes));
         return dto;
     }

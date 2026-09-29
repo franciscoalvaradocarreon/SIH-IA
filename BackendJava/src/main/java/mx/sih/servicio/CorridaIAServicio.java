@@ -6,6 +6,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -16,6 +17,7 @@ import java.util.Set;
 import mx.sih.excepcion.NegocioExcepcion;
 import mx.sih.ia.IntentoIA;
 import mx.sih.modelo.dto.CorridaIADTO;
+import mx.sih.modelo.dto.EstadisticasHorarioDTO;
 import mx.sih.modelo.entidad.CorridaIa;
 import mx.sih.modelo.entidad.CorridaIaDetalle;
 import mx.sih.modelo.entidad.Escuela;
@@ -62,15 +64,92 @@ public class CorridaIAServicio {
     private final CorridaIaDetalleRepositorio detalles;
     private final HorarioRepositorio horarioRepositorio;
     private final HorarioIAServicio horarioIAServicio;
+    private final EstadisticasHorarioServicio estadisticasHorarioServicio;
 
     public CorridaIAServicio(CorridaIaRepositorio corridas,
                              CorridaIaDetalleRepositorio detalles,
                              HorarioRepositorio horarioRepositorio,
-                             HorarioIAServicio horarioIAServicio) {
+                             HorarioIAServicio horarioIAServicio,
+                             EstadisticasHorarioServicio estadisticasHorarioServicio) {
         this.corridas = corridas;
         this.detalles = detalles;
         this.horarioRepositorio = horarioRepositorio;
         this.horarioIAServicio = horarioIAServicio;
+        this.estadisticasHorarioServicio = estadisticasHorarioServicio;
+    }
+
+    // ============================================================
+    // GUARDAR EL HORARIO VIGENTE COMO CORRIDA (respaldo de lo manual)
+    // ============================================================
+
+    /**
+     * Guarda el horario VIGENTE como una corrida mas.
+     *
+     * <p>Para que sirve: los movimientos del tablero manual viven SOLO en la tabla `horario`, y aplicar
+     * otra corrida los reemplaza. Guardando una foto del horario actual como corrida, se puede volver a
+     * el despues con el mismo boton "aplicar" de la pantalla de Horario IA.
+     *
+     * <p>Se guarda con asesor {@code "manual"} para distinguirla de las que genera el motor, y con las
+     * mismas metricas del recuadro de estadisticas (que usa las formulas del motor), asi que en la lista
+     * de corridas se puede comparar de tu a tu con las generadas.
+     */
+    @Transactional
+    public CorridaIADTO guardarDesdeHorario(Long escuelaId, Long semestreId, Long turnoId,
+                                            String nombre, String notas, String usuario) {
+        if (escuelaId == null) {
+            throw new NegocioExcepcion("sin_escuela_activa", "No se ha seleccionado una escuela activa");
+        }
+        if (semestreId == null || turnoId == null) {
+            throw new NegocioExcepcion("sin_turno", "Indica el semestre y el turno que quieres guardar");
+        }
+
+        List<Horario> actuales = horarioRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, semestreId).stream()
+                .filter(h -> turnoId.equals(h.getTurnoId()))
+                .toList();
+        if (actuales.isEmpty()) {
+            throw new NegocioExcepcion("horario_vacio",
+                    "Ese turno no tiene clases colocadas: no hay nada que guardar.");
+        }
+
+        EstadisticasHorarioDTO stats = estadisticasHorarioServicio.calcular(semestreId, turnoId);
+
+        IntentoIA intento = new IntentoIA();
+        intento.setNumero(0);
+        intento.setAsesor("manual");
+        intento.setGeneradoEn(LocalDateTime.now());
+        intento.setHoras(stats.getHorasColocadas());
+        intento.setHorasDemandadas(stats.getHorasDemandadas());
+        intento.setSesionesLargas(stats.getSesionesLargas());
+        intento.setSesionesLargasPendientes(stats.getSesionesLargasPendientes());
+        intento.setArranquesTarde(stats.getArranquesTarde());
+        intento.setCastigoHuecos(stats.getCastigoHuecos());
+        intento.setAdyacencias(stats.getAdyacencias());
+        intento.setMateriasCompletas(stats.getMateriasCompletas());
+        intento.setMateriasTotales(stats.getMateriasTotales());
+        intento.setMedium(stats.getMedium());
+
+        for (Horario h : actuales) {
+            intento.getFilas().add(new IntentoIA.Fila(
+                    h.getAsignacion().getAsignacionId(),
+                    h.getTurnoHorario().getId(),
+                    h.getMaestroId(),
+                    h.getAula() == null ? null : h.getAula().getAulaId()));
+        }
+
+        // Si el horario manual arrastra choques, se guardan con la corrida: al aplicarla se vera el
+        // aviso en lugar de rechazarla sin decir nada.
+        if (stats.getProblemas() > 0) {
+            intento.getProblemas().add("El horario guardado tenia " + stats.getProblemas()
+                    + " problema(s): " + stats.getChoquesGrupo() + " de grupo, "
+                    + stats.getChoquesMaestro() + " de maestro, " + stats.getChoquesAula() + " de aula, "
+                    + stats.getMateriasRepetidasDia() + " materias repetidas el mismo dia, "
+                    + stats.getClasesEnDescanso() + " en bloques de descanso y "
+                    + stats.getExcedeHoras() + " con horas de mas.");
+        }
+
+        // Las banderas de reparto no aplican a una foto manual: van en null ("no se repartio nada").
+        return guardar(escuelaId, semestreId, turnoId, null, null, intento, nombre, notas, usuario);
     }
 
     // ============================================================
