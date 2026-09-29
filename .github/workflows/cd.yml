@@ -137,6 +137,15 @@ jobs:
             sleep 15
           done
 
+          # La imagen desplegada se marca tambien como ':latest' EN EL SERVIDOR.
+          # El .env del servidor apunta a ':latest', y esa etiqueta solo la refresca este paso:
+          # sin el, un 'docker compose up -d' a mano (o cualquier comando que recree el contenedor
+          # sin pasar IMAGEN_APP) vuelve a la version vieja que tuviera el latest local.
+          # Paso de verdad: un 'up -d' recreo produccion en v1.1.12 teniendo v1.1.17 desplegada.
+          if [ -n "$ESPERADA" ]; then
+            ssh_sih "docker tag '$IMAGEN' '${REPO_IMAGEN}:latest' && echo '  latest del servidor ahora apunta a $IMAGEN'"
+          fi
+
           echo "=== 2) Reiniciar SOLO la aplicacion (la base y los uploads no se tocan) ==="
           # IMAGEN_APP se pasa por entorno, que tiene prioridad sobre el .env del
           # servidor: asi el contenedor queda apuntando al tag que se verifico.
