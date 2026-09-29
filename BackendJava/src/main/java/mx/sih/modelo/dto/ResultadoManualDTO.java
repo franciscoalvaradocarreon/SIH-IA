@@ -34,4 +34,10 @@ public class ResultadoManualDTO {
      * no se aplicó nada.
      */
     private List<String> errores = new ArrayList<>();
+
+    /**
+     * Estadísticas del horario DESPUÉS de aplicar la tanda (null si solo se validó o si no se aplicó
+     * nada). Van aquí para que el tablero recalcule su recuadro al guardar sin pedirlas otra vez.
+     */
+    private EstadisticasHorarioDTO estadisticas;
 }

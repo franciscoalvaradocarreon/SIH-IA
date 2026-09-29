@@ -2,6 +2,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { horarioService } from '../api/horarioService';
+import type { EstadisticasHorario } from '../api/horarioService';
 import { turnoService } from '../api/turnoService';
 import { grupoService } from '../api/grupoService';
 import { maestroService } from '../api/maestroService';
@@ -15,8 +16,34 @@ import MarcaGrupo from './MarcaGrupo';
 import { identidadGrupo } from '../utils/paletaGrupos';
 import {
   MdSchedule, MdPerson, MdRefresh, MdWarning, MdInfo, MdVisibility, MdCheckCircle,
-  MdSave, MdUndo, MdCancel,
+  MdSave, MdUndo, MdCancel, MdBarChart,
 } from 'react-icons/md';
+
+/**
+ * Tarjetita del recuadro de estadísticas. El color avisa sin necesidad de leer el número:
+ * verde cuando está bien, ámbar cuando hay algo que mirar y rojo cuando es un problema.
+ */
+const Estadistica: React.FC<{
+  etiqueta: string;
+  valor: string;
+  detalle?: string;
+  tono?: 'ok' | 'ojo' | 'mal';
+}> = ({ etiqueta, valor, detalle, tono = 'ok' }) => {
+  const color = tono === 'mal'
+    ? 'text-red-600 dark:text-red-400'
+    : tono === 'ojo'
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-gray-800 dark:text-gray-100';
+  return (
+    <div className="rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 dark:border-gray-600 dark:bg-gray-700/40">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+        {etiqueta}
+      </div>
+      <div className={`text-lg font-bold ${color}`}>{valor}</div>
+      {detalle && <div className="text-[11px] text-gray-500 dark:text-gray-400">{detalle}</div>}
+    </div>
+  );
+};
 
 /**
  * Trae TODA la disponibilidad de maestros del semestre (una vez por carga del tablero).
@@ -118,6 +145,12 @@ const HorarioManual: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  /**
+   * Estadísticas del turno, con las mismas fórmulas que el motor IA. Se recargan al abrir el
+   * tablero, al cambiar de turno y (sin pedirlas otra vez) al guardar una tanda de cambios.
+   */
+  const [stats, setStats] = useState<EstadisticasHorario | null>(null);
+
   // ── Borrador local ──
   const [cambios, setCambios] = useState<CambioBorrador[]>([]);
   const [arrastrando, setArrastrando] = useState<Arrastre | null>(null);
@@ -147,6 +180,18 @@ const HorarioManual: React.FC = () => {
     };
     cargarTurnos();
   }, [semestreActivo?.id]);
+
+  /** Pide las estadísticas del turno. Si falla no tumba el tablero: el recuadro se queda sin datos. */
+  const cargarEstadisticas = useCallback(async () => {
+    if (!semestreActivo?.id || !turnoId) { setStats(null); return; }
+    try {
+      const r = await horarioService.estadisticas(semestreActivo.id, turnoId);
+      setStats(r.data);
+    } catch (e: any) {
+      console.error('Error al cargar las estadísticas:', e);
+      setStats(null);
+    }
+  }, [semestreActivo?.id, turnoId]);
 
   const cargarTablero = useCallback(async () => {
     if (!semestreActivo?.id || !turnoId) { setLoading(false); return; }
@@ -184,7 +229,9 @@ const HorarioManual: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [semestreActivo?.id, turnoId]);
+    // Las estadísticas van aparte para que un fallo suyo no deje el tablero sin pintar.
+    await cargarEstadisticas();
+  }, [semestreActivo?.id, turnoId, cargarEstadisticas]);
 
   useEffect(() => { cargarTablero(); }, [cargarTablero]);
 
@@ -650,6 +697,7 @@ const HorarioManual: React.FC = () => {
     try {
       const res = await horarioService.aplicarCambiosManuales({
         semestreId: semestreActivo.id,
+        turnoId,
         validarSolo: soloValidar,
         cambios: cambios.map((c) => ({
           tipo: c.tipo,
@@ -662,6 +710,8 @@ const HorarioManual: React.FC = () => {
       if (r.aplicado) {
         setCambios([]);
         setMensaje(r.mensaje || 'Cambios aplicados correctamente.');
+        // El backend devuelve las estadísticas ya recalculadas: el recuadro se actualiza al guardar.
+        if (r.estadisticas) setStats(r.estadisticas);
         await cargarTablero();
       } else {
         setMensaje(r.mensaje || 'No se aplicó ningún cambio.');
@@ -931,6 +981,93 @@ const HorarioManual: React.FC = () => {
             <MdWarning /> {conflictoIds.size} pin(es) en choque (mismo maestro, grupo o aula en el
             mismo bloque). Se marcan con un anillo rojo.
           </p>
+        )}
+      </div>
+
+      {/* ── Estadísticas del horario guardado (mismas fórmulas y pesos que el motor IA) ── */}
+      <div className="mb-4 rounded-xl border border-gray-400 bg-white p-4 shadow-md dark:border-gray-700 dark:bg-gray-800">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-200">
+            <MdBarChart className="text-indigo-600 dark:text-indigo-400" />
+            Estadísticas{stats?.turnoNombre ? ` · ${stats.turnoNombre}` : ''}
+          </h2>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Mismas fórmulas y pesos que el motor IA · se recalculan al guardar
+          </span>
+        </div>
+
+        {!stats ? (
+          <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Sin estadísticas todavía: se calculan al cargar el tablero.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+              <Estadistica
+                etiqueta="Cobertura"
+                valor={`${stats.coberturaPorcentaje} %`}
+                detalle={`${stats.horasColocadas}/${stats.horasDemandadas} h`}
+                tono={stats.horasColocadas >= stats.horasDemandadas ? 'ok' : 'ojo'}
+              />
+              <Estadistica
+                etiqueta="Materias"
+                valor={`${stats.materiasCompletas}/${stats.materiasTotales}`}
+                detalle="completas"
+                tono={stats.materiasCompletas >= stats.materiasTotales ? 'ok' : 'ojo'}
+              />
+              <Estadistica
+                etiqueta="Pendientes"
+                valor={`${stats.horasPendientes} h`}
+                detalle={`${stats.pendientes.length} materia(s)`}
+                tono={stats.horasPendientes > 0 ? 'ojo' : 'ok'}
+              />
+              <Estadistica
+                etiqueta="Problemas"
+                valor={String(stats.problemas)}
+                detalle="choques y repetidas"
+                tono={stats.problemas > 0 ? 'mal' : 'ok'}
+              />
+              <Estadistica
+                etiqueta="Huecos"
+                valor={String(stats.huecos)}
+                detalle="bloques libres"
+                tono={stats.huecos > 0 ? 'ojo' : 'ok'}
+              />
+              <Estadistica
+                etiqueta="Arranques tarde"
+                valor={String(stats.arranquesTarde)}
+                detalle="grupo-días"
+                tono={stats.arranquesTarde > 0 ? 'ojo' : 'ok'}
+              />
+              <Estadistica
+                etiqueta="Adyacencias"
+                valor={String(stats.adyacencias)}
+                detalle="mismo maestro pegado"
+                tono={stats.adyacencias > 0 ? 'ojo' : 'ok'}
+              />
+              <Estadistica
+                etiqueta="MEDIUM"
+                valor={String(stats.medium)}
+                detalle="más cerca de 0 = mejor"
+              />
+            </div>
+
+            {stats.pendientes.length > 0 && (
+              <ul className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-400">
+                {stats.pendientes.slice(0, 4).map((p) => (
+                  <li key={p.asignacionId}>
+                    <span className="font-medium text-amber-700 dark:text-amber-400">
+                      Faltan {p.faltan} h
+                    </span>{' '}
+                    · {p.grupo} · {p.materia} ({p.colocadas}/{p.contratadas})
+                  </li>
+                ))}
+                {stats.pendientes.length > 4 && <li>… y {stats.pendientes.length - 4} más</li>}
+              </ul>
+            )}
+
+            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">{stats.mensaje}</p>
+          </>
         )}
       </div>
 

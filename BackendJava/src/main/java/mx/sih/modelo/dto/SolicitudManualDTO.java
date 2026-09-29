@@ -26,6 +26,13 @@ public class SolicitudManualDTO {
 
     private Long semestreId;
 
+    /**
+     * Turno que se está editando. No hace falta para aplicar los cambios (cada uno trae su horario o
+     * su asignación), pero sí para devolver las estadísticas del turno en la misma respuesta. Si no
+     * viene, el servicio lo deduce del primer cambio.
+     */
+    private Long turnoId;
+
     /** Si es true, no se escribe nada: solo se responde si la tanda es válida. */
     private Boolean validarSolo;
 

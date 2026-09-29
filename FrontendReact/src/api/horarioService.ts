@@ -1,6 +1,50 @@
 import api from './axiosConfig';
 import type { AnalisisCuelloBotella, Horario, ResultadoValidacion } from '../types';
 
+/**
+ * Estadísticas de un horario, calculadas con las MISMAS fórmulas y pesos que el motor IA: sirven
+ * para saber si una edición manual mejoró o empeoró lo que había dejado una corrida.
+ */
+export interface EstadisticasHorario {
+  turnoId: number;
+  turnoNombre: string;
+  semestreId: number;
+  semestreNombre: string;
+  grupos: number;
+  horasColocadas: number;
+  horasDemandadas: number;
+  coberturaPorcentaje: number;
+  materiasCompletas: number;
+  materiasTotales: number;
+  horasPendientes: number;
+  huecos: number;
+  castigoHuecos: number;
+  arranquesTarde: number;
+  adyacencias: number;
+  desvioDistribucion: number;
+  sesionesLargasPendientes: number;
+  sesionesLargas: number;
+  /** Score MEDIUM (negativo): más cerca de 0 = mejor. */
+  medium: number;
+  choquesGrupo: number;
+  choquesMaestro: number;
+  choquesAula: number;
+  materiasRepetidasDia: number;
+  clasesEnDescanso: number;
+  excedeHoras: number;
+  problemas: number;
+  pendientes: Array<{
+    asignacionId: number;
+    grupo: string;
+    materia: string;
+    maestro: string;
+    colocadas: number;
+    contratadas: number;
+    faltan: number;
+  }>;
+  mensaje: string;
+}
+
 export const horarioService = {
   validar: (semestreId: number, turnoId?: number) => {
     const params = new URLSearchParams();
@@ -52,6 +96,14 @@ export const horarioService = {
     return api.get<AnalisisCuelloBotella>(`/horarios/analisis-cuellos?${params.toString()}`);
   },
 
+  /** Estadísticas del horario de un turno (el recuadro del tablero manual). */
+  estadisticas: (semestreId: number, turnoId: number) => {
+    const params = new URLSearchParams();
+    params.set('semestreId', String(semestreId));
+    params.set('turnoId', String(turnoId));
+    return api.get<EstadisticasHorario>(`/horarios/estadisticas?${params.toString()}`);
+  },
+
   /**
    * Aplica (o solo valida) una tanda de cambios del tablero manual de pines.
    *
@@ -61,6 +113,8 @@ export const horarioService = {
    */
   aplicarCambiosManuales: (solicitud: {
     semestreId: number;
+    /** Turno que se está editando: sirve para devolver las estadísticas en la misma respuesta. */
+    turnoId?: number;
     validarSolo?: boolean;
     cambios: Array<{
       tipo: 'COLOCAR' | 'MOVER' | 'QUITAR';
@@ -77,5 +131,7 @@ export const horarioService = {
       quitados?: number;
       mensaje?: string;
       errores?: string[];
+      /** Estadísticas del horario ya con los cambios aplicados (para el recuadro). */
+      estadisticas?: EstadisticasHorario;
     }>('/horarios/manual', solicitud),
 };

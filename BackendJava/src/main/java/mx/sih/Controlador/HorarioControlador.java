@@ -2,10 +2,12 @@
 package mx.sih.controlador;
 
 import mx.sih.modelo.dto.AnalisisCuelloBotellaDTO;
+import mx.sih.modelo.dto.EstadisticasHorarioDTO;
 import mx.sih.modelo.dto.HorarioDTO;
 import mx.sih.modelo.dto.ResultadoValidacionDTO;
 import mx.sih.modelo.dto.SolicitudManualDTO;
 import mx.sih.modelo.dto.ResultadoManualDTO;
+import mx.sih.servicio.EstadisticasHorarioServicio;
 import mx.sih.servicio.HorarioServicio;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,9 +29,12 @@ import java.util.List;
 public class HorarioControlador {
 
     private final HorarioServicio horarioServicio;
+    private final EstadisticasHorarioServicio estadisticasHorarioServicio;
 
-    public HorarioControlador(HorarioServicio horarioServicio) {
+    public HorarioControlador(HorarioServicio horarioServicio,
+                              EstadisticasHorarioServicio estadisticasHorarioServicio) {
         this.horarioServicio = horarioServicio;
+        this.estadisticasHorarioServicio = estadisticasHorarioServicio;
     }
 
     @GetMapping("/grupo/{grupoId}")
@@ -98,5 +103,19 @@ public class HorarioControlador {
     public ResponseEntity<ResultadoManualDTO> aplicarCambiosManuales(
             @RequestBody SolicitudManualDTO solicitud) {
         return ResponseEntity.ok(horarioServicio.aplicarCambiosManuales(solicitud));
+    }
+
+    /**
+     * Estadisticas del horario de un turno, con las MISMAS formulas y pesos que el motor IA.
+     *
+     * <p>Las usa el recuadro del tablero manual. Se pueden pedir sueltas (al abrir el tablero o al
+     * cambiar de turno) o venir ya dentro de la respuesta de {@code POST /manual} para que se
+     * recalculen al guardar sin una segunda peticion.
+     */
+    @GetMapping("/estadisticas")
+    public ResponseEntity<EstadisticasHorarioDTO> estadisticas(
+            @RequestParam Long semestreId,
+            @RequestParam Long turnoId) {
+        return ResponseEntity.ok(estadisticasHorarioServicio.calcular(semestreId, turnoId));
     }
 }

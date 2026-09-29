@@ -44,6 +44,7 @@ public class HorarioServicio {
     private final DisponibilidadGrupoRepositorio disponibilidadGrupoRepositorio;
     private final AulaRepositorio aulaRepositorio;
     private final MaestroRepositorio maestroRepositorio;
+    private final EstadisticasHorarioServicio estadisticasHorarioServicio;
 
     public HorarioServicio(AsignacionRepositorio asignacionRepositorio,
                            TurnoHorarioRepositorio turnoHorarioRepositorio,
@@ -53,7 +54,8 @@ public class HorarioServicio {
                            DisponibilidadMaestroRepositorio disponibilidadRepositorio,
                            DisponibilidadGrupoRepositorio disponibilidadGrupoRepositorio,
                            AulaRepositorio aulaRepositorio,
-                           MaestroRepositorio maestroRepositorio) {
+                           MaestroRepositorio maestroRepositorio,
+                           EstadisticasHorarioServicio estadisticasHorarioServicio) {
         this.asignacionRepositorio = asignacionRepositorio;
         this.turnoHorarioRepositorio = turnoHorarioRepositorio;
         this.horarioRepositorio = horarioRepositorio;
@@ -63,6 +65,7 @@ public class HorarioServicio {
         this.disponibilidadGrupoRepositorio = disponibilidadGrupoRepositorio;
         this.aulaRepositorio = aulaRepositorio;
         this.maestroRepositorio = maestroRepositorio;
+        this.estadisticasHorarioServicio = estadisticasHorarioServicio;
     }
 
     private Long getEscuelaId() {
@@ -1012,7 +1015,39 @@ public class HorarioServicio {
         resultado.setAplicado(true);
         resultado.setMensaje("Se aplicaron " + colocados + " colocación(es), "
                 + movidos + " movimiento(s) y " + quitados + " retiro(s)");
+
+        // Recuadro de estadísticas del tablero: se calcula DESPUÉS de escribir (misma transacción) y
+        // viaja en esta misma respuesta, para que el tablero no tenga que pedirlo aparte.
+        Long turnoDeLaTanda = turnoDeLaTanda(solicitud, horarioPorId);
+        if (turnoDeLaTanda != null) {
+            resultado.setEstadisticas(estadisticasHorarioServicio.calcular(semestreId, turnoDeLaTanda));
+        }
         return resultado;
+    }
+
+    /**
+     * Turno de la tanda: el que manda el tablero o, si no viene, el del primer cambio que lo diga
+     * (el horario que se mueve o la asignación que se coloca).
+     */
+    private Long turnoDeLaTanda(SolicitudManualDTO solicitud, Map<Long, Horario> horarioPorId) {
+        if (solicitud.getTurnoId() != null) {
+            return solicitud.getTurnoId();
+        }
+        for (CambioManualDTO c : solicitud.getCambios()) {
+            if (c.getHorarioId() != null) {
+                Horario h = horarioPorId.get(c.getHorarioId());
+                if (h != null && h.getTurnoId() != null) {
+                    return h.getTurnoId();
+                }
+            }
+            if (c.getAsignacionId() != null) {
+                Asignacion a = asignacionRepositorio.findById(c.getAsignacionId()).orElse(null);
+                if (a != null && a.getTurno() != null) {
+                    return a.getTurno().getTurnoId();
+                }
+            }
+        }
+        return null;
     }
 
     /** COLOCAR: una hora de una materia que estaba en la caja pasa a un bloque. */
