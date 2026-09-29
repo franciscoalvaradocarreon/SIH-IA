@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { turnoService } from '../api/turnoService';
 import { turnoHorarioService } from '../api/turnoHorarioService';
+import { semestreService } from '../api/semestreService';
 import { useAuth } from '../context/AuthContext';
-import type { Turno, TurnoHorario, TurnoHorarioCrear } from '../types';
+import type { Semestre, Turno, TurnoHorario, TurnoHorarioCrear } from '../types';
 import ErrorScreen from '../utils/ErrorScreen';
 import 'react-datepicker/dist/react-datepicker.css';
 import { SwitchToggle } from '../utils/SwitchToggle.tsx';
@@ -66,6 +67,14 @@ const TurnoHorario: React.FC = () => {
     diaOrigen: number;
     horariosOrigen: TurnoHorario[];
   } | null>(null);
+
+  // Traer la rejilla de otro semestre: el modal pide el semestre de origen y enseña el resumen.
+  const [modalImportar, setModalImportar] = useState(false);
+  const [semestres, setSemestres] = useState<Semestre[]>([]);
+  const [semestreOrigen, setSemestreOrigen] = useState<number>(0);
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportacion, setResultadoImportacion] = useState<string | null>(null);
+  const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
 
   const [errorPantalla, setErrorPantalla] = useState<{
     titulo?: string;
@@ -528,6 +537,44 @@ const TurnoHorario: React.FC = () => {
   const isTurnoActivo = turnoActual?.activo || false;
   const horariosList = Array.isArray(horarios) ? horarios : [];
 
+  /** Abre el modal de importación y carga los semestres de la escuela (menos el activo). */
+  const abrirImportar = async () => {
+    setResultadoImportacion(null);
+    setErrorImportacion(null);
+    setSemestreOrigen(0);
+    setModalImportar(true);
+    try {
+      const res = await semestreService.listarTodos();
+      setSemestres((res.data as Semestre[]).filter(s => s.id !== semestreActivo?.id));
+    } catch (error) {
+      console.error('Error al cargar semestres:', error);
+      setErrorImportacion('No se pudieron cargar los semestres.');
+    }
+  };
+
+  /**
+   * Trae los bloques del turno elegido (el mismo nombre) del semestre de origen a este turno. El
+   * resumen que devuelve el backend se enseña tal cual: cuántos bloques se copiaron y cuáles se
+   * saltaron por chocar con uno que ya existía.
+   */
+  const confirmarImportar = async () => {
+    if (!semestreActivo?.id || !semestreOrigen || !turnoSeleccionado) return;
+    setImportando(true);
+    setErrorImportacion(null);
+    try {
+      const res = await turnoHorarioService.importar(
+        turnoSeleccionado, semestreOrigen, semestreActivo.id
+      );
+      setResultadoImportacion(res.data.mensaje);
+      await cargarHorarios(turnoSeleccionado);
+    } catch (error: any) {
+      console.error('Error al traer los bloques:', error);
+      setErrorImportacion(error.response?.data?.message || 'No se pudieron traer los bloques.');
+    } finally {
+      setImportando(false);
+    }
+  };
+
   if (loading && turnos.length === 0) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -568,14 +615,27 @@ const TurnoHorario: React.FC = () => {
             Semestre activo: {semestreActivo?.nombre || 'No seleccionado'}
           </div>
         </div>
-        <button
-          onClick={recargarDatos}
-          className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg shadow-md transition duration-200"
-          title="Recargar datos"
-        >
-          <MdRefresh className="text-xl" />
-          Recargar
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={recargarDatos}
+            className="flex items-center gap-2 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 px-4 py-2.5 rounded-lg shadow-md transition duration-200"
+            title="Recargar datos"
+          >
+            <MdRefresh className="text-xl" />
+            Recargar
+          </button>
+          <button
+            onClick={abrirImportar}
+            disabled={!turnoSeleccionado || !semestreActivo?.id}
+            title={turnoSeleccionado
+              ? 'Trae la rejilla de este turno desde otro semestre'
+              : 'Selecciona primero un turno'}
+            className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <MdContentCopy className="text-xl" />
+            Traer de otro semestre
+          </button>
+        </div>
       </div>
 
       {/* Selector de Turno */}
@@ -895,6 +955,93 @@ const TurnoHorario: React.FC = () => {
             Para comenzar a gestionar horarios, primero debes activar un turno
             desde la sección de administración de turnos.
           </p>
+        </div>
+      )}
+
+      {/* Modal: traer la rejilla de este turno desde otro semestre */}
+      {modalImportar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4">
+          <div className="my-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6 border border-gray-400 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg text-emerald-600 dark:text-emerald-400">
+                <MdContentCopy className="text-2xl" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                Traer la rejilla de otro semestre
+              </h3>
+            </div>
+
+            {resultadoImportacion ? (
+              <>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mb-4">{resultadoImportacion}</p>
+                <button
+                  onClick={() => setModalImportar(false)}
+                  className="w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Se traen <strong>los bloques del turno que se llama igual</strong>{' '}
+                  ({turnoActual?.nombre ?? 'el de este turno'}) del semestre que elijas: días, horas y
+                  descansos. Los que choquen con uno que ya exista aquí se saltan; no se sobrescribe
+                  nada.
+                </p>
+
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Semestre de origen
+                </label>
+                <select
+                  value={semestreOrigen}
+                  onChange={e => setSemestreOrigen(Number(e.target.value))}
+                  disabled={importando}
+                  className="w-full px-4 py-2.5 mb-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+                >
+                  <option value={0}>Selecciona un semestre...</option>
+                  {semestres.map(s => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Se traerán al turno <strong>{turnoActual?.nombre ?? '-'}</strong> del semestre activo:{' '}
+                  <strong>{semestreActivo?.nombre ?? '-'}</strong>
+                </p>
+
+                {errorImportacion && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mb-4">{errorImportacion}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setModalImportar(false)}
+                    disabled={importando}
+                    className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarImportar}
+                    disabled={importando || !semestreOrigen}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {importando ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Trayendo...
+                      </>
+                    ) : (
+                      <>
+                        <MdContentCopy className="text-lg" />
+                        Traer
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 

@@ -4,6 +4,8 @@ package mx.sih.controlador;
 import jakarta.validation.Valid;
 import mx.sih.modelo.dto.DisponibilidadMaestroCrearDTO;
 import mx.sih.modelo.dto.DisponibilidadMaestroDTO;
+import mx.sih.modelo.dto.ImportarDisponibilidadDTO;
+import mx.sih.modelo.dto.ResultadoImportacionDisponibilidadDTO;
 import mx.sih.servicio.DisponibilidadMaestroServicio;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -31,9 +33,6 @@ public class DisponibilidadMaestroControlador {
             @PageableDefault(size = 10) Pageable pageable,
             @RequestParam(required = false) String busqueda,
             @RequestParam(required = false) Long semestreId) {
-        System.out.println("Pageable" + pageable);
-        System.out.println("busqueda" + busqueda);
-        System.out.println("semestreID" + semestreId);
         return ResponseEntity.ok(disponibilidadServicio.listarDisponibilidades(pageable, busqueda, semestreId));
     }
 
@@ -79,5 +78,22 @@ public class DisponibilidadMaestroControlador {
     public ResponseEntity<Void> eliminarDisponibilidadPorMaestro(@PathVariable Long maestroId) {
         disponibilidadServicio.eliminarDisponibilidadPorMaestro(maestroId);
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Trae la disponibilidad de los maestros de un turno desde OTRO semestre.
+     *
+     * <p>OJO con el @PreAuthorize: esta clase esta anotada con isAuthenticated() (no con ADMIN/
+     * COORDINADOR), asi que la restriccion de escritura hay que repetirla en cada metodo, como en el
+     * resto de este controlador.
+     *
+     * <p>NegocioExcepcion se deja pasar al manejador global, que responde con el mismo cuerpo de error
+     * (success/error/message) que ya lee la pantalla.
+     */
+    @PostMapping("/importar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
+    public ResponseEntity<ResultadoImportacionDisponibilidadDTO> importarDisponibilidad(
+            @Valid @RequestBody ImportarDisponibilidadDTO dto) {
+        return ResponseEntity.ok(disponibilidadServicio.importarDisponibilidad(dto));
     }
 }

@@ -31,6 +31,20 @@ export const disponibilidadGrupoService = {
     return api.get<number>(
         `/disponibilidad-grupo/grupo/${grupoId}/count${params.toString() ? `?${params.toString()}` : ''}`
     );
-},
+  },
+
+  /**
+   * Trae la disponibilidad de los grupos de un turno desde otro semestre.
+   *
+   * El turno es el de DESTINO (el seleccionado en la pantalla): de ahí salen los bloques y los grupos
+   * con los que se empareja. Devuelve el resumen (casillas creadas y motivos de omisión).
+   */
+  importar: (turnoId: number, semestreOrigenId: number, semestreDestinoId: number) =>
+    api.post<{
+      filasCopiadas: number;
+      duenosCopiados: number;
+      omitidos: string[];
+      mensaje: string;
+    }>('/disponibilidad-grupo/importar', { turnoId, semestreOrigenId, semestreDestinoId }),
 
 };

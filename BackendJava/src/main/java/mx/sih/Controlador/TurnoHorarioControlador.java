@@ -3,6 +3,8 @@ package mx.sih.controlador;
 
 import jakarta.validation.Valid;
 import mx.sih.excepcion.NegocioExcepcion;
+import mx.sih.modelo.dto.ImportarTurnoHorarioDTO;
+import mx.sih.modelo.dto.ResultadoImportacionTurnoHorarioDTO;
 import mx.sih.modelo.dto.TurnoHorarioCrearDTO;
 import mx.sih.modelo.dto.TurnoHorarioDTO;
 import mx.sih.servicio.TurnoHorarioServicio;
@@ -107,6 +109,23 @@ public class TurnoHorarioControlador {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(crearErrorResponse("error_negocio", e.getMessage()));
         }
+    }
+
+    /**
+     * Trae los bloques de este turno desde OTRO semestre (mismo turno por nombre).
+     *
+     * <p>Va en /importar y no en / para no chocar con el POST de crear bloque: la ruta es literal y
+     * Spring la resuelve antes que cualquier /{id}.
+     *
+     * <p>A diferencia de los metodos de arriba, aqui NO se captura NegocioExcepcion: la deja pasar al
+     * manejador global, que ya responde con el mismo cuerpo de error (success/error/message) que lee
+     * la pantalla. Asi el mensaje se escribe en un solo sitio.
+     */
+    @PostMapping("/importar")
+    public ResponseEntity<ResultadoImportacionTurnoHorarioDTO> importarBloques(
+            @PathVariable Long turnoId,
+            @Valid @RequestBody ImportarTurnoHorarioDTO dto) {
+        return ResponseEntity.ok(turnoHorarioServicio.importarBloques(turnoId, dto));
     }
 
     @PutMapping("/{id}")

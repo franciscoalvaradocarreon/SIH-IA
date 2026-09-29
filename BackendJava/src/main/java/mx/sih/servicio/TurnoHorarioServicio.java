@@ -1,7 +1,11 @@
 package mx.sih.servicio;
 
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Locale;
 import mx.sih.excepcion.NegocioExcepcion;
+import mx.sih.modelo.dto.ImportarTurnoHorarioDTO;
+import mx.sih.modelo.dto.ResultadoImportacionTurnoHorarioDTO;
 import mx.sih.modelo.dto.TurnoHorarioCrearDTO;
 import mx.sih.modelo.dto.TurnoHorarioDTO;
 import mx.sih.modelo.entidad.Turno;
@@ -309,18 +313,154 @@ public class TurnoHorarioServicio {
 
 
 
+    // ============================================================
+    // IMPORTACION DESDE OTRO SEMESTRE
+    // ============================================================
+
+    /**
+     * Trae los bloques (la rejilla de dias y horas) de un turno de OTRO semestre.
+     *
+     * <p>El turno de destino es el que el usuario tiene abierto; el de ORIGEN se busca por NOMBRE en
+     * el semestre elegido ("el VESPERTINO del semestre X"), porque los bloques cuelgan del turno y el
+     * turno_id es de otro semestre.
+     *
+     * <p>Decisiones:
+     *
+     * <ol>
+     *   <li>Se copian TODOS los bloques del turno de origen, tambien los descansos: son parte de la
+     *       rejilla y sin ellos las horas no cuadran.</li>
+     *   <li>Si un bloque choca con uno que YA hay en el destino (misma hora o solapada) se SALTA y se
+     *       informa: no se sobrescribe ni se duplica. Se usa la misma comprobacion de solape que
+     *       valida crearHorario, que tambien detecta el bloque identico.</li>
+     *   <li>El choque se comprueba tambien contra lo copiado en esta misma corrida, para que un
+     *       origen con dos bloques solapados no meta los dos.</li>
+     *   <li>Todo va en UNA transaccion: si algo falla a mitad, no queda media rejilla copiada.</li>
+     * </ol>
+     */
+    @Transactional
+    public ResultadoImportacionTurnoHorarioDTO importarBloques(Long turnoId,
+                                                               ImportarTurnoHorarioDTO dto) {
+        Long escuelaId = getEscuelaId();
+
+        Turno destino = turnoRepositorio.findByIdAndEscuelaId(turnoId, escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("Turno no encontrado"));
+
+        if (destino.getSemestre() == null) {
+            throw new NegocioExcepcion("El turno seleccionado no tiene semestre asignado");
+        }
+        Long semestreDestinoId = destino.getSemestre().getSemestreId();
+
+        // El turno manda: si el semestre que manda la pantalla no es el suyo, algo no cuadra.
+        if (dto.getSemestreDestinoId() != null
+                && !dto.getSemestreDestinoId().equals(semestreDestinoId)) {
+            throw new NegocioExcepcion("El turno '" + destino.getNombre()
+                    + "' no pertenece al semestre destino indicado");
+        }
+        if (dto.getSemestreOrigenId().equals(semestreDestinoId)) {
+            throw new NegocioExcepcion("El semestre de origen y el de destino son el mismo");
+        }
+
+        Semestre origen = semestreRepositorio
+                .findByIdAndEscuelaId(dto.getSemestreOrigenId(), escuelaId)
+                .orElseThrow(() -> new NegocioExcepcion("No se encontro el semestre de origen"));
+
+        String nombreDestino = destino.getNombre() == null
+                ? ""
+                : destino.getNombre().trim().toUpperCase(Locale.ROOT);
+
+        Turno turnoOrigen = turnoRepositorio
+                .findByEscuelaIdAndSemestreId(escuelaId, origen.getSemestreId())
+                .stream()
+                .filter(t -> t.getNombre() != null
+                        && t.getNombre().trim().toUpperCase(Locale.ROOT).equals(nombreDestino))
+                .findFirst()
+                .orElseThrow(() -> new NegocioExcepcion("El semestre '" + origen.getNombre()
+                        + "' no tiene un turno llamado '" + destino.getNombre() + "'"));
+
+        List<TurnoHorario> fuente = turnoHorarioRepositorio
+                .findByTurnoIdAndSemestreId(turnoOrigen.getTurnoId(), origen.getSemestreId());
+        if (fuente.isEmpty()) {
+            throw new NegocioExcepcion("El turno '" + destino.getNombre() + "' del semestre '"
+                    + origen.getNombre() + "' no tiene bloques que traer");
+        }
+
+        // Lo que ya hay en el destino. Se guarda en una lista que tambien recibe lo copiado, para
+        // detectar choques entre bloques del propio origen.
+        List<TurnoHorario> ocupados = new ArrayList<>(turnoHorarioRepositorio
+                .findByTurnoIdAndSemestreId(turnoId, semestreDestinoId));
+
+        int copiados = 0;
+        List<String> omitidos = new ArrayList<>();
+
+        for (TurnoHorario original : fuente) {
+            String etiqueta = nombreDia(original.getDiaSemana()) + " " + original.getHoraInicio()
+                    + "-" + original.getHoraFin()
+                    + (Boolean.TRUE.equals(original.getDescanso()) ? " (descanso)" : "");
+
+            TurnoHorario choque = null;
+            for (TurnoHorario otro : ocupados) {
+                if (otro.getDiaSemana() != null
+                        && otro.getDiaSemana().equals(original.getDiaSemana())
+                        && otro.getHoraInicio() != null && otro.getHoraFin() != null
+                        && seSolapan(otro.getHoraInicio(), otro.getHoraFin(),
+                                     original.getHoraInicio(), original.getHoraFin())) {
+                    choque = otro;
+                    break;
+                }
+            }
+            if (choque != null) {
+                omitidos.add(etiqueta + " (ya habia un bloque de " + choque.getHoraInicio()
+                        + " a " + choque.getHoraFin() + ")");
+                continue;
+            }
+
+            TurnoHorario copia = new TurnoHorario();
+            copia.setTurno(destino);
+            copia.setSemestre(destino.getSemestre());
+            copia.setDiaSemana(original.getDiaSemana());
+            copia.setHoraInicio(original.getHoraInicio());
+            copia.setHoraFin(original.getHoraFin());
+            copia.setDescanso(original.getDescanso());
+            copia.setOrden(original.getOrden());
+
+            ocupados.add(turnoHorarioRepositorio.save(copia));
+            copiados++;
+        }
+
+        StringBuilder mensaje = new StringBuilder();
+        mensaje.append("Se trajeron ").append(copiados)
+                .append(copiados == 1 ? " bloque" : " bloques")
+                .append(" del turno '").append(destino.getNombre())
+                .append("' desde '").append(origen.getNombre()).append("'.");
+        if (!omitidos.isEmpty()) {
+            mensaje.append(" Se saltaron ").append(omitidos.size()).append(": ")
+                    .append(String.join("; ", omitidos)).append(".");
+        }
+
+        logger.info("Importacion de bloques al turno {} desde {}: {} copiados, {} omitidos",
+                turnoId, origen.getNombre(), copiados, omitidos.size());
+
+        return new ResultadoImportacionTurnoHorarioDTO(copiados, omitidos, mensaje.toString());
+    }
+
     // MÉTODO PRIVADO - Verificar solapamiento
     private boolean seSolapan(LocalTime inicio1, LocalTime fin1, LocalTime inicio2, LocalTime fin2) {
         return !(fin1.isBefore(inicio2) || inicio1.isAfter(fin2) ||
                  fin1.equals(inicio2) || inicio1.equals(fin2));
     }
 
+    /** Nombre del día para los mensajes ("Lunes"...); el número si viene fuera de rango. */
+    private static String nombreDia(Integer diaSemana) {
+        String[] dias = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes"};
+        if (diaSemana == null) {
+            return "Día ?";
+        }
+        return diaSemana >= 1 && diaSemana <= 5 ? dias[diaSemana - 1] : "Día " + diaSemana;
+    }
+
     // MÉTODO DE CONVERSIÓN
     private TurnoHorarioDTO toDTO(TurnoHorario horario) {
-        String[] dias = {"Lunes", "Martes", "Miércoles", "Jueves", "Viernes"};
-        String diaNombre = horario.getDiaSemana() >= 1 && horario.getDiaSemana() <= 5
-            ? dias[horario.getDiaSemana() - 1]
-            : "Día " + horario.getDiaSemana();
+        String diaNombre = nombreDia(horario.getDiaSemana());
 
     return TurnoHorarioDTO.builder()
         .id(horario.getId())

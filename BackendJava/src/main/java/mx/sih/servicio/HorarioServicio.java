@@ -940,25 +940,71 @@ public class HorarioServicio {
         }
 
         // ── Aplicar ──
+        // En DOS TANDAS con un flush en medio, igual que el motor IA (HorarioIAServicio).
+        //
+        // Por que: Hibernate ejecuta los INSERT antes que los DELETE al hacer flush. Si se inserta
+        // una clase antes de borrar (o de mover) la que ocupaba ese bloque, los indices unicos
+        // (grupo | maestro | aula + bloque) saltan a mitad de la transaccion. Con eso, CUALQUIER
+        // intercambio fallaba: la validacion daba la tanda por buena y al guardar salia
+        // "duplicate key value violates unique constraint no_solape_grupo_bloque" (409).
+        //
+        // Tanda 1 - VACIAR: se borran las filas que se quitan Y las que se mueven (liberan su bloque).
+        List<Horario> aVaciar = new ArrayList<>();
+        Set<Long> idsAVaciar = new HashSet<>();
         for (Long id : porBorrar) {
             Horario h = horarioPorId.get(id);
-            if (h != null) {
-                horarioRepositorio.delete(h);
+            if (h != null && idsAVaciar.add(id)) {
+                aVaciar.add(h);
             }
         }
-        destinoDe.forEach((horarioId, bloqueId) -> {
-            Horario h = horarioPorId.get(horarioId);
-            if (h == null) {
-                return;
+        for (Long id : destinoDe.keySet()) {
+            Horario h = horarioPorId.get(id);
+            if (h != null && idsAVaciar.add(id)) {
+                aVaciar.add(h);
             }
-            turnoHorarioRepositorio.findById(bloqueId).ifPresent(h::setTurnoHorario);
-            Aula aula = aulaDestinoDe.get(horarioId);
-            if (aula != null) {
-                h.setAula(aula);
+        }
+
+        try {
+            if (!aVaciar.isEmpty()) {
+                horarioRepositorio.deleteAll(aVaciar);
+                horarioRepositorio.flush();
             }
-        });
-        if (!porCrear.isEmpty()) {
-            horarioRepositorio.saveAll(porCrear);
+
+            // Tanda 2 - COLOCAR: las movidas se reinsertan como filas nuevas en su bloque destino
+            // (mismo grupo, asignacion, maestro y aula elegida), y despues las colocaciones nuevas.
+            for (Map.Entry<Long, Long> destino : destinoDe.entrySet()) {
+                Horario original = horarioPorId.get(destino.getKey());
+                if (original == null) {
+                    continue;
+                }
+                Horario movido = new Horario();
+                movido.setEscuela(original.getEscuela());
+                movido.setGrupo(original.getGrupo());
+                movido.copiarDelGrupo();
+                movido.setAsignacion(original.getAsignacion());
+                movido.setTurnoHorario(turnoHorarioRepositorio.findById(destino.getValue())
+                        .orElse(original.getTurnoHorario()));
+                Aula aulaDestino = aulaDestinoDe.get(destino.getKey());
+                movido.setAula(aulaDestino != null ? aulaDestino : original.getAula());
+                movido.setMaestroId(original.getMaestroId());
+                movido.setSemestre(original.getSemestre());
+                movido.setVersion(original.getVersion() == null ? 1 : original.getVersion());
+                porCrear.add(movido);
+            }
+
+            if (!porCrear.isEmpty()) {
+                horarioRepositorio.saveAll(porCrear);
+                horarioRepositorio.flush();
+            }
+        } catch (DataIntegrityViolationException e) {
+            // Si aun asi choca, que el usuario sepa QUE se solapa en vez del mensaje generico de
+            // "registros relacionados" (la validacion ya lo filtra, pero la BD es la ultima palabra).
+            String solape = MensajeErrorUtil.detectarConstraintSolape(e);
+            if (solape != null) {
+                logger.warn("Edicion manual rechazada por la base de datos: {}", solape);
+                throw new NegocioExcepcion(MensajeErrorUtil.codigoDesdeConstraint(e), solape, e);
+            }
+            throw e;
         }
 
         logger.info("Edición manual aplicada: {} colocada(s), {} movida(s), {} quitada(s)",

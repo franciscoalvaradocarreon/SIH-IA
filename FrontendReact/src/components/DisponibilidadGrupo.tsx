@@ -1,16 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { disponibilidadGrupoService } from '../api/disponibilidadGrupoService';
+import { semestreService } from '../api/semestreService';
 import { grupoService } from '../api/grupoService';
 import { horarioService } from '../api/horarioService';
 import { turnoHorarioService } from '../api/turnoHorarioService';
 import { turnoService } from '../api/turnoService';
 import { useAuth } from '../context/AuthContext';
-import type { Grupo, Horario, Turno, TurnoHorario } from '../types';
+import type { Grupo, Horario, Semestre, Turno, TurnoHorario } from '../types';
 import {
   MdEdit, MdRefresh, MdClass, MdSchedule,
   MdCheck, MdClose, MdChevronLeft, MdChevronRight,
-  MdWarning
+  MdWarning, MdContentCopy
 } from 'react-icons/md';
 
 const DIAS_SEMANA = [
@@ -37,6 +38,16 @@ const DisponibilidadGrupo: React.FC = () => {
   const [turnos, setTurnos] = useState<Turno[]>([]);
   const [grupoSeleccionado, setGrupoSeleccionado] = useState<number>(0);
   const [turnoSeleccionado, setTurnoSeleccionado] = useState<number>(0);
+
+  // Traer la disponibilidad de TODO el turno desde otro semestre (no de un grupo suelto).
+  const [modalImportar, setModalImportar] = useState(false);
+  const [semestres, setSemestres] = useState<Semestre[]>([]);
+  const [semestreOrigen, setSemestreOrigen] = useState<number>(0);
+  const [importando, setImportando] = useState(false);
+  const [resultadoImportacion, setResultadoImportacion] = useState<
+    { mensaje: string; omitidos: string[] } | null
+  >(null);
+  const [errorImportacion, setErrorImportacion] = useState<string | null>(null);
   const [horarios, setHorarios] = useState<TurnoHorario[]>([]);
   const [disponibilidades, setDisponibilidades] = useState<Map<number, boolean>>(new Map());
   // Bloques (TurnoHorario.id) que el grupo YA tiene ocupados por una clase colocada en el horario
@@ -332,6 +343,48 @@ const DisponibilidadGrupo: React.FC = () => {
     );
   }
 
+  /** Abre el modal de importación y carga los semestres de la escuela (menos el activo). */
+  const abrirImportar = async () => {
+    setResultadoImportacion(null);
+    setErrorImportacion(null);
+    setSemestreOrigen(0);
+    setModalImportar(true);
+    try {
+      const res = await semestreService.listarTodos();
+      setSemestres((res.data as Semestre[]).filter(s => s.id !== semestreActivo?.id));
+    } catch (error) {
+      console.error('Error al cargar semestres:', error);
+      setErrorImportacion('No se pudieron cargar los semestres.');
+    }
+  };
+
+  /**
+   * Trae la disponibilidad de los grupos de ESTE turno desde el semestre elegido.
+   *
+   * El backend empareja por nombre del grupo (dentro del turno) y por día + hora del bloque, y
+   * devuelve el resumen: cuántas casillas creó y qué se saltó.
+   */
+  const confirmarImportar = async () => {
+    if (!turnoSeleccionado || !semestreOrigen || !semestreActivo?.id) return;
+    setImportando(true);
+    setErrorImportacion(null);
+    try {
+      const res = await disponibilidadGrupoService.importar(
+        turnoSeleccionado, semestreOrigen, semestreActivo.id
+      );
+      setResultadoImportacion({ mensaje: res.data.mensaje, omitidos: res.data.omitidos ?? [] });
+      // Refresca la rejilla del grupo abierto para ver lo recién traído.
+      if (grupoSeleccionado > 0) {
+        await cargarDisponibilidades(grupoSeleccionado);
+      }
+    } catch (error: any) {
+      console.error('Error al traer la disponibilidad:', error);
+      setErrorImportacion(error.response?.data?.message || 'No se pudo traer la disponibilidad.');
+    } finally {
+      setImportando(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto">
       {/* Encabezado */}
@@ -347,6 +400,17 @@ const DisponibilidadGrupo: React.FC = () => {
             </span>
           </p>
         </div>
+        <button
+          onClick={abrirImportar}
+          disabled={!turnoSeleccionado || !semestreActivo?.id}
+          title={turnoSeleccionado
+            ? 'Trae la disponibilidad de los grupos de este turno desde otro semestre'
+            : 'Selecciona primero un turno'}
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg shadow-md transition duration-200 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          <MdContentCopy className="text-xl" />
+          Traer de otro semestre
+        </button>
       </div>
 
       {/* 🔥 FILTROS: Turno + Grupo */}
@@ -634,6 +698,100 @@ const DisponibilidadGrupo: React.FC = () => {
         <div className="text-center py-12 text-gray-500 dark:text-gray-400">
           <MdClass className="text-4xl mx-auto mb-2 text-gray-300 dark:text-gray-600" />
           <p>Selecciona un turno para ver sus grupos</p>
+        </div>
+      )}
+
+      {/* Modal: traer la disponibilidad del turno desde otro semestre */}
+      {modalImportar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 backdrop-blur-sm p-4">
+          <div className="my-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-lg w-full p-6 border border-gray-400 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-emerald-100 dark:bg-emerald-900/40 rounded-lg text-emerald-600 dark:text-emerald-400">
+                <MdContentCopy className="text-2xl" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-800 dark:text-white">
+                Traer disponibilidad de otro semestre
+              </h3>
+            </div>
+
+            {resultadoImportacion ? (
+              <>
+                <p className="text-sm text-gray-700 dark:text-gray-300">{resultadoImportacion.mensaje}</p>
+                {resultadoImportacion.omitidos.length > 0 && (
+                  <ul className="mt-3 space-y-1 text-xs text-gray-600 dark:text-gray-400 list-disc list-inside">
+                    {resultadoImportacion.omitidos.map((m, i) => (
+                      <li key={i}>{m}</li>
+                    ))}
+                  </ul>
+                )}
+                <button
+                  onClick={() => setModalImportar(false)}
+                  className="mt-5 w-full px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
+                >
+                  Cerrar
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  Se trae la disponibilidad de los grupos del turno{' '}
+                  <strong>{turnos.find(t => t.id === turnoSeleccionado)?.nombre || '-'}</strong> desde
+                  el semestre que elijas. Se empareja cada grupo <strong>por nombre</strong> y cada
+                  casilla por día y hora; lo que no exista aquí se salta, y lo que ya tengas
+                  configurado no se toca.
+                </p>
+
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Semestre de origen
+                </label>
+                <select
+                  value={semestreOrigen}
+                  onChange={e => setSemestreOrigen(Number(e.target.value))}
+                  disabled={importando}
+                  className="w-full px-4 py-2.5 mb-2 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition disabled:opacity-50"
+                >
+                  <option value={0}>Selecciona un semestre...</option>
+                  {semestres.map(s => (
+                    <option key={s.id} value={s.id}>{s.nombre}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                  Se traerán al semestre activo: <strong>{semestreActivo?.nombre ?? '-'}</strong>
+                </p>
+
+                {errorImportacion && (
+                  <p className="text-sm text-red-600 dark:text-red-400 mb-4">{errorImportacion}</p>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setModalImportar(false)}
+                    disabled={importando}
+                    className="flex-1 px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={confirmarImportar}
+                    disabled={importando || !semestreOrigen}
+                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {importando ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+                        Trayendo...
+                      </>
+                    ) : (
+                      <>
+                        <MdContentCopy className="text-lg" />
+                        Traer
+                      </>
+                    )}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

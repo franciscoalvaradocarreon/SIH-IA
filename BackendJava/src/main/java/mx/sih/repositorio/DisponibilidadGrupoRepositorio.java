@@ -89,4 +89,20 @@ public interface DisponibilidadGrupoRepositorio extends JpaRepository<Disponibil
      */
     @Query("SELECT COUNT(d) FROM DisponibilidadGrupo d WHERE d.grupo.grupoId = :grupoId")
     long countByGrupoId(@Param("grupoId") Long grupoId);
+
+    /**
+     * Todas las filas de un semestre cuyos bloques pertenecen a ese turno.
+     *
+     * Lo usa la importacion desde otro semestre: se traen turno por turno (la disponibilidad es
+     * "grupo x bloque", y los bloques son del turno). El JOIN FETCH a grupo y a turnoHorario es
+     * necesario para emparejar por nombre y por dia/hora en el destino sin caer en un N+1.
+     */
+    @Query("SELECT d FROM DisponibilidadGrupo d " +
+           "JOIN FETCH d.grupo g " +
+           "JOIN FETCH d.turnoHorario th " +
+           "WHERE d.semestre.semestreId = :semestreId " +
+           "AND th.turno.turnoId = :turnoId " +
+           "ORDER BY g.grado ASC, g.nombre ASC, th.diaSemana ASC, th.orden ASC")
+    List<DisponibilidadGrupo> findBySemestreIdAndTurnoId(@Param("semestreId") Long semestreId,
+                                                          @Param("turnoId") Long turnoId);
 }

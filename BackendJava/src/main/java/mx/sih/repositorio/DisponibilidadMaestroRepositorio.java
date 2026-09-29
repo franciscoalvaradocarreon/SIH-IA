@@ -255,4 +255,23 @@ public interface DisponibilidadMaestroRepositorio extends JpaRepository<Disponib
     @Query("SELECT COUNT(d) FROM DisponibilidadMaestro d " +
            "WHERE d.maestro.maestroId = :maestroId")
     long countByMaestroId(@Param("maestroId") Long maestroId);
+
+    /**
+     * Todas las filas de un semestre cuyos bloques pertenecen a ese turno.
+     *
+     * Lo usa la importacion desde otro semestre: se traen turno por turno (la disponibilidad es
+     * "maestro x bloque", y los bloques son del turno), asi que primero se leen las filas del turno
+     * de ORIGEN y luego se emparejan con los maestros y bloques del turno de DESTINO.
+     *
+     * El JOIN FETCH a maestro y a turnoHorario es obligatorio: el servicio necesita el nombre del
+     * maestro y el dia/hora del bloque para reencontrarlos en el destino; sin el fetch seria un N+1.
+     */
+    @Query("SELECT d FROM DisponibilidadMaestro d " +
+           "JOIN FETCH d.maestro m " +
+           "JOIN FETCH d.turnoHorario th " +
+           "WHERE d.semestre.semestreId = :semestreId " +
+           "AND th.turno.turnoId = :turnoId " +
+           "ORDER BY m.apellidos ASC, m.nombre ASC, th.diaSemana ASC, th.orden ASC")
+    List<DisponibilidadMaestro> findBySemestreIdAndTurnoId(@Param("semestreId") Long semestreId,
+                                                            @Param("turnoId") Long turnoId);
 }

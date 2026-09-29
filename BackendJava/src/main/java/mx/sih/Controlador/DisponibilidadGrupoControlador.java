@@ -3,6 +3,8 @@ package mx.sih.controlador;
 import jakarta.validation.Valid;
 import mx.sih.modelo.dto.DisponibilidadGrupoCrearDTO;
 import mx.sih.modelo.dto.DisponibilidadGrupoDTO;
+import mx.sih.modelo.dto.ImportarDisponibilidadDTO;
+import mx.sih.modelo.dto.ResultadoImportacionDisponibilidadDTO;
 import mx.sih.servicio.DisponibilidadGrupoServicio;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -78,5 +80,18 @@ public class DisponibilidadGrupoControlador {
             @RequestParam(required = false) Long semestreId) {
         return ResponseEntity.ok(disponibilidadServicio.contarBloquesDisponibles(grupoId, semestreId));
     }
-    
+
+    /**
+     * Trae la disponibilidad de los grupos de un turno desde OTRO semestre.
+     *
+     * <p>Mismo @PreAuthorize explicito que el resto de las escrituras de este controlador. La
+     * NegocioExcepcion la responde el manejador global con el cuerpo de error que ya lee la pantalla.
+     */
+    @PostMapping("/importar")
+    @PreAuthorize("hasAnyRole('ADMIN', 'COORDINADOR')")
+    public ResponseEntity<ResultadoImportacionDisponibilidadDTO> importarDisponibilidad(
+            @Valid @RequestBody ImportarDisponibilidadDTO dto) {
+        return ResponseEntity.ok(disponibilidadServicio.importarDisponibilidad(dto));
+    }
+
 }

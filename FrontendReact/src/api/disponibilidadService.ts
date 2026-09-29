@@ -35,6 +35,20 @@ export const disponibilidadService = {
   eliminarPorMaestro: (maestroId: number) =>
     api.delete(`/disponibilidad-maestro/maestro/${maestroId}`),
 
+  /**
+   * Trae la disponibilidad de los maestros de un turno desde otro semestre.
+   *
+   * El turno es el de DESTINO (el seleccionado en la pantalla): de ahí salen tanto los bloques como
+   * los maestros con los que se empareja. Devuelve el resumen (casillas creadas y motivos de omisión).
+   */
+  importar: (turnoId: number, semestreOrigenId: number, semestreDestinoId: number) =>
+    api.post<{
+      filasCopiadas: number;
+      duenosCopiados: number;
+      omitidos: string[];
+      mensaje: string;
+    }>('/disponibilidad-maestro/importar', { turnoId, semestreOrigenId, semestreDestinoId }),
+
   contarDisponibles: (grupoId: number, semestreId?: number) => {
     const params = new URLSearchParams();
     if (semestreId) params.set('semestreId', String(semestreId));
