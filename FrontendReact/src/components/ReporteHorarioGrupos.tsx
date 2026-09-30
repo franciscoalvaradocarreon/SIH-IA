@@ -23,55 +23,77 @@ import {
 // Adaptador local para mantener el nombre que ya usaba el archivo
 const formatHora = (hora: string) => formatHoraUtil(hora);
 
+/** Una de las aulas donde cayeron las clases de una asignacion, y cuantas horas en cada una. */
+export interface AulaDeMateria {
+  nombre: string;
+  horas: number;
+}
+
 export interface MateriaResumen {
   asignacionId: number;
   materiaNombre: string;
   materiaClave: string;
   maestroNombre: string;
-  aulaNombre: string;
+  /** Aulas donde quedaron las clases, ordenadas por nombre. Una sola en el caso normal. */
+  aulas: AulaDeMateria[];
   horas: number;
   colorHex: string;
 }
 
 /**
- * Resumen de materias y maestros del grupo: UNA FILA POR ASIGNACION Y AULA.
+ * Resumen de materias y maestros del grupo: UN RENGLON POR ASIGNACION.
  *
- * Antes se agrupaba solo por asignacion y el aula se guardaba de la PRIMERA clase que aparecia,
- * mientras que las horas se sumaban de TODAS. Con el motor en modo "elegir el taller"
- * (asignarAulas), una misma asignacion puede acabar en varias aulas: TICS de 1°D quedo repartida
- * entre AULA A4, T. COMP 1, T. COMP 2 y T. COMP 3. El resumen imprimia entonces combinaciones que
- * nunca existieron, del tipo "T. COMP 3 · 2 horas" cuando en realidad era 1 hora en T. COMP 3 y 1
- * en AULA A4. Agrupando por (asignacion, aula) cada renglon dice la verdad y las horas por aula se
- * pueden contar.
+ * La clave es la asignacion (materia + maestro + grupo), que es la unidad con la que trabaja la
+ * pantalla de Asignacion, asi que el listado se lee igual que la tabla de origen.
+ *
+ * OJO con el aula: con el motor en modo "elegir el taller" (asignarAulas) una misma asignacion puede
+ * acabar repartida en varias aulas. Antes se guardaba el aula de la PRIMERA clase que aparecia y se
+ * sumaban las horas de TODAS, y eso imprimia combinaciones que nunca existieron: TICS de 1°D salia
+ * como "T. COMP 3 - 2 horas" cuando eran 1 hora en T. COMP 3 y 1 en AULA A4. Ahora se guarda el
+ * desglose por aula y la columna Aula lo muestra cuando hay mas de una (ver textoAulas).
  *
  * Es una funcion pura a proposito: la pantalla, el PDF y el Excel la comparten, y las pruebas la
  * llaman directamente sin montar el componente.
  */
 export const resumirMaterias = (horarios: Horario[]): MateriaResumen[] => {
-  const materiasMap = new Map<string, MateriaResumen>();
+  const materiasMap = new Map<number, MateriaResumen>();
   horarios.forEach(h => {
-    const clave = `${h.asignacionId}|${h.aulaId}`;
-    if (!materiasMap.has(clave)) {
-      materiasMap.set(clave, {
+    let fila = materiasMap.get(h.asignacionId);
+    if (!fila) {
+      fila = {
         asignacionId: h.asignacionId,
         materiaNombre: h.materiaNombre,
         materiaClave: h.materiaClave,
         maestroNombre: h.maestroNombre,
-        aulaNombre: h.aulaNombre,
+        aulas: [],
         horas: 0,
         colorHex: h.colorHex || '#808080',
-      });
+      };
+      materiasMap.set(h.asignacionId, fila);
     }
-    materiasMap.get(clave)!.horas += 1;
+    fila.horas += 1;
+    const aula = fila.aulas.find(a => a.nombre === h.aulaNombre);
+    if (aula) {
+      aula.horas += 1;
+    } else {
+      fila.aulas.push({ nombre: h.aulaNombre, horas: 1 });
+    }
   });
 
+  const lista = Array.from(materiasMap.values());
   // Orden estable: por materia y, dentro de ella, por aula. Asi dos exportaciones salen iguales.
-  return Array.from(materiasMap.values()).sort(
-    (a, b) =>
-      a.materiaNombre.localeCompare(b.materiaNombre) ||
-      a.aulaNombre.localeCompare(b.aulaNombre),
-  );
+  lista.forEach(m => m.aulas.sort((a, b) => a.nombre.localeCompare(b.nombre)));
+  return lista.sort((a, b) => a.materiaNombre.localeCompare(b.materiaNombre));
 };
+
+/**
+ * Texto de la columna "Aula". Con una sola aula (el caso normal) es solo su nombre; cuando el motor
+ * repartio la asignacion en varias, se listan con sus horas para que se vea donde quedo cada una.
+ */
+export const textoAulas = (m: MateriaResumen): string =>
+  m.aulas.length <= 1
+    ? (m.aulas[0]?.nombre ?? '')
+    : m.aulas.map(a => `${a.nombre} (${a.horas})`).join(', ');
 
 interface GrupoConHorario {
   grupo: Grupo;
@@ -365,7 +387,7 @@ const ReporteHorariosGrupos: React.FC = () => {
           ...g.materias.map(m => [
             m.materiaNombre,
             m.maestroNombre,
-            m.aulaNombre,
+            textoAulas(m),
             String(m.horas),
           ]),
           [
@@ -491,7 +513,7 @@ const ReporteHorariosGrupos: React.FC = () => {
           m.materiaClave,
           m.materiaNombre,
           m.maestroNombre,
-          m.aulaNombre,
+          textoAulas(m),
           m.horas,
         ]);
       });
@@ -787,7 +809,7 @@ const ReporteHorariosGrupos: React.FC = () => {
                         <tbody>
                           {g.materias.map((m, idx) => (
                             <tr
-                              key={`${m.asignacionId}-${m.aulaNombre}`}
+                              key={m.asignacionId}
                               className={idx % 2 === 0
                                 ? 'bg-white dark:bg-gray-800'
                                 : 'bg-gray-50 dark:bg-gray-800/50'}
@@ -810,7 +832,7 @@ const ReporteHorariosGrupos: React.FC = () => {
                                 {m.maestroNombre}
                               </td>
                               <td className="px-3 py-2 text-gray-700 dark:text-gray-300 border border-gray-400 dark:border-gray-700">
-                                {m.aulaNombre}
+                                {textoAulas(m)}
                               </td>
                               <td className="px-3 py-2 text-center font-semibold text-indigo-700 dark:text-indigo-300 border border-gray-400 dark:border-gray-700">
                                 {m.horas}

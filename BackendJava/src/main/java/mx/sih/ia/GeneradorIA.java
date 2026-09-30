@@ -460,9 +460,14 @@ public class GeneradorIA {
                             a.getMaestro().getTituloNombreCompleto());
                 }
             }
-            // Stock de talleres por materia: las aulas distintas que ya usa.
+            // Stock de TALLERES por materia: solo las aulas marcadas como taller (aulas.taller) que ya
+            // usa la materia. Las aulas normales NO entran aqui a proposito: el aula de una asignacion
+            // de teoria no es un comodin para acabar en un taller (ver aulasCandidatas).
             for (Asignacion a : asignaciones) {
                 if (a.getMateria() == null || a.getAula() == null) {
+                    continue;
+                }
+                if (!Boolean.TRUE.equals(a.getAula().getTaller())) {
                     continue;
                 }
                 stockAulasPorMateria.computeIfAbsent(a.getMateria().getMateriaId(), k -> new LinkedHashSet<>())
@@ -503,7 +508,12 @@ public class GeneradorIA {
                 Set<Long> stock = a.getMateria() != null
                         ? stockPorMateria.getOrDefault(a.getMateria().getMateriaId(), Set.of())
                         : Set.of();
-                Set<Long> stockAulas = a.getMateria() != null
+                // El stock de talleres solo se le da a las sesiones cuya asignacion YA esta en un taller.
+                // Si su aula es normal (o no tiene), el conjunto va vacio: el motor la deja en el aula de
+                // la tabla y no la puede colocar en un taller. Es la regla pedida: las horas de teoria no
+                // juegan a ser taller, y las de taller solo rotan entre talleres.
+                boolean aulaEsTaller = a.getAula() != null && Boolean.TRUE.equals(a.getAula().getTaller());
+                Set<Long> stockAulas = (a.getMateria() != null && aulaEsTaller)
                         ? stockAulasPorMateria.getOrDefault(a.getMateria().getMateriaId(), Set.of())
                         : Set.of();
                 boolean jovenes = a.getMateria() != null && a.getMateria().getClave() != null
@@ -3433,6 +3443,10 @@ public class GeneradorIA {
             // eleccion normal del aula. La bandera gobierna la eleccion normal (aulasCandidatas); si
             // aqui se respetara, el par se quedaria pegado y la metrica de adyacencias subiria sin que
             // el usuario hubiera pedido nada parecido.
+            //
+            // Lo que SI se respeta aqui es el TIPO de aula: el stock solo trae talleres y solo lo tienen
+            // las sesiones que ya estan en uno, asi que una sesion de aula normal llega con el conjunto
+            // vacio y se prueba unicamente en su propia aula.
             List<Long> aulas = new ArrayList<>();
             if (s.aid != 0) {
                 aulas.add(s.aid);
