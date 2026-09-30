@@ -23,7 +23,7 @@ import {
 // Adaptador local para mantener el nombre que ya usaba el archivo
 const formatHora = (hora: string) => formatHoraUtil(hora);
 
-interface MateriaResumen {
+export interface MateriaResumen {
   asignacionId: number;
   materiaNombre: string;
   materiaClave: string;
@@ -32,6 +32,46 @@ interface MateriaResumen {
   horas: number;
   colorHex: string;
 }
+
+/**
+ * Resumen de materias y maestros del grupo: UNA FILA POR ASIGNACION Y AULA.
+ *
+ * Antes se agrupaba solo por asignacion y el aula se guardaba de la PRIMERA clase que aparecia,
+ * mientras que las horas se sumaban de TODAS. Con el motor en modo "elegir el taller"
+ * (asignarAulas), una misma asignacion puede acabar en varias aulas: TICS de 1°D quedo repartida
+ * entre AULA A4, T. COMP 1, T. COMP 2 y T. COMP 3. El resumen imprimia entonces combinaciones que
+ * nunca existieron, del tipo "T. COMP 3 · 2 horas" cuando en realidad era 1 hora en T. COMP 3 y 1
+ * en AULA A4. Agrupando por (asignacion, aula) cada renglon dice la verdad y las horas por aula se
+ * pueden contar.
+ *
+ * Es una funcion pura a proposito: la pantalla, el PDF y el Excel la comparten, y las pruebas la
+ * llaman directamente sin montar el componente.
+ */
+export const resumirMaterias = (horarios: Horario[]): MateriaResumen[] => {
+  const materiasMap = new Map<string, MateriaResumen>();
+  horarios.forEach(h => {
+    const clave = `${h.asignacionId}|${h.aulaId}`;
+    if (!materiasMap.has(clave)) {
+      materiasMap.set(clave, {
+        asignacionId: h.asignacionId,
+        materiaNombre: h.materiaNombre,
+        materiaClave: h.materiaClave,
+        maestroNombre: h.maestroNombre,
+        aulaNombre: h.aulaNombre,
+        horas: 0,
+        colorHex: h.colorHex || '#808080',
+      });
+    }
+    materiasMap.get(clave)!.horas += 1;
+  });
+
+  // Orden estable: por materia y, dentro de ella, por aula. Asi dos exportaciones salen iguales.
+  return Array.from(materiasMap.values()).sort(
+    (a, b) =>
+      a.materiaNombre.localeCompare(b.materiaNombre) ||
+      a.aulaNombre.localeCompare(b.aulaNombre),
+  );
+};
 
 interface GrupoConHorario {
   grupo: Grupo;
@@ -131,26 +171,8 @@ const ReporteHorariosGrupos: React.FC = () => {
         if (arr.length > 1) solapamientos++;
       }
 
-      // Resumen de materias y maestros
-      const materiasMap = new Map<number, MateriaResumen>();
-      hs.forEach(h => {
-        const id = h.asignacionId;
-        if (!materiasMap.has(id)) {
-          materiasMap.set(id, {
-            asignacionId: id,
-            materiaNombre: h.materiaNombre,
-            materiaClave: h.materiaClave,
-            maestroNombre: h.maestroNombre,
-            aulaNombre: h.aulaNombre,
-            horas: 0,
-            colorHex: h.colorHex || '#808080',
-          });
-        }
-        materiasMap.get(id)!.horas += 1;
-      });
-
-      const materias: MateriaResumen[] = Array.from(materiasMap.values())
-        .sort((a, b) => a.materiaNombre.localeCompare(b.materiaNombre));
+      // Resumen de materias y maestros: una fila por asignacion y aula (ver resumirMaterias).
+      const materias = resumirMaterias(hs);
 
       resultado.push({ grupo, horarios: hs, bloquesFilas, horarioIndex, materias, solapamientos });
     });
@@ -765,7 +787,7 @@ const ReporteHorariosGrupos: React.FC = () => {
                         <tbody>
                           {g.materias.map((m, idx) => (
                             <tr
-                              key={m.asignacionId}
+                              key={`${m.asignacionId}-${m.aulaNombre}`}
                               className={idx % 2 === 0
                                 ? 'bg-white dark:bg-gray-800'
                                 : 'bg-gray-50 dark:bg-gray-800/50'}

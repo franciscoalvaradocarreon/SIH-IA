@@ -35,6 +35,11 @@ jobs:
         run: |
           FILES=$(git diff --name-only --diff-filter=ACM origin/main...HEAD -- 'src/**/*.ts' 'src/**/*.tsx' | tr '\n' ' ')
           if [ -n "$FILES" ]; then npx tsc --noEmit -p tsconfig.app.json 2>&1 | grep -E "$(echo $FILES | tr ' ' '|')" && exit 1 || echo "Sin errores en los archivos cambiados"; fi
+      # Pruebas de componentes con Vitest: segundos, sin navegador y deterministicas. Aqui se
+      # atrapan los fallos de logica de las pantallas (columnas mal armadas, estados vacios,
+      # permisos, filtros que no filtran). Si esto falla, no pasa.
+      - name: Pruebas de componentes (Vitest)
+        run: npx vitest run
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-dist

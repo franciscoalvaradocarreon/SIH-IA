@@ -1706,13 +1706,26 @@ const nombreDeTurno = (turnos: Turno[], turnoId: number | null): string => {
  * <p>"sin registrar" no es lo mismo que "sin stock": las corridas guardadas antes de que existiera
  * este dato no tienen forma de saberlo, y decir "sin stock" afirmaría algo que no consta.
  */
+/**
+ * Cómo se generó una corrida, para la columna "Modo".
+ *
+ * Las que se guardan desde el tablero manual no vienen de una generación: el backend las marca con
+ * asesor "manual" y ese dato manda sobre las banderas de reparto.
+ */
 const etiquetaModo = (c: CorridaIA): string => {
+  if ((c.asesor ?? '').trim().toLowerCase() === 'manual') return 'manual';
   if (c.asignarMaestros == null && c.asignarAulas == null) return 'sin registrar';
   const partes: string[] = [];
   if (c.asignarMaestros) partes.push('maestros');
   if (c.asignarAulas) partes.push('talleres');
   return partes.length > 0 ? partes.join(' + ') : 'sin stock';
 };
+
+/** true si de verdad no hay pista de cómo se generó (ni banderas ni asesor manual): se pinta gris. */
+const modoSinRegistrar = (c: CorridaIA): boolean =>
+  (c.asesor ?? '').trim().toLowerCase() !== 'manual'
+  && c.asignarMaestros == null
+  && c.asignarAulas == null;
 
 /**
  * Confirmación en modal para aplicar o borrar una corrida.
@@ -1906,7 +1919,7 @@ const ListaCorridas: React.FC<{
                     )}
                   </td>
                   <td className="px-2 py-2 text-gray-700 dark:text-gray-300">{nombreDeTurno(turnos, c.turnoId)}</td>
-                  <td className={`px-2 py-2 ${c.asignarMaestros == null && c.asignarAulas == null
+                  <td className={`px-2 py-2 ${modoSinRegistrar(c)
                     ? 'text-gray-400 dark:text-gray-500'
                     : 'text-gray-700 dark:text-gray-300'}`}>
                     {etiquetaModo(c)}

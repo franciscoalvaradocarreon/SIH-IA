@@ -941,7 +941,7 @@ const HorarioManual: React.FC = () => {
               title="Guarda el horario actual como una corrida, para poder volver a él desde Gen. Horario IA"
               className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <MdSave /> Guardar como corrida
+              <MdSave /> Guardar corrida
             </button>
           </div>
         </div>

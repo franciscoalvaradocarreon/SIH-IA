@@ -272,7 +272,9 @@ const ReporteCerebro: React.FC = () => {
         y = inicioContenido;
       }
 
-      doc.setFontSize(14);
+      // 13 pt (un punto menos que antes): el nombre de la especialidad ya no compite en tamaño con
+      // el titulo del reporte y la linea sigue destacando por ir en negrita.
+      doc.setFontSize(13);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
       doc.text('ESPECIALIDAD: ' + sec.nombre, 14, y);
