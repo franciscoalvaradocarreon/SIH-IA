@@ -168,9 +168,12 @@ const ReporteHorariosGrupos: React.FC = () => {
 
   // Construir estructura: por cada grupo, sus horarios + bloques del turno + materias resumen
   const gruposConHorario: GrupoConHorario[] = useMemo(() => {
+    // SIN turno elegido no se arma NADA: este reporte es por turno, y mostrar todos los grupos del
+    // semestre mezclados era confuso (y dejaba exportar sin haber elegido). Devolviendo la lista
+    // vacia, el aviso de abajo pide el turno y los botones de exportar se deshabilitan solos.
     const gruposFiltrados = turnoSeleccionado > 0
       ? grupos.filter(g => g.turnoId === turnoSeleccionado)
-      : grupos;
+      : [];
 
     const horariosPorGrupo = new Map<number, Horario[]>();
     horarios.forEach(h => {
@@ -624,6 +627,11 @@ const ReporteHorariosGrupos: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {turnoSeleccionado === 0 && (
+              <span className="self-center text-xs text-amber-700 dark:text-amber-400">
+                Selecciona un turno para exportar.
+              </span>
+            )}
             <button
               onClick={cargarTodo}
               disabled={loading}
@@ -697,10 +705,12 @@ const ReporteHorariosGrupos: React.FC = () => {
           <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-8 text-center">
             <MdWarning className="text-5xl text-yellow-600 dark:text-yellow-400 mx-auto mb-3" />
             <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200">
-              Sin horarios generados
+              {turnoSeleccionado > 0 ? 'Sin horarios generados' : 'Elige un turno'}
             </h3>
             <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
-              No hay horarios generados para {turnoSeleccionado > 0 ? 'el turno seleccionado' : 'este semestre'}.
+              {turnoSeleccionado > 0
+                ? 'No hay horarios generados para el turno seleccionado.'
+                : 'Selecciona un turno para ver el reporte.'}
             </p>
           </div>
         ) : (

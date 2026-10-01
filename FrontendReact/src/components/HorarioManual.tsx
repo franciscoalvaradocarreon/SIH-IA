@@ -893,7 +893,7 @@ const HorarioManual: React.FC = () => {
         onDragEnter={() => { if (arrastrando) setCeldaSobre(clave); }}
         onDragLeave={() => { if (celdaSobre === clave) setCeldaSobre(null); }}
         onDrop={onDrop}
-        className={`border-b border-r border-gray-400 p-0.5 align-middle dark:border-gray-700 ${extra} ${
+        className={`border-b border-r border-gray-400 px-0.5 py-px align-middle dark:border-gray-700 ${extra} ${
           sobre ? 'bg-blue-50 ring-2 ring-inset ring-blue-400 dark:bg-blue-900/30' : ''
         }`}
       >
@@ -916,8 +916,7 @@ const HorarioManual: React.FC = () => {
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
               Renglones = maestros · columnas = días y horas. Pin = hora clase: arrástralo
-              de la caja a un hueco, muévelo de casilla o devuélvelo a la caja. Nada se guarda hasta
-              pulsar Guardar.
+              de la caja a un hueco. Nada se guarda hasta pulsar Guardar.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -1427,7 +1426,7 @@ const HorarioManual: React.FC = () => {
                 <tr key={m.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
                   <th
                     title={`${m.apellidos && m.apellidos !== '.' ? m.apellidos + ', ' : ''}${m.nombre}`}
-                    className="sticky left-0 z-20 whitespace-nowrap border-b border-r border-gray-400 bg-white px-3 py-1 text-left dark:border-gray-600 dark:bg-gray-800"
+                    className="sticky left-0 z-20 whitespace-nowrap border-b border-r border-gray-400 bg-white px-3 py-0 text-xs leading-none text-left dark:border-gray-600 dark:bg-gray-800"
                   >
                     <span className="text-xs font-semibold text-gray-800 dark:text-gray-100">{m.apodo}</span>
                     <span className="ml-2 text-[10px] text-gray-400">{m.horas} h</span>
@@ -1462,7 +1461,7 @@ const HorarioManual: React.FC = () => {
                             onDragEnter={() => { if (arrastrando) setCeldaSobre(`sem-${clave}`); }}
                             onDragLeave={() => { if (celdaSobre === `sem-${clave}`) setCeldaSobre(null); }}
                             onDrop={(e) => soltarEnCasillaMaestro(e, m.id, b.id)}
-                            className={`border-b border-r border-gray-400 p-0.5 align-middle dark:border-gray-700 ${
+                            className={`border-b border-r border-gray-400 px-0.5 py-px align-middle dark:border-gray-700 ${
                               idx === (bloquesPorDia.get(dia) ?? []).length - 1 ? 'border-r-2 border-indigo-400 dark:border-indigo-500' : ''
                             } ${sobre ? 'bg-blue-50 ring-2 ring-inset ring-blue-400 dark:bg-blue-900/30' : ''}`}
                           >
@@ -1529,7 +1528,7 @@ const HorarioManual: React.FC = () => {
                   </tr>
                   {(bloquesPorDia.get(dia) ?? []).map((b, idx) => (
                     <tr key={b.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30">
-                      <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-400 bg-white px-3 py-1 text-left dark:border-gray-600 dark:bg-gray-800">
+                      <th className="sticky left-0 z-10 whitespace-nowrap border-b border-r border-gray-400 bg-white px-3 py-0 text-xs leading-none text-left dark:border-gray-600 dark:bg-gray-800">
                         <span className="text-xs font-semibold text-gray-700 dark:text-gray-200">{idx + 1}a</span>
                         <span className="ml-2 text-[10px] text-gray-400">{(b.horaInicio ?? '').slice(0, 5)}</span>
                       </th>
@@ -1552,7 +1551,7 @@ const HorarioManual: React.FC = () => {
                             onDragEnter={() => { if (arrastrando) setCeldaSobre(`grp-${clave}`); }}
                             onDragLeave={() => { if (celdaSobre === `grp-${clave}`) setCeldaSobre(null); }}
                             onDrop={(e) => soltarEnCasillaGrupo(e, g.id, b.id)}
-                            className={`border-b border-r border-gray-400 p-0.5 align-middle dark:border-gray-700 ${
+                            className={`border-b border-r border-gray-400 px-0.5 py-px align-middle dark:border-gray-700 ${
                               idx === (bloquesPorDia.get(dia) ?? []).length - 1 ? 'border-b-2 border-indigo-400 dark:border-indigo-500' : ''
                             } ${sobre ? 'bg-blue-50 ring-2 ring-inset ring-blue-400 dark:bg-blue-900/30' : ''}`}
                           >
