@@ -58,8 +58,6 @@ public class GrupoServicio {
                                        Long turnoId,
                                        Long semestreId) {
         Long escuelaId = getEscuelaId();
-        System.out.println("📌 especialidadId: " + especialidadId + " | semestreId: " + semestreId);
-
         String busquedaNormalizada = (busqueda == null) ? "" : busqueda.trim();
 
         // Si no hay semestreId, usar el semestre activo

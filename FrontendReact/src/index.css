@@ -84,3 +84,27 @@ html {
 html.dark {
   scrollbar-color: #4b5563 #1f2937;
 }
+
+/* ============================================================================
+   IMPRESION: fuera los controles y la barra lateral
+   ============================================================================
+   La clase 'no-print' se usa en los controles de los reportes y del manual. La
+   regla vivia SOLO dentro del <style> de ReporteHorarioGrupos, asi que en las
+   demas pantallas (el Cerebro, por ejemplo) no hacia nada y los controles
+   salian en el papel. Aqui aplica a toda la aplicacion.
+
+   'aside' y 'nav' cubren la barra lateral del sistema; los controles que las
+   pantallas marcan con 'no-print' se ocultan solos.
+   ============================================================================ */
+@media print {
+  nav,
+  aside,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Sin sombras ni bordes de tarjeta: el papel no los necesita y ensucian. */
+  body {
+    background: #fff !important;
+  }
+}

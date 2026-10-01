@@ -16,7 +16,7 @@ import PinHorario from './PinHorario';
 import MarcaGrupo from './MarcaGrupo';
 import { identidadGrupo } from '../utils/paletaGrupos';
 import {
-  MdSchedule, MdPerson, MdRefresh, MdWarning, MdInfo, MdVisibility, MdCheckCircle,
+  MdSchedule, MdDesignServices, MdPerson, MdRefresh, MdWarning, MdInfo, MdVisibility, MdCheckCircle,
   MdSave, MdUndo, MdCancel, MdBarChart,
 } from 'react-icons/md';
 
@@ -911,7 +911,7 @@ const HorarioManual: React.FC = () => {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-800 dark:text-white">
-              <MdSchedule className="text-blue-600 dark:text-blue-400" />
+              <MdDesignServices className="text-blue-600 dark:text-blue-400" />
               Tablero manual de horarios
             </h1>
             <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
@@ -1447,7 +1447,7 @@ const HorarioManual: React.FC = () => {
                               {celdaVacia(`sem-${clave}`, (e) => soltarEnCasillaMaestro(e, m.id, b.id),
                                 (idx === (bloquesPorDia.get(dia) ?? []).length - 1 ? 'border-r-2 border-indigo-400 dark:border-indigo-500' : '')
                                   + (maestroDisponible(m.id, b.id) && celdaSobre !== `sem-${clave}`
-                                    ? ' bg-emerald-50 dark:bg-emerald-900/25'
+                                    ? ' bg-emerald-100 ring-1 ring-inset ring-emerald-400 dark:bg-emerald-800/50 dark:ring-emerald-500/70'
                                     : '')
                               )}
                             </React.Fragment>
@@ -1628,7 +1628,7 @@ const HorarioManual: React.FC = () => {
             </span>
             <span className="flex items-center gap-1.5"><MdInfo /> casilla punteada = hueco libre</span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-4 w-4 rounded border border-dashed border-gray-400 bg-emerald-50 dark:border-gray-600 dark:bg-emerald-900/25" />
+              <span className="inline-block h-4 w-4 rounded border border-dashed border-gray-400 bg-emerald-100 ring-1 ring-inset ring-emerald-400 dark:border-gray-600 dark:bg-emerald-800/50 dark:ring-emerald-500/70" />
               verde = el maestro tiene disponibilidad
             </span>
           </div>

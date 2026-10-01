@@ -66,6 +66,18 @@ export const ICONOS_MAP: Record<string, React.ComponentType<{ className?: string
     'MdArrowDropDown': IconsMd.MdArrowDropDown,
     'MdArrowDropUp': IconsMd.MdArrowDropUp,
 
+    // === Tablero manual de horarios (diseño a mano) ===
+    // MdDesignServices: lápiz + regla + escuadra, el icono de "diseño" de Material.
+    'MdDesignServices': IconsMd.MdDesignServices,
+    // MdViewKanban: un tablero con tarjetas movibles, que es justo lo que hace el tablero manual.
+    'MdViewKanban': IconsMd.MdViewKanban,
+    // MdEditCalendar: calendario con lápiz, para "editar el horario".
+    'MdEditCalendar': IconsMd.MdEditCalendar,
+    // MdPanTool: la mano abierta: "a mano" y la metáfora de arrastrar.
+    'MdPanTool': IconsMd.MdPanTool,
+    // MdSwapHoriz: mover piezas de un lado a otro.
+    'MdSwapHoriz': IconsMd.MdSwapHoriz,
+
     // === Phosphor Icons ===
     'PiBuildingApartment': IconsPi.PiBuildingApartment,
     'PiRowsPlusBottomDuotone': IconsPi.PiRowsPlusBottomDuotone,

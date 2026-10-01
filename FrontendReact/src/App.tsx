@@ -45,6 +45,7 @@ import ReporteCerebro from './components/ReporteCerebro';
 import ReporteAsignacion from './components/ReporteAsignacion';
 import RecuperarPassword from './components/RecuperarPassword.tsx';
 import RestablecerPassword from './components/RestablecerPassword.tsx';
+import ManualUsuario from './components/ManualUsuario';
 
 
 function App() {
@@ -63,6 +64,9 @@ function App() {
             <Route element={<Layout />}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              {/* Manual de usuario: la version (administrador o coordinador) la decide el rol
+                  dentro de la propia pantalla, asi que la ruta es la misma para todos. */}
+              <Route path="/manual" element={<ManualUsuario />} />
 
               {/* =====================================================
                   Solo ADMIN: pantallas que el backend restringe con

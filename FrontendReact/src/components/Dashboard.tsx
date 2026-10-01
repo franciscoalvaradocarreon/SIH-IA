@@ -1,4 +1,8 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
+import { MdMenuBook, MdArrowForward } from 'react-icons/md';
+import { useAuth } from '../context/AuthContext';
+import { tituloManual, versionParaRol } from '../manual/manuales';
 
 /**
  * Pantalla de inicio.
@@ -12,6 +16,46 @@ import React from 'react';
  * ya no lleva rounded/border/shadow: el borde lo pone el propio dibujo, y un borde o una sombra de
  * CSS dibujarian un cuadrado alrededor de una imagen que ya no lo es.
  */
+
+/**
+ * Tarjeta del MANUAL DE USUARIO.
+ *
+ * La version no se elige aqui: se deduce de los roles (ADMIN -> administrador, cualquier otro ->
+ * coordinador) en manuales.ts, que es el mismo modulo que alimenta la pantalla del manual. Asi la
+ * tarjeta y el documento no se pueden desfasar.
+ */
+const TarjetaManual: React.FC = () => {
+  const { roles, rolesEscuelaActiva } = useAuth();
+  const rolesEfectivos = rolesEscuelaActiva && rolesEscuelaActiva.length > 0 ? rolesEscuelaActiva : roles ?? [];
+  const version = versionParaRol(rolesEfectivos);
+
+  return (
+    <div className="mx-auto mt-8 max-w-2xl rounded-xl border border-gray-400 bg-white p-5 shadow-md dark:border-gray-700 dark:bg-gray-800">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <MdMenuBook className="mt-0.5 text-3xl text-blue-600 dark:text-blue-400" />
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              {tituloManual(version)}
+            </h2>
+            <p className="text-sm text-gray-600 dark:text-gray-300">
+              {version === 'administrador'
+                ? 'Incluye la operación académica completa y la administración del sistema: usuarios, roles, menús, correo y respaldos.'
+                : 'La guía de la operación académica: catálogos, disponibilidad, asignación, generación del horario y reportes.'}
+            </p>
+          </div>
+        </div>
+        <Link
+          to="/manual"
+          className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 font-medium text-white shadow-md transition hover:bg-blue-700"
+        >
+          Abrir manual <MdArrowForward />
+        </Link>
+      </div>
+    </div>
+  );
+};
+
 const Dashboard: React.FC = () => {
   return (
     <div className="max-w-[84rem] mx-auto">
@@ -26,6 +70,8 @@ const Dashboard: React.FC = () => {
       <p className="mt-2 text-center text-gray-600 dark:text-gray-300">
         Bienvenidos al Sistema
       </p>
+
+      <TarjetaManual />
     </div>
   );
 };
