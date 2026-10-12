@@ -175,6 +175,11 @@ export interface Usuario {
   ultimoAcceso?: string;
   roles: string[];
   escuelas: string[];
+  /**
+   * Aviso NO bloqueante del backend. Hoy se usa cuando el usuario se guardó pero su foto no se pudo
+   * procesar (la foto es opcional: no debe tirar el alta). null o ausente = todo salió bien.
+   */
+  aviso?: string | null;
 }
 
 export interface UsuarioForm {

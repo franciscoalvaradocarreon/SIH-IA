@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { usuarioService } from '../api/usuarioService';
 import type { Usuario } from '../types';
 import ErrorScreen from '../utils/ErrorScreen';
@@ -17,6 +17,22 @@ const Usuarios: React.FC = () => {
   const [busqueda, setBusqueda] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  /**
+   * Aviso no bloqueante que llega desde el formulario de alta/edición (por ejemplo: el usuario se
+   * guardó, pero su foto no se pudo procesar). Se limpia el estado de navegación al mostrarlo para
+   * que no reaparezca al refrescar la pantalla.
+   */
+  const [aviso, setAviso] = useState<string | null>(null);
+
+  useEffect(() => {
+    const recibido = (location.state as { aviso?: string | null } | null)?.aviso;
+    if (recibido) {
+      setAviso(recibido);
+      navigate(location.pathname, { replace: true });
+    }
+  }, [location, navigate]);
 
   // 🔥 Estados para modal de confirmación y pantalla de error
   const [modalEliminar, setModalEliminar] = useState<{
@@ -148,6 +164,19 @@ const Usuarios: React.FC = () => {
 
   return (
     <div className="p-6">
+      {/* Aviso no bloqueante del formulario (el usuario se guardó, pero la foto no se pudo procesar). */}
+      {aviso && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
+          <p className="text-sm">{aviso}</p>
+          <button
+            type="button"
+            onClick={() => setAviso(null)}
+            className="shrink-0 text-sm font-semibold hover:underline"
+          >
+            Cerrar
+          </button>
+        </div>
+      )}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-800 dark:text-white">Usuarios</h1>
         <button

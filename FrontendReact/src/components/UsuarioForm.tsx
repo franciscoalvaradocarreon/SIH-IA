@@ -180,12 +180,13 @@ const UsuarioForm: React.FC = () => {
         fotoArchivo,
       };
 
-      if (isEdit) {
-        await usuarioService.actualizar(Number(id), dataToSend);
-      } else {
-        await usuarioService.crear(dataToSend);
-      }
-      navigate('/administracion/usuarios');
+      // Si el backend guardó el usuario pero no pudo procesar la foto, devuelve un AVISO: se pasa a
+      // la lista en el estado de navegación para que se muestre ahí (la foto es opcional, H-04).
+      const res = isEdit
+        ? await usuarioService.actualizar(Number(id), dataToSend)
+        : await usuarioService.crear(dataToSend);
+
+      navigate('/administracion/usuarios', { state: { aviso: res.data?.aviso ?? null } });
     } catch (err: any) {
       if (err.response?.data?.message) {
         setError(err.response.data.message);

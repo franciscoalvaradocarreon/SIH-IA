@@ -53,6 +53,16 @@ public class UsuarioServicio {
 
     private static final Logger logger = LoggerFactory.getLogger(UsuarioServicio.class);
 
+    /**
+     * Aviso que se devuelve cuando la foto no se pudo procesar pero el usuario SI se guardo.
+     *
+     * <p>La foto es un campo opcional: que el archivo venga corrupto (una descarga cortada, un
+     * archivo renombrado) no debe tirar el alta completa (hallazgo H-04 de QA).
+     */
+    private static final String AVISO_FOTO =
+            "El usuario se guardó correctamente, pero la imagen no se pudo procesar. "
+            + "Verifica que sea un archivo JPG, PNG o GIF válido y vuelve a subirla.";
+
     private final UsuarioRepositorio usuarioRepositorio;
     private final UsuarioEscuelaRolRepositorio usuarioEscuelaRolRepositorio;
     private final EscuelaRepositorio escuelaRepositorio;
@@ -127,15 +137,22 @@ public class UsuarioServicio {
 
         // Foto: si viene archivo, se guarda en disco y se obtiene la URL.
         // Si no, se usa la fotoUrl que venga en el DTO (o null).
+        //
+        // La foto es OPCIONAL: si el archivo no se puede procesar, el usuario se crea igual y se
+        // devuelve un AVISO en la respuesta. Antes esto abortaba el alta completa (hallazgo H-04).
         String fotoUrl = dto.getFotoUrl();
+        String aviso = null;
         if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
             try {
                 fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
-                } catch (IOException e) {
-                    logger.warn("No se pudo procesar la foto del usuario: {}", e.getMessage(), e);
-                    throw new NegocioExcepcion("imagen_invalida",
-                            "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
-                }
+            } catch (Exception e) {
+                // Se atrapa Exception y no solo IOException a proposito: la foto es opcional, asi que
+                // CUALQUIER fallo al guardarla (imagen corrupta, formato no permitido, archivo que no
+                // es imagen y ni siquiera se puede leer) no debe tirar el alta. El detalle va al log.
+                logger.warn("No se pudo procesar la foto del usuario; se crea sin foto: {}",
+                        e.getMessage(), e);
+                aviso = AVISO_FOTO;
+            }
         }
 
         Usuario usuario = new Usuario();
@@ -151,7 +168,9 @@ public class UsuarioServicio {
 
         crearAsignaciones(guardado, dto.getAsignaciones());
 
-        return toDTO(guardado);
+        UsuarioDTO respuesta = toDTO(guardado);
+        respuesta.setAviso(aviso);
+        return respuesta;
     }
 
     @Transactional
@@ -190,7 +209,9 @@ public class UsuarioServicio {
         //   · Si no viene archivo pero sí fotoUrl en el DTO → usarla (permite
         //     limpiar la foto enviando cadena vacía).
         //   · Si no viene ni archivo ni fotoUrl → NO tocar la foto existente.
+        //   · Si el archivo nuevo no se puede procesar → se guarda todo lo demás y se avisa.
         // ------------------------------------------------------------
+        String aviso = null;
         if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
             if (usuario.getFotoUrl() != null) {
                 archivoServicio.eliminarArchivo(usuario.getFotoUrl());
@@ -198,10 +219,12 @@ public class UsuarioServicio {
             try {
                 String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
                 usuario.setFotoUrl(nuevaFotoUrl);
-            } catch (IOException e) {
-                logger.warn("No se pudo procesar la foto del usuario: {}", e.getMessage(), e);
-                throw new NegocioExcepcion("imagen_invalida",
-                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
+            } catch (Exception e) {
+                // Igual que en el alta: la foto es opcional, los demas cambios se guardan y se avisa.
+                // Se atrapa Exception (no solo IOException) por el mismo motivo que arriba.
+                logger.warn("No se pudo procesar la foto del usuario; se guarda sin cambiarla: {}",
+                        e.getMessage(), e);
+                aviso = AVISO_FOTO;
             }
         } else if (dto.getFotoUrl() != null) {
             // Cadena vacía limpia la foto; null significa "no tocar".
@@ -239,10 +262,14 @@ public class UsuarioServicio {
                     .orElseThrow(() -> new NegocioExcepcion("usuario_no_encontrado",
                             "Usuario no encontrado con ID: " + usuarioId));
             crearAsignaciones(recargado, asignaciones);
-            return toDTO(recargado);
+            UsuarioDTO respuesta = toDTO(recargado);
+            respuesta.setAviso(aviso);
+            return respuesta;
         }
 
-        return toDTO(usuario);
+        UsuarioDTO respuesta = toDTO(usuario);
+        respuesta.setAviso(aviso);
+        return respuesta;
     }
 
     @Transactional
@@ -384,7 +411,9 @@ public class UsuarioServicio {
                 usuario.getActivo(),
                 usuario.getUltimoAcceso(),
                 roles,
-                escuelas
+                escuelas,
+                // El aviso se rellena despues, solo en el alta o la edicion que lo necesiten.
+                null
         );
     }
 
