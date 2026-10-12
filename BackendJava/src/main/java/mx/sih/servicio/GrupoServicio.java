@@ -241,17 +241,23 @@ public class GrupoServicio {
             );
         }
 
-        // 2. Verificar disponibilidad configurada
-        long disponibilidad = disponibilidadRepositorio.countByGrupoId(id);
+        // 2. Verificar disponibilidad REGISTRADA DE VERDAD.
+        //    Mismo detalle que en maestros: la pantalla guarda una fila por casilla, marcada como
+        //    disponible o no, asi que contar filas bloqueaba el borrado aunque se hubiera desmarcado
+        //    todo. Solo cuentan las casillas marcadas como disponibles.
+        long disponibilidad = disponibilidadRepositorio.countDisponiblesByGrupoId(id);
         if (disponibilidad > 0) {
             throw new NegocioExcepcion(
                     "GRUPO_EN_USO",
                     "No se puede eliminar el grupo '" + grupo.getNombre() +
                     "' porque tiene " + disponibilidad +
-                    " bloque(s) de disponibilidad configurado(s). Elimínalos primero " +
+                    " bloque(s) marcado(s) como disponible(s). Desmárcalos primero " +
                     "desde la pantalla de Disponibilidad de Grupos o desactiva el grupo."
             );
         }
+
+        // 2b. Quitar el resto de filas (todas en "no disponible") antes de borrar el grupo.
+        disponibilidadRepositorio.deleteByGrupoId(id);
 
         // 3. Sin dependencias: eliminar
         grupoRepositorio.delete(grupo);

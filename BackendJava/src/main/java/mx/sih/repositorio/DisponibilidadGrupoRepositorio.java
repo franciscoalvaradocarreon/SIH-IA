@@ -2,7 +2,9 @@ package mx.sih.repositorio;
 
 import mx.sih.modelo.entidad.DisponibilidadGrupo;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -89,6 +91,24 @@ public interface DisponibilidadGrupoRepositorio extends JpaRepository<Disponibil
      */
     @Query("SELECT COUNT(d) FROM DisponibilidadGrupo d WHERE d.grupo.grupoId = :grupoId")
     long countByGrupoId(@Param("grupoId") Long grupoId);
+
+    /**
+     * Cuenta solo los bloques marcados como DISPONIBLES de un grupo.
+     *
+     * <p>Mismo caso que en maestros: {@link #countByGrupoId(Long)} cuenta todas las filas, asi que un
+     * grupo con todo desmarcado seguia bloqueando su borrado.
+     */
+    @Query("SELECT COUNT(d) FROM DisponibilidadGrupo d " +
+           "WHERE d.grupo.grupoId = :grupoId AND d.disponible = true")
+    long countDisponiblesByGrupoId(@Param("grupoId") Long grupoId);
+
+    /**
+     * Borra TODAS las filas de disponibilidad de un grupo (disponibles o no), al eliminar el grupo.
+     */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM DisponibilidadGrupo d WHERE d.grupo.grupoId = :grupoId")
+    void deleteByGrupoId(@Param("grupoId") Long grupoId);
 
     /**
      * Todas las filas de un semestre cuyos bloques pertenecen a ese turno.

@@ -228,17 +228,26 @@ public class MaestroServicio {
             );
         }
 
-        // 2. Verificar disponibilidad registrada
-        long disponibilidad = disponibilidadRepositorio.countByMaestroId(id);
+        // 2. Verificar disponibilidad REGISTRADA DE VERDAD.
+        //    Ojo con el detalle: la pantalla guarda una fila por casilla, marcada como disponible o
+        //    no. Contar filas bloqueaba el borrado aunque el usuario hubiera desmarcado todo (paso en
+        //    produccion: un maestro con 39 filas, todas en "false", y sin forma de eliminarlo). No
+        //    tener fila y tenerla en false significan lo mismo para el motor, asi que solo cuentan
+        //    las casillas marcadas como disponibles.
+        long disponibilidad = disponibilidadRepositorio.countDisponiblesByMaestroId(id);
         if (disponibilidad > 0) {
             throw new NegocioExcepcion(
                     "MAESTRO_EN_USO",
                     "No se puede eliminar al maestro '" + maestro.getNombreCompleto() +
                     "' porque tiene " + disponibilidad +
-                    " registro(s) de disponibilidad. Elimínala primero desde la " +
+                    " casilla(s) marcada(s) como disponible(s). Desmárcalas primero en la " +
                     "pantalla de disponibilidad o desactiva al maestro."
             );
         }
+
+        // 2b. Quitar el resto de filas (todas en "no disponible"): son un resto sin informacion y
+        //     hay que borrarlas para no romper la llave foranea al eliminar al maestro.
+        disponibilidadRepositorio.deleteByMaestroId(id);
 
         // 3. Sin dependencias: eliminar foto y luego el registro
         if (maestro.getFotoUrl() != null) {

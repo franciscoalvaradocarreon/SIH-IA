@@ -131,6 +131,14 @@ public class DisponibilidadGrupoServicio {
         disponibilidad.setDisponible(dto.getDisponible());
 
         DisponibilidadGrupo guardado = disponibilidadRepositorio.save(disponibilidad);
+
+        // DESMARCAR = QUITAR LA FILA, con el mismo criterio que en disponibilidad de maestros:
+        // "sin fila" y "fila en false" significan lo mismo, y guardar el false solo dejaba basura
+        // que despues bloqueaba el borrado del grupo. True asegura la fila; false asegura que no
+        // exista. Se guarda y se borra en la misma transaccion para conservar el DTO de respuesta.
+        if (Boolean.FALSE.equals(dto.getDisponible())) {
+            disponibilidadRepositorio.delete(guardado);
+        }
         return toDTO(guardado);
     }
 

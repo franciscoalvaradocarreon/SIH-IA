@@ -145,6 +145,19 @@ public class DisponibilidadMaestroServicio {
         disponibilidad.setSemestre(semestre);
 
         DisponibilidadMaestro guardado = disponibilidadRepositorio.save(disponibilidad);
+
+        // DESMARCAR = QUITAR LA FILA, no guardarla en false.
+        //
+        // Para el motor y para la propia pantalla, "sin fila" y "fila en false" significan lo mismo,
+        // asi que guardar el false solo dejaba basura: un maestro con todo desmarcado seguia contando
+        // 39 filas de disponibilidad y no habia forma de eliminarlo (paso en produccion). Ahora el
+        // guardado es idempotente en los dos sentidos: true asegura que la fila exista; false, que NO
+        // exista.
+        //
+        // Se guarda y se borra dentro de la misma transaccion para no cambiar el DTO de respuesta.
+        if (Boolean.FALSE.equals(dto.getDisponible())) {
+            disponibilidadRepositorio.delete(guardado);
+        }
         return toDTO(guardado);
     }
 

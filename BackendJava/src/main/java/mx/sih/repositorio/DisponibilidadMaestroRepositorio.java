@@ -257,6 +257,31 @@ public interface DisponibilidadMaestroRepositorio extends JpaRepository<Disponib
     long countByMaestroId(@Param("maestroId") Long maestroId);
 
     /**
+     * Cuenta solo las casillas marcadas como DISPONIBLES de un maestro.
+     *
+     * <p>Es la cuenta que debe usar el borrado de maestros. {@link #countByMaestroId(Long)} cuenta
+     * TODAS las filas, incluidas las que la pantalla guarda como "no disponible" al desmarcar: un
+     * maestro con todo desmarcado seguia apareciendo con 39 registros y no habia forma de borrarlo
+     * (paso en produccion). No tener fila y tenerla en false significan lo mismo para el motor, asi
+     * que solo las "true" son disponibilidad de verdad.
+     */
+    @Query("SELECT COUNT(d) FROM DisponibilidadMaestro d " +
+           "WHERE d.maestro.maestroId = :maestroId AND d.disponible = true")
+    long countDisponiblesByMaestroId(@Param("maestroId") Long maestroId);
+
+    /**
+     * Borra TODAS las filas de disponibilidad de un maestro (disponibles o no).
+     *
+     * <p>Se usa al eliminar al maestro, despues de comprobar que no le quedan casillas disponibles:
+     * las filas en false son un resto sin informacion y hay que quitarlas para no romper la llave
+     * foranea.
+     */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM DisponibilidadMaestro d WHERE d.maestro.maestroId = :maestroId")
+    void deleteByMaestroId(@Param("maestroId") Long maestroId);
+
+    /**
      * Todas las filas de un semestre cuyos bloques pertenecen a ese turno.
      *
      * Lo usa la importacion desde otro semestre: se traen turno por turno (la disponibilidad es
