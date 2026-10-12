@@ -11,6 +11,9 @@ import mx.sih.repositorio.EscuelaRepositorio;
 import mx.sih.repositorio.RolRepositorio;
 import mx.sih.repositorio.UsuarioEscuelaRolRepositorio;
 import mx.sih.repositorio.UsuarioRepositorio;
+import mx.sih.seguridad.PoliticaPassword;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -48,7 +51,7 @@ import java.util.stream.Collectors;
 @Service
 public class UsuarioServicio {
 
-    private static final int LONGITUD_MINIMA_PASSWORD = 8;
+    private static final Logger logger = LoggerFactory.getLogger(UsuarioServicio.class);
 
     private final UsuarioRepositorio usuarioRepositorio;
     private final UsuarioEscuelaRolRepositorio usuarioEscuelaRolRepositorio;
@@ -128,10 +131,11 @@ public class UsuarioServicio {
         if (dto.getFotoArchivo() != null && !dto.getFotoArchivo().isEmpty()) {
             try {
                 fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
-            } catch (IOException e) {
-                throw new NegocioExcepcion("error_foto",
-                        "Error al guardar la foto: " + e.getMessage());
-            }
+                } catch (IOException e) {
+                    logger.warn("No se pudo procesar la foto del usuario: {}", e.getMessage(), e);
+                    throw new NegocioExcepcion("imagen_invalida",
+                            "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
+                }
         }
 
         Usuario usuario = new Usuario();
@@ -195,8 +199,9 @@ public class UsuarioServicio {
                 String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "usuario_");
                 usuario.setFotoUrl(nuevaFotoUrl);
             } catch (IOException e) {
-                throw new NegocioExcepcion("error_foto",
-                        "Error al guardar la foto: " + e.getMessage());
+                logger.warn("No se pudo procesar la foto del usuario: {}", e.getMessage(), e);
+                throw new NegocioExcepcion("imagen_invalida",
+                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
             }
         } else if (dto.getFotoUrl() != null) {
             // Cadena vacía limpia la foto; null significa "no tocar".
@@ -349,10 +354,9 @@ public class UsuarioServicio {
             }
             return;
         }
-        if (password.length() < LONGITUD_MINIMA_PASSWORD) {
-            throw new NegocioExcepcion("password_debil",
-                    "La contraseña debe tener al menos " + LONGITUD_MINIMA_PASSWORD + " caracteres");
-        }
+        // La regla completa (longitud, composicion y obvias) vive en PoliticaPassword, para que el
+        // alta, la actualizacion y el restablecimiento no puedan desfasarse (hallazgo H-06).
+        PoliticaPassword.validar(password);
     }
 
     private UsuarioDTO toDTO(Usuario usuario) {

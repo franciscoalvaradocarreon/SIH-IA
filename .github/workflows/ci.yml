@@ -111,6 +111,34 @@ jobs:
 
       - name: Compilar y correr pruebas
         run: mvn -B clean verify
+
+      # HALLAZGO H-02: sin Docker, las pruebas de integracion se SALTAN y Maven termina en verde
+      # ("Tests run: 9, Skipped: 9, BUILD SUCCESS"). Ese verde no prueba nada. Este paso lee los
+      # reportes de Surefire y tumba el trabajo si no se ejecuto ninguna prueba. El mismo criterio
+      # esta en herramientas/revisar-pruebas.ps1 para revisarlo en local.
+      - name: Exigir que las pruebas se hayan ejecutado
+        run: |
+          DIR=target/surefire-reports
+          if [ ! -d "$DIR" ] || [ -z "$(ls -A "$DIR"/*.xml 2>/dev/null)" ]; then
+            echo "::error::No hay reportes de Surefire en $DIR: no se ejecuto ninguna prueba."
+            exit 1
+          fi
+          TOTAL=$(grep -ho 'tests="[0-9]*"' "$DIR"/*.xml | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          SALTADAS=$(grep -ho 'skipped="[0-9]*"' "$DIR"/*.xml | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          FALLOS=$(grep -ho 'failures="[0-9]*"' "$DIR"/*.xml | grep -o '[0-9]*' | awk '{s+=$1} END {print s+0}')
+          echo "Pruebas: $TOTAL | Saltadas: $SALTADAS | Fallidas: $FALLOS"
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "::error::No se ejecuto ninguna prueba del backend."
+            exit 1
+          fi
+          if [ "$TOTAL" -eq "$SALTADAS" ]; then
+            echo "::error::Las $TOTAL pruebas se saltaron (casi siempre por falta de Docker). Un 'BUILD SUCCESS' sin pruebas ejecutadas no vale."
+            exit 1
+          fi
+          if [ "$SALTADAS" -gt 0 ]; then
+            echo "::warning::$SALTADAS de $TOTAL pruebas se saltaron: revisa por que."
+          fi
+
       - name: Empaquetar el programa (WAR ejecutable)
         run: mvn -B package -DskipTests
       - uses: actions/upload-artifact@v4

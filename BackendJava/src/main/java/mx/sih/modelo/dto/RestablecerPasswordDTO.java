@@ -6,9 +6,13 @@ package mx.sih.modelo.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import mx.sih.seguridad.PoliticaPassword;
 
 
 public record RestablecerPasswordDTO(
     @NotBlank String token,
-    @NotBlank @Size(min = 8, max = 128) String nuevaPassword
+    // El minimo sale de la politica (hallazgo H-06): antes eran 8, y el alta no tenia minimo.
+    @NotBlank @Size(min = PoliticaPassword.LONGITUD_MINIMA, max = PoliticaPassword.LONGITUD_MAXIMA,
+            message = "La contraseña debe tener al menos 12 caracteres y no más de 128")
+    String nuevaPassword
 ) {}

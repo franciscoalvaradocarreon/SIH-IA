@@ -20,6 +20,8 @@ import mx.sih.repositorio.MaestroRepositorio;
 import mx.sih.repositorio.SemestreRepositorio;
 import mx.sih.repositorio.TurnoRepositorio;
 import mx.sih.seguridad.contexto.EscuelaContexto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -27,6 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class MaestroServicio {
+
+    private static final Logger logger = LoggerFactory.getLogger(MaestroServicio.class);
 
     private final MaestroRepositorio maestroRepositorio;
     private final ArchivoServicio archivoServicio;
@@ -109,7 +113,9 @@ public class MaestroServicio {
             try {
                 fotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "maestro_");
             } catch (IOException e) {
-                throw new NegocioExcepcion("Error al guardar la foto: " + e.getMessage());
+                logger.warn("No se pudo procesar la foto del maestro: {}", e.getMessage(), e);
+                throw new NegocioExcepcion("imagen_invalida",
+                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
             }
         }
 
@@ -171,7 +177,9 @@ public class MaestroServicio {
                 String nuevaFotoUrl = archivoServicio.guardarArchivo(dto.getFotoArchivo(), "maestro_");
                 maestro.setFotoUrl(nuevaFotoUrl);
             } catch (IOException e) {
-                throw new NegocioExcepcion("Error al guardar la foto: " + e.getMessage());
+                logger.warn("No se pudo procesar la foto del maestro: {}", e.getMessage(), e);
+                throw new NegocioExcepcion("imagen_invalida",
+                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
             }
         } else if (dto.getFotoUrl() != null) {
             maestro.setFotoUrl(dto.getFotoUrl());

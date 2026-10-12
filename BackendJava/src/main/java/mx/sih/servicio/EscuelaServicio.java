@@ -9,6 +9,8 @@ import mx.sih.modelo.dto.EscuelaCrearDTO;
 import mx.sih.modelo.dto.EscuelaDTO;
 import mx.sih.modelo.entidad.Escuela;
 import mx.sih.repositorio.EscuelaRepositorio;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.Authentication;
@@ -24,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class EscuelaServicio {
+
+    private static final Logger logger = LoggerFactory.getLogger(EscuelaServicio.class);
 
     private final EscuelaRepositorio escuelaRepositorio;
     private final ArchivoServicio archivoServicio;
@@ -82,8 +86,9 @@ public class EscuelaServicio {
             try {
                 logoUrl = archivoServicio.guardarArchivo(dto.getLogoArchivo(), "escuela_");
             } catch (IOException e) {
-                throw new NegocioExcepcion("error_logo",
-                        "Error al guardar el logo: " + e.getMessage());
+                logger.warn("No se pudo procesar el logo de la escuela: {}", e.getMessage(), e);
+                throw new NegocioExcepcion("imagen_invalida",
+                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
             }
         }
 
@@ -129,8 +134,9 @@ public class EscuelaServicio {
                 String nuevoLogoUrl = archivoServicio.guardarArchivo(dto.getLogoArchivo(), "escuela_");
                 escuela.setLogoUrl(nuevoLogoUrl);
             } catch (IOException e) {
-                throw new NegocioExcepcion("error_logo",
-                        "Error al guardar el logo: " + e.getMessage());
+                logger.warn("No se pudo procesar el logo de la escuela: {}", e.getMessage(), e);
+                throw new NegocioExcepcion("imagen_invalida",
+                        "No se pudo procesar la imagen. Verifica que sea un archivo JPG, PNG o GIF válido.");
             }
         } else if (dto.getLogoUrl() != null) {
             if (dto.getLogoUrl().isBlank()) {

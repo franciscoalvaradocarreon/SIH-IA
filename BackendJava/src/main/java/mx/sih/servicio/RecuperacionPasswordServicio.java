@@ -14,6 +14,7 @@ import mx.sih.modelo.entidad.PasswordResetToken;
 import mx.sih.modelo.entidad.Usuario;
 import mx.sih.repositorio.PasswordResetTokenRepositorio;
 import mx.sih.repositorio.UsuarioRepositorio;
+import mx.sih.seguridad.PoliticaPassword;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -50,9 +51,6 @@ public class RecuperacionPasswordServicio {
 
     /** Ventana de validez del enlace enviado por correo. */
     private static final Duration EXPIRACION_TOKEN = Duration.ofMinutes(30);
-
-    /** Mínimo de caracteres de la nueva contraseña (alineado con UsuarioServicio). */
-    private static final int LONGITUD_MINIMA_PASSWORD = 8;
 
     private final UsuarioRepositorio usuarioRepositorio;
     private final PasswordResetTokenRepositorio tokenRepositorio;
@@ -210,9 +208,7 @@ public class RecuperacionPasswordServicio {
         if (password == null || password.isBlank()) {
             throw new NegocioExcepcion("password_obligatoria", "La contraseña es obligatoria.");
         }
-        if (password.length() < LONGITUD_MINIMA_PASSWORD) {
-            throw new NegocioExcepcion("password_debil",
-                    "La contraseña debe tener al menos " + LONGITUD_MINIMA_PASSWORD + " caracteres.");
-        }
+        // Misma politica que el alta de usuarios y el cambio de contrasena (hallazgo H-06).
+        PoliticaPassword.validar(password);
     }
 }

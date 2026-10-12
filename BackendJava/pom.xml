@@ -61,6 +61,18 @@
             <scope>test</scope>
         </dependency>
 
+        <!--
+            El LAUNCHER de JUnit Platform, que spring-boot-starter-test NO trae (trae Jupiter y el
+            engine, pero no el launcher). Hace falta para compilar el listener que avisa cuando todas
+            las pruebas se saltaron por no haber Docker (hallazgo H-02 de QA). La version la fija el
+            BOM de Spring Boot, asi que aqui no se declara.
+        -->
+        <dependency>
+            <groupId>org.junit.platform</groupId>
+            <artifactId>junit-platform-launcher</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- PostgreSQL Driver -->
         <dependency>
             <groupId>org.postgresql</groupId>

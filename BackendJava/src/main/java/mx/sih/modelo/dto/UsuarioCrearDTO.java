@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import mx.sih.seguridad.PoliticaPassword;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -33,7 +34,11 @@ public class UsuarioCrearDTO {
     @Size(max = 255)
     private String fotoUrl;
 
-    @Size(max = 128, message = "La contraseña no puede exceder 128 caracteres")
+    // El minimo y el maximo salen de la politica (hallazgo H-06): asi la validacion de entrada y la
+    // del servicio no se pueden desfasar. La regla de composicion (letras y numeros, nada de obvias)
+    // la comprueba PoliticaPassword en el servicio, que es donde se puede explicar el motivo.
+    @Size(min = PoliticaPassword.LONGITUD_MINIMA, max = PoliticaPassword.LONGITUD_MAXIMA,
+            message = "La contraseña debe tener al menos 12 caracteres y no más de 128")
     private String password;
 
     private Boolean activo = true;
