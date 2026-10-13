@@ -67,7 +67,7 @@ if (-not $Password) {
     $Password = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
                     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($seg))
 }
-if ($Password.Length -lt 8) { Fallar 'la contrasena debe tener al menos 8 caracteres' }
+if ($Password.Length -lt 12) { Fallar 'la contrasena debe tener al menos 12 caracteres (politica de contrasenas, antes eran 8)' }
 
 # ── 2) Java y la libreria bcrypt ────────────────────────────────────────────
 if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
