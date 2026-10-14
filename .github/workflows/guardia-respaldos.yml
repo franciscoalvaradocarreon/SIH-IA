@@ -1,0 +1,89 @@
+name: Guardia de respaldos
+
+# Responde a una sola pregunta: los respaldos automaticos, funcionan?
+#
+# Nace de un fallo real y silencioso: db/respaldar.sh estaba versionado sin permiso de ejecucion, el
+# cron fallaba cada noche con "Permission denied" y el log crecia sin que nadie lo mirara. Tres
+# semanas sin respaldos. Un respaldo que no se comprueba no es un respaldo.
+#
+# La comprobacion vive en db/verificar-respaldos.sh (dentro del servidor), para que se pueda ejecutar
+# tambien a mano. Aqui solo se entra por SSH y se mira su codigo de salida.
+#
+# Si este trabajo falla, GitHub avisa por correo al autor del ultimo cambio de este archivo. Para
+# lanzarlo a mano: Actions -> Guardia de respaldos -> Run workflow.
+
+on:
+  schedule:
+    # Todos los dias a las 06:00 UTC. El respaldo del servidor corre a las 02:00,
+    # asi que a esta hora ya deberia existir el del dia.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Comprobar el respaldo mas reciente
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Preparar la clave SSH
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          # printf (no echo) para garantizar el salto de linea final que OpenSSH exige.
+          printf '%s\n' "${{ secrets.SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+      - name: Verificar que la clave es valida
+        run: |
+          # ssh-keygen -y falla si la clave privada esta corrupta o le faltan las
+          # lineas BEGIN/END: asi un secreto mal pegado se ve aqui y no mas tarde
+          # como un "Permission denied" que despista.
+          if ssh-keygen -y -f ~/.ssh/id_ed25519 > /dev/null 2>&1; then
+            ssh-keygen -lf ~/.ssh/id_ed25519
+          else
+            echo "::error::El secreto SSH_KEY no contiene una clave privada valida."
+            exit 1
+          fi
+
+      - name: Comprobar los respaldos del servidor
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          # Se llama USUARIO y no USER a proposito: USER es una variable del sistema.
+          USUARIO: ${{ secrets.SSH_USER }}
+          # Horas maximas de antiguedad que se toleran.
+          MAX_HORAS: "48"
+        run: |
+          set -uo pipefail
+
+          # Se usa una FUNCION y no una variable con el comando completo: una variable se expande por
+          # palabras y un espacio o un salto de linea invisible al final de un secreto parte los
+          # argumentos. Con una funcion, cada argumento va entre comillas.
+          ssh_sih() {
+            ssh -i "$HOME/.ssh/id_ed25519" \
+                -o StrictHostKeyChecking=accept-new \
+                -o BatchMode=yes \
+                -o IdentitiesOnly=yes \
+                -o ConnectTimeout=20 \
+                "$USUARIO@$HOST" "$@"
+          }
+
+          if [ -z "${HOST:-}" ] || [ -z "${USUARIO:-}" ]; then
+            echo "::error::Faltan los secretos SSH_HOST o SSH_USER."
+            exit 1
+          fi
+
+          # Tres intentos: un corte de red momentaneo no debe dar una falsa alarma.
+          for intento in 1 2 3; do
+            echo "=== Intento $intento de 3 ==="
+            if ssh_sih "~/SIH-IA/db/verificar-respaldos.sh $MAX_HORAS"; then
+              echo "OK: los respaldos estan al dia."
+              exit 0
+            fi
+            echo "El intento $intento no dio OK."
+            if [ "$intento" -lt 3 ]; then sleep 30; fi
+          done
+
+          echo "::error::La comprobacion de respaldos fallo tres veces seguidas. Mira el detalle de arriba: el respaldo automatico puede estar caido."
+          exit 1
