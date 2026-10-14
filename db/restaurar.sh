@@ -72,15 +72,25 @@ echo "[$(date '+%F %T')] probando el respaldo: $ARCHIVO ($(stat -c%s "$ARCHIVO")
 # La base de prueba se recrea desde cero para que el resultado no dependa de
 # restos de una prueba anterior.
 docker compose exec -T db psql -U "$USUARIO" -d postgres -v ON_ERROR_STOP=1 -q \
-  -c "DROP DATABASE IF EXISTS $PRUEBA WITH (FORCE);"
+  -c "DROP DATABASE IF EXISTS $PRUEBA WITH (FORCE);" 2>/dev/null
 docker compose exec -T db psql -U "$USUARIO" -d postgres -v ON_ERROR_STOP=1 -q \
   -c "CREATE DATABASE $PRUEBA;"
 
 echo "[$(date '+%F %T')] cargando el respaldo en la base de prueba '$PRUEBA'..."
 INICIO=$(date +%s)
-gunzip -c "$ARCHIVO" \
-  | docker compose exec -T db psql -U "$USUARIO" -d "$PRUEBA" -v ON_ERROR_STOP=1 -q
-echo "[$(date '+%F %T')] carga terminada en $(( $(date +%s) - INICIO )) segundos"
+# La salida de la carga va a un archivo: un pg_dump trae cientos de lineas de
+# setval/set_config que solo estorban y parecen errores. Si algo falla de verdad,
+# se muestran las ultimas lineas.
+LOG=/tmp/restauracion_carga.log
+if gunzip -c "$ARCHIVO" \
+    | docker compose exec -T db psql -U "$USUARIO" -d "$PRUEBA" -v ON_ERROR_STOP=1 -q > "$LOG" 2>&1; then
+  echo "[$(date '+%F %T')] carga terminada en $(( $(date +%s) - INICIO )) segundos"
+else
+  echo "ERROR: la carga fallo tras $(( $(date +%s) - INICIO )) segundos. Ultimas lineas:"
+  tail -15 "$LOG"
+  exit 1
+fi
+rm -f "$LOG"
 
 echo ""
 echo "===== QUE HAY DENTRO DEL RESPALDO ====="
