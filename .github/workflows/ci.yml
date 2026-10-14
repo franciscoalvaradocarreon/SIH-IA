@@ -11,6 +11,70 @@ on:
 jobs:
 
   # --------------------------------------------------------------------------
+  # Guardia de secretos: el repositorio es publico, asi que lo que se sube se ve
+  #
+  # El .gitignore ya deja fuera los archivos con secretos (.env*, documentacion/,
+  # db/04_datos_cliente.sql), pero eso no cubre un descuido: pegar una clave en un
+  # script, en un .properties o en un README. Este trabajo lo cubre.
+  #
+  # Imprime SOLO el archivo y la linea, nunca el valor: el registro de este trabajo
+  # tambien es publico.
+  # --------------------------------------------------------------------------
+  guardia-secretos:
+    name: Guardia de secretos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Buscar credenciales en los archivos versionados
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          # Patrones (expresiones regulares extendidas, las mismas que usa git grep):
+          # 1) Variables con valor, estilo .env o .properties. Se pide un valor de 6
+          #    caracteres o mas y que no empiece por $ ni por < para no marcar los
+          #    vacios, los marcadores (<...>) ni las referencias (${OTRA_CLAVE}).
+          P_VARIABLES='^[[:space:]]*(export[[:space:]]+)?(JWT_SECRETO|DB_PASSWORD|POSTGRES_PASSWORD|MAIL_PASSWORD|MAIL_PASS|SSH_KEY|IA_API_KEY|AWS_SECRET_ACCESS_KEY|SMTP_PASSWORD)[[:space:]]*=[[:space:]]*[^[:space:]<>$][^[:space:]]{5,}'
+          # 2) Claves privadas.
+          P_PRIVADA='-----BEGIN [A-Z ]*PRIVATE KEY-----'
+          # 3) Token JWT completo (las tres partes).
+          P_JWT='eyJ[A-Za-z0-9_-]{10,}[.]eyJ[A-Za-z0-9_-]{10,}[.][A-Za-z0-9_-]{10,}'
+          # 4) Credenciales dentro de una URL: postgresql://usuario:clave@host
+          P_URL='[a-z]+://[A-Za-z0-9._-]+:[^@[:space:]]{6,}@'
+          # 5) Hash bcrypt real (los ejemplos de la documentacion llevan "..." y no pasan).
+          P_BCRYPT='[$]2[aby][$][0-9]{2}[$][./A-Za-z0-9]{50,}'
+          # 6) Tokens de servicios conocidos.
+          P_TOKENS='(ghp_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,})'
+
+          fallos=0
+          for patron in "$P_VARIABLES" "$P_PRIVADA" "$P_JWT" "$P_URL" "$P_BCRYPT" "$P_TOKENS"; do
+            # Exclusiones: las plantillas (*.ejemplo) y el perfil de PRUEBAS, que lleva
+            # valores a proposito (JWT_SECRETO=clave-solo-para-pruebas...). Los lock y los
+            # minificados se saltan por tamano y ruido.
+            # 'cut' deja solo "archivo:linea": el valor no se imprime nunca.
+            hallazgos="$(git grep -nI -E "$patron" -- . \
+              ':!*.ejemplo' ':!.env.example' ':!**/application-test.properties' \
+              ':!package-lock.json' ':!*.lock' ':!*.min.js' \
+              | cut -d: -f1,2 || true)"
+            if [ -n "$hallazgos" ]; then
+              echo "::error::Posible credencial versionada (patron: $patron)"
+              echo "$hallazgos"
+              fallos=1
+            fi
+          done
+
+          if [ "$fallos" -ne 0 ]; then
+            echo ""
+            echo "Que hacer:"
+            echo "  1. Sacar el valor del archivo y leerlo de una variable de entorno."
+            echo "  2. Si ya se subio, ROTARLO: un secreto publicado esta comprometido."
+            echo "  3. Si es un dato de cliente, moverlo fuera del repositorio y anadirlo a .gitignore."
+            exit 1
+          fi
+          echo "OK: sin patrones de credenciales en los archivos versionados."
+
+  # --------------------------------------------------------------------------
   # Front: compila y revisa tipos SOLO de los archivos tocados
   # --------------------------------------------------------------------------
   frontend:

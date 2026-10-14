@@ -1,0 +1,88 @@
+# Actualizaciones automaticas de dependencias (Dependabot).
+#
+# Cada lunes abre pull requests con las versiones nuevas. El CI de este repositorio es la
+# aduana: nada llega a main sin compilar y sin pasar las pruebas, asi que una actualizacion
+# que rompa algo se ve en el propio pull request.
+#
+# OJO: esto configura las actualizaciones de VERSION. Las de SEGURIDAD (las que salen cuando
+# aparece una vulnerabilidad en una dependencia) no se configuran aqui: se activan en el
+# repositorio, en Settings -> Code security -> "Dependabot alerts" y "Dependabot security
+# updates". Conviene activarlas: es la mitad del hallazgo de seguridad que quedo pendiente.
+#
+# Los "groups" juntan actualizaciones relacionadas en un solo pull request para no llenar la
+# lista (por ejemplo, todas las de Spring en uno).
+
+version: 2
+updates:
+
+  # Backend: Maven (Spring Boot, Hibernate, jjwt, driver de PostgreSQL...)
+  - package-ecosystem: maven
+    directory: /BackendJava
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      spring:
+        patterns:
+          - "org.springframework*"
+      pruebas:
+        patterns:
+          - "org.junit*"
+          - "org.mockito*"
+          - "org.testcontainers*"
+
+  # Frontend: npm (React, Vite, Tailwind, jspdf, xlsx...)
+  - package-ecosystem: npm
+    directory: /FrontendReact
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      react:
+        patterns:
+          - "react*"
+          - "@types/react*"
+      vite:
+        patterns:
+          - "vite*"
+          - "@vitejs/*"
+
+  # Las propias acciones de GitHub que usan la CI y el release.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Mexico_City
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(ci)"
+
+  # La imagen base del Dockerfile.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Mexico_City
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(docker)"
