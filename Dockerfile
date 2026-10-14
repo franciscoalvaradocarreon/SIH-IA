@@ -13,7 +13,7 @@
 
 
 # ---------- Etapa 1: compilar el frontend (React + Vite) ----------
-FROM node:22-alpine AS front
+FROM node:26-alpine AS front
 WORKDIR /front
 
 # Primero solo los manifiestos: si el codigo cambia pero no las dependencias,
