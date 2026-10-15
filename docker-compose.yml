@@ -125,8 +125,17 @@ services:
 
       # La URL apunta al servicio 'db' por su nombre en la red de Docker.
       DB_URL:      "jdbc:postgresql://db:5432/${DB_NAME:-SIH}?currentSchema=sih"
-      DB_USER:     "${DB_USER:-User_app}"
-      DB_PASSWORD: "${DB_PASSWORD:?falta DB_PASSWORD en .env}"
+      # CREDENCIALES DE LA APLICACION: propias y SIN privilegios de administracion.
+      #
+      # Antes la app usaba las mismas credenciales que el contenedor de la base, o sea el
+      # superusuario del cluster (User_app): quien consiguiera esa clave controlaba todo el
+      # motor. Ahora la app entra como 'sih_app', que solo puede leer y escribir datos.
+      #
+      # La cuenta de administracion sigue existiendo y es la misma de siempre: la usan el
+      # servicio 'db', los scripts de respaldo/restauracion y la administracion manual.
+      # Por eso son variables DISTINTAS: la app ya no recibe la clave del superusuario.
+      DB_USER:     "${DB_USER_APP:-sih_app}"
+      DB_PASSWORD: "${DB_PASSWORD_APP:?falta DB_PASSWORD_APP en .env: es la clave del rol de la aplicacion}"
 
       JWT_SECRETO: "${JWT_SECRETO:?falta JWT_SECRETO en .env. Genera uno con openssl rand -base64 48}"
 
