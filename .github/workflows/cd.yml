@@ -174,6 +174,21 @@ jobs:
           ssh_sih "cd ~/SIH-IA && docker compose logs app --tail 30" || true
           exit 1
 
+      - name: Liberar espacio en el servidor (imagenes viejas)
+        # Cada release descarga una imagen nueva de ~550 MB y las anteriores no se borran solas:
+        # el 15/10/2026 habia 7,7 GB acumulados en 14 versiones. 'until=48h' conserva la que esta
+        # en uso (Docker nunca borra una imagen con un contenedor vivo) y la del dia anterior; el
+        # registro de GHCR guarda todas, asi que se puede volver a cualquier version si hiciera
+        # falta. Va con 'if: always()' y con '|| true': si la limpieza fallara, no tumba el
+        # despliegue, que ya termino bien.
+        if: always()
+        run: |
+          ssh -i "$HOME/.ssh/id_ed25519" \
+              -o StrictHostKeyChecking=accept-new -o BatchMode=yes \
+              -o IdentitiesOnly=yes -o ConnectTimeout=20 \
+              "${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}" \
+              "docker image prune -af --filter 'until=48h' >/dev/null 2>&1 || true; echo '  disco en el servidor:'; df -h / | tail -1"
+
       - name: Resumen
         if: always()
         run: |

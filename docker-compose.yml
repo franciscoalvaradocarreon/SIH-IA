@@ -17,6 +17,25 @@
 
 name: sih-ia
 
+# ----------------------------------------------------------------------------
+# Rotacion de los registros de los contenedores
+#
+# Sin esto, Docker guarda TODA la salida de cada contenedor en un archivo que
+# crece sin limite: con el tiempo llena el disco, y un disco lleno tumba la base
+# y el sitio. Con esta configuracion cada servicio conserva como maximo 3
+# archivos de 10 MB (30 MB por contenedor).
+#
+# Se declara aqui, por servicio, y no solo en /etc/docker/daemon.json, porque el
+# demonio de Docker solo lee ese archivo al ARRANCAR: asi basta con recrear el
+# contenedor para que la rotacion se aplique, sin reiniciar Docker ni cortar el
+# servicio. El daemon.json tambien quedo puesto, para los contenedores nuevos.
+# ----------------------------------------------------------------------------
+x-registros: &registros
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
 
   # --------------------------------------------------------------------------
@@ -25,6 +44,7 @@ services:
   db:
     image: postgres:17-alpine
     restart: unless-stopped
+    logging: *registros
     environment:
       POSTGRES_DB:       "${DB_NAME:-SIH}"
       POSTGRES_USER:     "${DB_USER:-User_app}"
@@ -98,6 +118,7 @@ services:
         GIT_COMMIT:  "${GIT_COMMIT:-desconocido}"
         FECHA_BUILD: "${FECHA_BUILD:-desconocido}"
     restart: unless-stopped
+    logging: *registros
 
     # Limite de memoria del contenedor. Importa por dos motivos:
     #   1. La JVM calcula su heap con -XX:MaxRAMPercentage=75 (ver Dockerfile).
@@ -173,6 +194,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *registros
     depends_on:
       - app
     ports:
