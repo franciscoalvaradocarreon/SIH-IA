@@ -130,7 +130,7 @@ const TooltipPortal: React.FC<TooltipPortalProps> = ({ contenido, children }) =>
 const ContenidoTooltip: React.FC<{
   horario: Horario;
   variante: VarianteFila;
-}> = ({ horario, variante }) => (
+}> = ({ horario }) => (
   <>
     <div className="flex items-center gap-1.5 mb-1">
       <MdPerson className="text-sm flex-shrink-0 opacity-80" />

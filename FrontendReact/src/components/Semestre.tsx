@@ -5,7 +5,7 @@ import type { Semestre } from '../types';
 import ErrorScreen from '../utils/ErrorScreen';
 import {
   MdAdd, MdEdit, MdDelete, MdSearch, MdCheckCircle, MdCancel,
-  MdRefresh, MdClass, MdSchool, MdWarning
+  MdRefresh, MdSchool, MdWarning
 } from 'react-icons/md';
 
 const SemestreList: React.FC = () => {

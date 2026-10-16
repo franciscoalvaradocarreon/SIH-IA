@@ -131,7 +131,10 @@ public class AutenticacionServicio {
             usuario.getEmail(),
             roles,
             escuelaInicial,
-            escuelaIds
+            escuelaIds,
+            // Contador de sesiones: viaja en el token y permite revocarlo al cerrar sesion o al
+            // cambiar la contrasena. Sin el, un token robado servia hasta 24 h.
+            usuario.getTokenVersion() == null ? 0 : usuario.getTokenVersion()
         );
 
         var token = tokenServicio.generarToken(claims);
@@ -150,5 +153,20 @@ public class AutenticacionServicio {
             escuelaInicial,
             roles
         );
+    }
+
+    /**
+     * Cierra la sesion del usuario: incrementa su contador de sesiones, de modo que el token que
+     * acaba de usar -y cualquier otro suyo, en cualquier dispositivo- deja de valer de inmediato.
+     * El frontend, ademas, borra el token que guarda.
+     *
+     * <p>Es idempotente: llamarlo dos veces no rompe nada. La transaccion la abre la propia consulta
+     * del repositorio (lleva @Transactional), asi que aqui no hace falta nada mas.
+     */
+    public void cerrarSesion(Long usuarioId) {
+        if (usuarioId == null) {
+            return;
+        }
+        usuarioRepositorio.incrementarTokenVersion(usuarioId);
     }
 }

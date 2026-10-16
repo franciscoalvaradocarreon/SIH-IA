@@ -171,6 +171,9 @@ public class RecuperacionPasswordServicio {
         // Actualizar contraseña
         Usuario usuario = entidad.getUsuario();
         usuario.setPasswordHash(passwordEncoder.encode(nuevaPassword));
+        // Restablecer la contrasena revoca TODAS las sesiones del usuario: si el cambio se debe a que
+        // le robaron la cuenta, el token del atacante deja de valer de inmediato.
+        usuario.setTokenVersion((usuario.getTokenVersion() == null ? 0 : usuario.getTokenVersion()) + 1);
         usuarioRepositorio.save(usuario);
 
         // Marcar el token como usado y limpiar cualquier otro token activo del usuario.

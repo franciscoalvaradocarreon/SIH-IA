@@ -46,6 +46,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   });
 
   const logout = useCallback(() => {
+    // Avisar al servidor ANTES de borrar nada, y con el token explicito: el backend incrementa el
+    // contador de sesiones del usuario, asi que el token deja de valer de verdad (antes, cerrar
+    // sesion solo borraba el token del navegador y el token seguia siendo valido hasta 24 h si
+    // alguien lo hubiera copiado). Si la llamada falla -sin red, servidor caido- la sesion local se
+    // cierra igual: no se deja al usuario atrapado dentro.
+    const tokenGuardado = localStorage.getItem('token');
+    if (tokenGuardado) {
+      api.post('/auth/logout', null, {
+        headers: { Authorization: `Bearer ${tokenGuardado}` },
+      }).catch(() => undefined);
+    }
+
     setUser(null);
     setToken(null);
     setEscuelaActiva(null);

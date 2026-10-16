@@ -250,6 +250,9 @@ public class UsuarioServicio {
         validarPassword(dto.getPassword(), false);
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
             usuario.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
+            // Cambiar la contrasena revoca las sesiones abiertas: si alguien la habia robado, el
+            // token que tuviera deja de valer al instante (antes seguia sirviendo hasta 24 horas).
+            usuario.setTokenVersion((usuario.getTokenVersion() == null ? 0 : usuario.getTokenVersion()) + 1);
         }
 
         usuarioRepositorio.save(usuario);

@@ -4,9 +4,11 @@ import mx.sih.modelo.entidad.Usuario;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -72,4 +74,20 @@ public interface UsuarioRepositorio extends JpaRepository<Usuario, Long> {
            "LEFT JOIN FETCH r.rol " +
            "WHERE u.email = :email")
     Optional<Usuario> findByEmailConRelaciones(@Param("email") String email);
+
+    /**
+     * Incrementa el contador de sesiones del usuario: TODOS los tokens emitidos antes dejan de valer
+     * (al instante y en todos sus dispositivos). Es lo que se ejecuta al cerrar sesion y al cambiar o
+     * restablecer la contrasena.
+     *
+     * <p>Se hace con un UPDATE atomico en la base y no leyendo-y-guardando, para que dos peticiones
+     * simultaneas -cerrar sesion en dos pestañas, por ejemplo- no se pisen: cada una suma.
+     *
+     * <p>Va con {@code @Transactional} aqui porque una consulta de modificacion necesita una
+     * transaccion activa, y asi no depende de que quien la llame se acuerde de abrirla.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Usuario u SET u.tokenVersion = COALESCE(u.tokenVersion, 0) + 1 WHERE u.usuarioId = :id")
+    int incrementarTokenVersion(@Param("id") Long id);
 }

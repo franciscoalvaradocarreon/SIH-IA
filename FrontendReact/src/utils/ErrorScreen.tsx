@@ -2,7 +2,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  MdError, MdWarning, MdArrowBack, MdRefresh, MdHome
+  MdError, MdWarning, MdArrowBack, MdHome
 } from 'react-icons/md';
 
 export interface ErrorScreenProps {

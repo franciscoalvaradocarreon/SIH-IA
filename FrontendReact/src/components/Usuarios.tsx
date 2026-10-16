@@ -5,7 +5,7 @@ import type { Usuario } from '../types';
 import ErrorScreen from '../utils/ErrorScreen';
 import { urlFoto } from '../utils/imagenes';
 import {
-  MdAdd, MdEdit, MdDelete, MdSearch, MdPerson,
+  MdAdd, MdEdit, MdDelete, MdSearch,
   MdCheckCircle, MdCancel, MdWarning
 } from 'react-icons/md';
 

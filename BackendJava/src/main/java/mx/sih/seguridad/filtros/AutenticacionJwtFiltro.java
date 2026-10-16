@@ -57,6 +57,16 @@ public class AutenticacionJwtFiltro extends OncePerRequestFilter {
             // 3. Extraer claims del usuario
             var claims = servicioToken.extraerClaims(token);
 
+            // 3.b ¿Sigue vigente esta sesion? Cerrar sesion o cambiar la contrasena incrementa
+            //     token_version en la base, asi que el token que traia el valor anterior queda
+            //     revocado al instante. Falla cerrado: si no se puede comprobar, no se autentica.
+            if (!servicioToken.versionVigente(claims)) {
+                responderNoAutorizado(respuesta, "sesion_revocada",
+                        "La sesión ya no es válida (se cerró la sesión o cambió la contraseña). "
+                                + "Vuelve a iniciar sesión.");
+                return;
+            }
+
             // 4. Resolver la escuela activa (validación multi-tenant)
             Optional<Long> escuelaActiva = resolverEscuelaActiva(peticion, claims, respuesta);
             if (escuelaActiva.isEmpty()) {
