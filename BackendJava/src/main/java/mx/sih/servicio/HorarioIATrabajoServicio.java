@@ -158,11 +158,15 @@ public class HorarioIATrabajoServicio {
     private final int maxPasosDefecto;
     private final int hilos;
 
+    /** Cuantos trabajos pueden estar vivos a la vez (en cola o generando) antes de rechazar. */
+    private final int trabajosMaximos;
+
     public HorarioIATrabajoServicio(HorarioIAServicio servicio,
                                     @Value("${app.ia.intentos:12}") int intentosPorDefecto,
                                     @Value("${app.ia.segundos-por-intento:500}") int segundosPorIntentoDefecto,
                                     @Value("${app.ia.max-pasos:60000}") int maxPasosDefecto,
-                                    @Value("${app.ia.hilos:3}") int hilos) {
+                                    @Value("${app.ia.hilos:3}") int hilos,
+                                    @Value("${app.ia.trabajos-max:8}") int trabajosMaximos) {
         this.servicio = servicio;
         this.intentosPorDefecto = intentosPorDefecto <= 0 ? 12 : intentosPorDefecto;
         this.segundosPorIntentoDefecto = segundosPorIntentoDefecto <= 0 ? 500 : segundosPorIntentoDefecto;
@@ -170,6 +174,11 @@ public class HorarioIATrabajoServicio {
         // Tope de 16 por si alguien escribe un número absurdo en la configuración: más hilos que
         // núcleos no acelera nada, solo reparte el mismo tiempo entre más intentos a medias.
         this.hilos = hilos <= 0 ? 3 : Math.min(hilos, 16);
+        // Tope de trabajos VIVOS. Es un limite del RECURSO, no de la persona: da igual que sean
+        // cinco pestañas del mismo usuario o cinco compañeros distintos. El pool de coordinadores
+        // tiene 4 hilos y una cola ILIMITADA, asi que sin este tope aceptaria cientos de trabajos y
+        // la maquina se arrastraria durante horas. Con 8 caben los 4 que generan y 4 esperando.
+        this.trabajosMaximos = trabajosMaximos <= 0 ? 8 : Math.min(trabajosMaximos, 64);
         this.cocineros = Executors.newFixedThreadPool(this.hilos, daemon("ia-intento"));
         this.coordinadores = Executors.newFixedThreadPool(TRABAJOS_A_LA_VEZ, daemon("ia-trabajo"));
         logger.info("Generador IA listo: {} hilo(s) de intentos, hasta {} trabajo(s) a la vez",
@@ -241,6 +250,23 @@ public class HorarioIATrabajoServicio {
         AsesorIA asesor = servicio.asesor(modo, apiKey, url, modelo);
 
         limpiarAntiguos();
+
+        // ¿Cabe otro trabajo? Se cuentan los VIVOS (en cola o generando) DESPUES de limpiar los
+        // antiguos, para no rechazar por trabajos que terminaron hace rato.
+        //
+        // Va aqui, y no antes de la deduplicacion, a proposito: si alguien vuelve a pedir SU
+        // generacion en curso, tiene que recibir esa (el bloque de arriba), no un error de cola llena.
+        long vivos = trabajos.values().stream()
+                .filter(t -> EN_COLA.equals(t.estado) || EN_PROCESO.equals(t.estado))
+                .count();
+        if (vivos >= trabajosMaximos) {
+            logger.warn("Generacion IA rechazada por tope: {} trabajo(s) vivo(s), tope {}, pedido por {}",
+                    vivos, trabajosMaximos, solicitadoPor);
+            throw new NegocioExcepcion("cola_llena",
+                    "Hay " + vivos + " generaciones en curso y el máximo es " + trabajosMaximos
+                            + ". Espera a que termine alguna antes de lanzar otra.");
+        }
+
         Trabajo trabajo = new Trabajo(escuelaId, semestreId, turnoId,
                 modo == null || modo.isBlank() ? "heuristica" : modo.trim(),
                 intentos == null || intentos <= 0 ? intentosPorDefecto : Math.min(intentos, 50),
