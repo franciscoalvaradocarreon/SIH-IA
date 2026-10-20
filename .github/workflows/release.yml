@@ -123,7 +123,7 @@ jobs:
         run: mvn -B clean package -DskipTests
 
       - name: Publicar el Release con el WAR
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: BackendJava/target/SIH-IA-1.0.war
           generate_release_notes: true
