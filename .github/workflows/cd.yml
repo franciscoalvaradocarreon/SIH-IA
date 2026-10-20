@@ -131,9 +131,12 @@ jobs:
           # Sin --delete a proposito: el .env y db/04_datos_cliente.sql no estan en git y viven solo
           # en el servidor. Un --delete los borraria, y no se pueden recuperar del repositorio.
           echo "=== 0) Enviar el bundle de despliegue a /opt/sih ==="
+          # OJO con la barra final de 'db': 'db/' copia el CONTENIDO de la carpeta (los .sql y los
+          # scripts acabarian sueltos en /opt/sih), y 'db' copia el DIRECTORIO. Es el clasico del
+          # rsync, y nos paso en el primer despliegue: 21 ficheros duplicados en la raiz.
           rsync -a --itemize-changes \
             -e "ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o IdentitiesOnly=yes" \
-            docker-compose.yml Caddyfile OPERACION.md db/ \
+            docker-compose.yml Caddyfile OPERACION.md db \
             "$USUARIO@$HOST:/opt/sih/" | sed 's/^/  /'
           # El pull se reintenta. Un fallo de red del runner a mitad de la descarga
           # abortaba el despliegue completo (paso en v1.1.12: 83 s y a mano) porque
