@@ -120,13 +120,21 @@ jobs:
           fi
           echo "  imagen a desplegar: $IMAGEN"
 
-          ssh_sih "cd ~/SIH-IA && git pull"
-
+          # El servidor ya NO tiene el repositorio: solo baja el BUNDLE de despliegue. Las fuentes
+          # no se envian nunca (requisito normativo: el codigo no se instala en produccion).
+          #
+          # Sin --delete a proposito: el .env y db/04_datos_cliente.sql no estan en git y viven solo
+          # en el servidor. Un --delete los borraria, y no se pueden recuperar del repositorio.
+          echo "=== 0) Enviar el bundle de despliegue a /opt/sih ==="
+          rsync -a --itemize-changes \
+            -e "ssh -i $HOME/.ssh/id_ed25519 -o StrictHostKeyChecking=accept-new -o BatchMode=yes -o IdentitiesOnly=yes" \
+            docker-compose.yml Caddyfile OPERACION.md db/ \
+            "$USUARIO@$HOST:/opt/sih/" | sed 's/^/  /'
           # El pull se reintenta. Un fallo de red del runner a mitad de la descarga
           # abortaba el despliegue completo (paso en v1.1.12: 83 s y a mano) porque
           # 'set -e' corta el guion. Un fallo transitorio no debe tumbar un despliegue.
           for intento in 1 2 3; do
-            if ssh_sih "cd ~/SIH-IA && IMAGEN_APP='$IMAGEN' docker compose pull app"; then
+            if ssh_sih "cd /opt/sih && IMAGEN_APP='$IMAGEN' docker compose pull app"; then
               break
             fi
             if [ "$intento" = "3" ]; then
@@ -149,7 +157,7 @@ jobs:
           echo "=== 2) Reiniciar SOLO la aplicacion (la base y los uploads no se tocan) ==="
           # IMAGEN_APP se pasa por entorno, que tiene prioridad sobre el .env del
           # servidor: asi el contenedor queda apuntando al tag que se verifico.
-          ssh_sih "cd ~/SIH-IA && IMAGEN_APP='$IMAGEN' docker compose up -d --no-build app"
+          ssh_sih "cd /opt/sih && IMAGEN_APP='$IMAGEN' docker compose up -d --no-build app"
 
           echo "=== 3) Verificar que responde la version publicada ==="
           # La aplicacion tarda ~20 s en arrancar: se reintenta hasta 2 minutos.
@@ -169,9 +177,9 @@ jobs:
 
           echo "::error::La version desplegada no coincide con '$ESPERADA' tras 2 minutos."
           echo "--- estado de los contenedores ---"
-          ssh_sih "cd ~/SIH-IA && docker compose ps" || true
+          ssh_sih "cd /opt/sih && docker compose ps" || true
           echo "--- ultimas lineas del log de la aplicacion ---"
-          ssh_sih "cd ~/SIH-IA && docker compose logs app --tail 30" || true
+          ssh_sih "cd /opt/sih && docker compose logs app --tail 30" || true
           exit 1
 
       - name: Liberar espacio en el servidor (imagenes viejas)

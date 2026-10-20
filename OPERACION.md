@@ -12,7 +12,7 @@ Todo lo que aparece aquí está probado en este despliegue.
 | Servidor | Oracle Cloud Always Free · ARM Ampere A1 · 4 OCPU / 24 GB |
 | IP pública | `140.84.191.170` (**reservada**: no cambia) |
 | Usuario SSH | `opc` (alias `sih` configurado en el PC) |
-| Carpeta del proyecto | `~/SIH-IA` |
+| Carpeta del proyecto | `/opt/sih` |
 | Imagen | `ghcr.io/franciscoalvaradocarreon/sih-ia` |
 | Contenedores | `sih-ia-app-1`, `sih-ia-db-1`, `sih-ia-caddy-1` |
 | Respaldos | `~/respaldos`, diarios a las 02:00, se conservan 14 |
@@ -116,7 +116,7 @@ Hay dos formas. La primera es para **salir del apuro en un minuto**; la segunda 
 Las versiones anteriores siguen publicadas en GHCR, así que se puede volver a cualquiera sin recompilar nada.
 
 ```powershell
-ssh sih "cd ~/SIH-IA && sed -i 's|^IMAGEN_APP=.*|IMAGEN_APP=ghcr.io/franciscoalvaradocarreon/sih-ia:v1.0.1|' .env && docker compose pull app && docker compose up -d --no-build app && sleep 20 && curl -s http://127.0.0.1/api/version"
+ssh sih "cd /opt/sih && sed -i 's|^IMAGEN_APP=.*|IMAGEN_APP=ghcr.io/franciscoalvaradocarreon/sih-ia:v1.0.1|' .env && docker compose pull app && docker compose up -d --no-build app && sleep 20 && curl -s http://127.0.0.1/api/version"
 ```
 
 Cambia `v1.0.1` por **la última versión que sabes que funcionaba**.
@@ -130,7 +130,7 @@ ssh sih "docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.CreatedSinc
 ⚠️ **Importante y fácil de olvidar**: este atajo deja el `.env` *anclado* a esa versión. Mientras esté así, el CD automático **no podrá desplegar versiones nuevas** (fallará con un mensaje de versión que no coincide). Cuando arregles el problema, devuélvelo a `latest`:
 
 ```powershell
-ssh sih "cd ~/SIH-IA && sed -i 's|^IMAGEN_APP=.*|IMAGEN_APP=ghcr.io/franciscoalvaradocarreon/sih-ia:latest|' .env && grep IMAGEN_APP .env"
+ssh sih "cd /opt/sih && sed -i 's|^IMAGEN_APP=.*|IMAGEN_APP=ghcr.io/franciscoalvaradocarreon/sih-ia:latest|' .env && grep IMAGEN_APP .env"
 ```
 
 ### Opción B · Revertir en git y publicar la corrección (~10 min)
@@ -175,7 +175,7 @@ ssh sih "ls -la ~/respaldos/"
 ### Paso 2 · Comprobar que el respaldo sirve (antes de tocar producción)
 
 ```powershell
-ssh sih "cd ~/SIH-IA && ./db/restaurar.sh ~/respaldos/SIH-20260922-020000.sql.gz"
+ssh sih "cd /opt/sih && ./db/restaurar.sh ~/respaldos/SIH-20260922-020000.sql.gz"
 ```
 
 Esto lo carga en una base **aparte**, cuenta las filas y la borra. Si los números cuadran (escuelas, grupos, clases en horario), el respaldo es bueno.
@@ -191,21 +191,21 @@ scp sih:~/respaldos/SIH-20260922-020000.sql.gz D:\RespaldosSIH\
 Se para la aplicación primero para que no haya conexiones abiertas que bloqueen los `DROP`:
 
 ```powershell
-ssh sih "cd ~/SIH-IA && docker compose stop app"
+ssh sih "cd /opt/sih && docker compose stop app"
 ```
 
 ```powershell
-ssh sih "cd ~/SIH-IA && gunzip -c ~/respaldos/SIH-20260922-020000.sql.gz | docker compose exec -T db psql -U User_app -d SIH -v ON_ERROR_STOP=1 -q"
+ssh sih "cd /opt/sih && gunzip -c ~/respaldos/SIH-20260922-020000.sql.gz | docker compose exec -T db psql -U User_app -d SIH -v ON_ERROR_STOP=1 -q"
 ```
 
 ```powershell
-ssh sih "cd ~/SIH-IA && docker compose start app"
+ssh sih "cd /opt/sih && docker compose start app"
 ```
 
 ### Paso 5 · Verificar
 
 ```powershell
-ssh sih "cd ~/SIH-IA && docker compose exec -T db psql -U User_app -d SIH -f - < db/qa_esquema.sql | tail -12"
+ssh sih "cd /opt/sih && docker compose exec -T db psql -U User_app -d SIH -f - < db/qa_esquema.sql | tail -12"
 ```
 
 Debe decir `OK -> base lista para produccion`. Y luego entra en la aplicación y comprueba los datos a mano.
@@ -216,22 +216,22 @@ Debe decir `OK -> base lista para produccion`. Y luego entra en la aplicación y
 
 ```powershell
 # Estado de los contenedores
-ssh sih "cd ~/SIH-IA && docker compose ps"
+ssh sih "cd /opt/sih && docker compose ps"
 
 # Logs de la aplicacion (lo mas util)
-ssh sih "cd ~/SIH-IA && docker compose logs app --tail 50"
+ssh sih "cd /opt/sih && docker compose logs app --tail 50"
 
 # Logs de Caddy (errores 502, certificados)
-ssh sih "cd ~/SIH-IA && docker compose logs caddy --tail 30"
+ssh sih "cd /opt/sih && docker compose logs caddy --tail 30"
 
 # Logs de la base
-ssh sih "cd ~/SIH-IA && docker compose logs db --tail 30"
+ssh sih "cd /opt/sih && docker compose logs db --tail 30"
 
 # Version desplegada
 ssh sih "curl -s http://127.0.0.1/api/version"
 
 # Espacio en disco
-ssh sih "df -h / && du -sh ~/SIH-IA ~/respaldos"
+ssh sih "df -h / && du -sh /opt/sih ~/respaldos"
 
 # Memoria
 ssh sih "free -h"
@@ -280,7 +280,7 @@ su heap sobre los 24 GB de la máquina en vez de sobre un límite decidido.
 2. Si está `Stopped`, pulsa **Start**.
 3. Si está `Running` pero no responde, reiníciala desde la consola.
 4. Tras el arranque, los contenedores se levantan solos (`restart: unless-stopped`). Dale un minuto.
-5. Comprueba: `ssh sih "cd ~/SIH-IA && docker compose ps"`
+5. Comprueba: `ssh sih "cd /opt/sih && docker compose ps"`
 
 ---
 
@@ -289,8 +289,8 @@ su heap sobre los 24 GB de la máquina en vez de sobre un límite decidido.
 | Tarea | Comando |
 |---|---|
 | Automático | Diario a las 02:00 (cron). Registro en `~/respaldos/respaldo.log` |
-| Forzar uno ahora | `ssh sih "cd ~/SIH-IA && ./db/respaldar.sh"` |
-| Probar que un respaldo sirve | `ssh sih "cd ~/SIH-IA && ./db/restaurar.sh"` |
+| Forzar uno ahora | `ssh sih "cd /opt/sih && ./db/respaldar.sh"` |
+| Probar que un respaldo sirve | `ssh sih "cd /opt/sih && ./db/restaurar.sh"` |
 | Ver el registro | `ssh sih "tail -20 ~/respaldos/respaldo.log"` |
 | Bajar copia al PC | `scp sih:~/respaldos/*.sql.gz D:\RespaldosSIH\` |
 | Liberar el servidor | `ssh sih "ls -1t ~/respaldos/SIH-*.sql.gz \| tail -n +2 \| xargs -r rm -f"` (conserva el último) |

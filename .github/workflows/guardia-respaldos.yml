@@ -77,7 +77,7 @@ jobs:
           # Tres intentos: un corte de red momentaneo no debe dar una falsa alarma.
           for intento in 1 2 3; do
             echo "=== Intento $intento de 3 ==="
-            if ssh_sih "~/SIH-IA/db/verificar-respaldos.sh $MAX_HORAS"; then
+            if ssh_sih "/opt/sih/db/verificar-respaldos.sh $MAX_HORAS"; then
               echo "OK: los respaldos estan al dia."
               exit 0
             fi
