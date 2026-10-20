@@ -43,6 +43,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
+      # El bundle de despliegue sale del repositorio, asi que el runner necesita el codigo: es el
+      # UNICO sitio donde vive ahora (el servidor ya no lo tiene). Las fuentes se quedan en el
+      # runner; al servidor solo viajan el compose, el Caddyfile, db/ y el manual.
+      - uses: actions/checkout@v4
+
       - name: Preparar la clave SSH
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
