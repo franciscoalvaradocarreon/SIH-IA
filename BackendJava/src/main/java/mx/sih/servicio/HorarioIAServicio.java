@@ -27,6 +27,7 @@ import mx.sih.repositorio.GrupoRepositorio;
 import mx.sih.repositorio.HorarioRepositorio;
 import mx.sih.repositorio.SemestreRepositorio;
 import mx.sih.repositorio.TurnoHorarioRepositorio;
+import mx.sih.seguridad.UrlProveedorIA;
 import mx.sih.seguridad.contexto.EscuelaContexto;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -1084,6 +1085,17 @@ public class HorarioIAServicio {
     }
 
     /**
+     * Hosts permitidos para el asesor LLM ({@code app.ia.url-permitidas}, separados por comas).
+     *
+     * <p>La pantalla de Horario IA deja escribir la URL del proveedor. Sin esta lista, el servidor
+     * abriria una conexion a donde le pidieran: servicios internos, el servicio de metadatos de la
+     * instancia o un servidor preparado para explotar un fallo de TLS. Con ella, solo a destinos
+     * conocidos y siempre por https.
+     */
+    @Value("${app.ia.url-permitidas:api.openai.com,api.deepseek.com}")
+    private String iaUrlPermitidas;
+
+    /**
      * Asesor para UNA generación concreta.
      *
      * <p>La clave puede venir en la propia petición: en ese caso se usa solo para este trabajo y se
@@ -1100,7 +1112,10 @@ public class HorarioIAServicio {
             throw new NegocioExcepcion("falta_api_key",
                     "Para usar el asesor IA hay que indicar la clave de la API.");
         }
-        String destino = url != null && !url.isBlank() ? url.trim() : iaUrl;
+        // La URL la escribe el usuario en la pantalla, asi que pasa por la lista blanca: sin ella el
+        // SERVIDOR se conectaria a donde le pidieran (metadatos de la instancia, red interna, o un
+        // servidor TLS preparado para explotar CVE-2026-91403). Vacia = la de app.ia.url.
+        String destino = UrlProveedorIA.destino(url, iaUrl, iaUrlPermitidas);
         String elegido = modelo != null && !modelo.isBlank() ? modelo.trim() : iaModelo;
         logger.info("Horario IA: asesor LLM {} (clave propia de la generación: {})",
                 elegido, apiKey != null && !apiKey.isBlank());
