@@ -159,6 +159,9 @@ public class UsuarioServicio {
         usuario.setUsuario(dto.getUsuario());
         usuario.setNombreCompleto(dto.getNombreCompleto());
         usuario.setEmail(dto.getEmail());
+        // Vigencia: se guarda tal cual llega. Vacio (null) = sin limite, que es como estan todos los
+        // usuarios anteriores a este cambio.
+        usuario.setVigenteHasta(dto.getVigenteHasta());
         usuario.setFotoUrl(fotoUrl);
         usuario.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
         usuario.setUltimoAcceso(null);
@@ -242,6 +245,9 @@ public class UsuarioServicio {
         usuario.setUsuario(dto.getUsuario());
         usuario.setNombreCompleto(dto.getNombreCompleto());
         usuario.setEmail(dto.getEmail());
+        // Vigencia: se guarda tal cual llega. Vacio (null) = sin limite, que es como estan todos los
+        // usuarios anteriores a este cambio.
+        usuario.setVigenteHasta(dto.getVigenteHasta());
 
         if (dto.getActivo() != null) {
             usuario.setActivo(dto.getActivo());
@@ -413,6 +419,7 @@ public class UsuarioServicio {
                 usuario.getFotoUrl(),
                 usuario.getActivo(),
                 usuario.getUltimoAcceso(),
+                usuario.getVigenteHasta(),
                 roles,
                 escuelas,
                 // El aviso se rellena despues, solo en el alta o la edicion que lo necesiten.

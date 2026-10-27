@@ -123,6 +123,23 @@ public class AutenticacionServicio {
             .distinct()
             .toList();
 
+        // 6.b) Vigencia de la cuenta.
+        //
+        // Va DESPUES de comprobar la contrasena y no antes: responder "tu vigencia termino" sin haber
+        // validado la clave le confirmaria a un desconocido que ese usuario existe. El mensaje de una
+        // clave incorrecta no distingue entre usuario inexistente y clave mala, y aqui se mantiene.
+        //
+        // Quien tiene el rol ADMIN no esta restringido: el administrador del sistema no puede quedarse
+        // fuera, ni siquiera si alguien le pone una fecha por error.
+        //
+        // La fecha de hoy se toma en la zona horaria de la aplicacion (America/Mexico_City), no la del
+        // servidor, que esta en GMT: si no, la cuenta venceria a las 6 de la tarde del dia anterior.
+        if (!roles.contains("ADMIN")
+                && mx.sih.seguridad.VigenciaUsuario.vencida(usuario.getVigenteHasta(), java.time.LocalDate.now())) {
+            throw new NegocioExcepcion("usuario_vencido",
+                    mx.sih.seguridad.VigenciaUsuario.mensaje(usuario.getVigenteHasta()));
+        }
+
         // Escuela "activa" al momento del login: la primera (el frontend puede cambiarla después)
         Long escuelaInicial = escuelaIds.get(0);
 

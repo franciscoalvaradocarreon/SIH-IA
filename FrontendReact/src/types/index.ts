@@ -173,6 +173,11 @@ export interface Usuario {
   fotoUrl?: string | null;
   activo: boolean;
   ultimoAcceso?: string;
+  /**
+   * Último día de vigencia de la cuenta, en formato ISO (`2026-12-31`).
+   * `null` o ausente = sin límite. No se aplica a quien tiene el rol ADMIN.
+   */
+  vigenteHasta?: string | null;
   roles: string[];
   escuelas: string[];
   /**
@@ -190,6 +195,8 @@ export interface UsuarioForm {
   fotoArchivo?: File | null;
   password?: string;
   activo?: boolean;
+  /** Último día de vigencia (ISO). Vacío = sin límite. */
+  vigenteHasta?: string | null;
   asignaciones?: AsignacionEscuelaRol[];
 }
 

@@ -788,7 +788,8 @@ CREATE TABLE sih.usuarios (
     creado time without time zone DEFAULT CURRENT_TIMESTAMP,
     ultimo_acceso timestamp without time zone,
     google_sub character varying(255),
-    token_version integer DEFAULT 0 NOT NULL
+    token_version integer DEFAULT 0 NOT NULL,
+    vigente_hasta date
 );
 
 

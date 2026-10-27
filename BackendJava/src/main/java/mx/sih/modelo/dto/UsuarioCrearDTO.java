@@ -10,6 +10,7 @@ import lombok.Setter;
 import mx.sih.seguridad.PoliticaPassword;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Getter
@@ -42,6 +43,14 @@ public class UsuarioCrearDTO {
     private String password;
 
     private Boolean activo = true;
+
+    /**
+     * Ultimo dia de vigencia de la cuenta (formato ISO, {@code 2026-12-31}). Vacio = sin limite.
+     *
+     * <p>Es opcional y lo edita quien edita el usuario, como cualquier otro campo. No se aplica a
+     * quien tiene el rol ADMIN.
+     */
+    private LocalDate vigenteHasta;
 
     private List<AsignacionEscuelaRolDTO> asignaciones;
 

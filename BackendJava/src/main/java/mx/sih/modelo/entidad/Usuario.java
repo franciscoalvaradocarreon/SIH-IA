@@ -5,6 +5,7 @@
 package mx.sih.modelo.entidad;
 
 import jakarta.persistence.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -58,6 +59,15 @@ public class Usuario {
      */
     @Column(name = "token_version", nullable = false)
     private Integer tokenVersion = 0;
+
+    /**
+     * Ultimo dia en que la cuenta puede iniciar sesion. {@code null} = sin limite.
+     *
+     * <p>Es una fecha, no una marca de tiempo: la cuenta vale TODO ese dia y vence al siguiente. Se
+     * comprueba solo al iniciar sesion, y no se aplica a quien tiene el rol ADMIN.
+     */
+    @Column(name = "vigente_hasta")
+    private LocalDate vigenteHasta;
 
     // Relación con UsuarioEscuelaRol (uno a muchos)
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

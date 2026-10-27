@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -20,6 +21,10 @@ public class UsuarioDTO {
     private String fotoUrl;
     private Boolean activo;
     private LocalDateTime ultimoAcceso;
+
+    /** Ultimo dia de vigencia; {@code null} = sin limite. Ver {@code VigenciaUsuario}. */
+    private LocalDate vigenteHasta;
+
     private List<String> roles;
     private List<String> escuelas;
 

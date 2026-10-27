@@ -29,6 +29,7 @@ const UsuarioForm: React.FC = () => {
     fotoUrl: '',
     password: '',
     activo: true,
+    vigenteHasta: '',
     asignaciones: [],
   });
 
@@ -76,6 +77,8 @@ const UsuarioForm: React.FC = () => {
         nombreCompleto: data.nombreCompleto,
         email: data.email,
         fotoUrl: data.fotoUrl || '',
+        // Llega como ISO (2026-12-31) o null; el input type="date" trabaja con eso tal cual.
+        vigenteHasta: data.vigenteHasta || '',
         activo: data.activo,
         asignaciones: data.asignaciones?.map((a: any) => ({
           escuelaId: a.escuelaId,
@@ -290,6 +293,22 @@ const UsuarioForm: React.FC = () => {
                   placeholder="Juan Pérez"
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Vigencia hasta
+              </label>
+              <input
+                type="date"
+                name="vigenteHasta"
+                value={form.vigenteHasta || ''}
+                onChange={handleChange}
+                className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Último día de acceso. Vacío = sin límite. No se aplica a los usuarios con rol ADMIN.
+              </p>
             </div>
 
             <div>
