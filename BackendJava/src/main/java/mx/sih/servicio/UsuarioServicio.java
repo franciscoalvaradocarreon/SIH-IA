@@ -451,6 +451,7 @@ public class UsuarioServicio {
                 usuario.getFotoUrl(),
                 usuario.getActivo(),
                 usuario.getUltimoAcceso(),
+                usuario.getVigenteHasta(),
                 asignacionesDTO
         );
     }
