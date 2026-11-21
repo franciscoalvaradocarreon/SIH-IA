@@ -135,4 +135,39 @@ else
   fi
 fi
 
+# ----------------------------------------------------------------------------
+# Copia al bucket de OCI (Object Storage, API compatible con S3).
+#
+# Por que: el 21-11-2026 Oracle reclamo la instancia y se llevo el disco con
+# todos los respaldos diarios. Solo sobrevivio la copia que estaba fuera, en el
+# bucket. Un respaldo que vive en la misma maquina que los datos no es respaldo.
+#
+# Se activa solo si RCLONE_REMOTO esta definido en el .env del servidor:
+#     RCLONE_REMOTO=oci:sirve-sih-respaldos/sih
+# Si no esta (o no existe rclone), se omite sin fallar: en el portatil no hay
+# bucket y el script debe seguir sirviendo.
+#
+# Se lee del .env con grep en vez de 'source': asi un .env con caracteres raros
+# no puede ejecutar comandos. El archivo se busca junto al script.
+# ----------------------------------------------------------------------------
+ENV_FILE="$(cd "$(dirname "$0")/.." && pwd)/.env"
+RCLONE_REMOTO=""
+if [ -f "$ENV_FILE" ]; then
+  RCLONE_REMOTO="$(grep -E '^RCLONE_REMOTO=' "$ENV_FILE" | head -1 | cut -d= -f2- | tr -d '\r')"
+fi
+
+if [ -n "$RCLONE_REMOTO" ] && command -v rclone >/dev/null 2>&1; then
+  SUBIDOS=0
+  for f in "$ARCHIVO" "$FOTOS"; do
+    [ -f "$f" ] || continue
+    if rclone copy --quiet --stats-one-line "$f" "$RCLONE_REMOTO" 2>/dev/null; then
+      echo "[$(date '+%F %T')] subido al bucket: $(basename "$f")"
+      SUBIDOS=$((SUBIDOS + 1))
+    else
+      echo "AVISO: no se pudo subir $(basename "$f") al bucket ($RCLONE_REMOTO). El respaldo local SI existe."
+    fi
+  done
+  [ "$SUBIDOS" -gt 0 ] || echo "AVISO: nada se subio al bucket; revisa las credenciales de rclone."
+fi
+
 echo "[$(date '+%F %T')] disponibles: $(ls -1 "$DESTINO"/SIH-*.sql.gz 2>/dev/null | wc -l) base(s) y $(ls -1 "$DESTINO"/fotos-*.tar.gz 2>/dev/null | wc -l) de fotos"
