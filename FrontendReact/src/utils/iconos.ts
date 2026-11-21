@@ -13,7 +13,6 @@ export const ICONOS_MAP: Record<string, React.ComponentType<{ className?: string
     'MdBook': IconsMd.MdBook,
     'MdGroup': IconsMd.MdGroup,
     'MdSchedule': IconsMd.MdSchedule,
-    'MdAutoAwesome': IconsMd.MdAutoAwesome,
     'MdEdit': IconsMd.MdEdit,
     'MdRocket': IconsMd.MdRocket,
     'MdVisibility': IconsMd.MdVisibility,
@@ -65,6 +64,9 @@ export const ICONOS_MAP: Record<string, React.ComponentType<{ className?: string
     'MdClear': IconsMd.MdClear,
     'MdArrowDropDown': IconsMd.MdArrowDropDown,
     'MdArrowDropUp': IconsMd.MdArrowDropUp,
+    'MdAutoAwesome': IconsMd.MdAutoAwesome,
+    'MdAutoAwesomeMosaic': IconsMd.MdAutoAwesomeMosaic,
+    'MdAutoAwesomeMotion': IconsMd.MdAutoAwesomeMotion,
 
     // === Tablero manual de horarios (diseño a mano) ===
     // MdDesignServices: lápiz + regla + escuadra, el icono de "diseño" de Material.

@@ -17,6 +17,10 @@ public class AulaDetalleDTO {
     private String descripcion;
     private Boolean activo;
     private Boolean taller;
+
+    /** Tipo de laboratorio o taller; null = aula normal. */
+    private Long tipoEspacioId;
+
     private Long semestreId;
     private String semestreNombre;
     private Long turnoId;

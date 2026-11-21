@@ -627,11 +627,6 @@ const ReporteHorariosGrupos: React.FC = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {turnoSeleccionado === 0 && (
-              <span className="self-center text-xs text-amber-700 dark:text-amber-400">
-                Selecciona un turno para exportar.
-              </span>
-            )}
             <button
               onClick={cargarTodo}
               disabled={loading}

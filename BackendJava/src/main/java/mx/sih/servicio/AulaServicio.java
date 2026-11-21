@@ -107,7 +107,9 @@ public class AulaServicio {
         aula.setPiso(dto.getPiso() != null ? dto.getPiso().toUpperCase() : null);
         aula.setDescripcion(dto.getDescripcion());
         aula.setActivo(dto.getActivo() != null ? dto.getActivo() : true);
-        aula.setTaller(dto.getTaller() != null ? dto.getTaller() : false);
+        // 'taller' es derivado: lo unico que manda es el tipo de espacio (migracion 18)
+        aula.setTipoEspacioId(dto.getTipoEspacioId());
+        aula.setTaller(dto.getTipoEspacioId() != null);
         aula.setSemestre(semestre);
         aula.setTurno(turno);   // 🔥
 
@@ -151,7 +153,9 @@ public class AulaServicio {
         if (dto.getActivo() != null) {
             aula.setActivo(dto.getActivo());
         }
-        aula.setTaller(dto.getTaller() != null ? dto.getTaller() : false);
+        // 'taller' es derivado: lo unico que manda es el tipo de espacio (migracion 18)
+        aula.setTipoEspacioId(dto.getTipoEspacioId());
+        aula.setTaller(dto.getTipoEspacioId() != null);
         aula.setSemestre(semestre);
         aula.setTurno(turno);   // 🔥
 
@@ -283,7 +287,12 @@ public class AulaServicio {
             copia.setPiso(original.getPiso());
             copia.setDescripcion(original.getDescripcion());
             copia.setActivo(original.getActivo());
-            copia.setTaller(original.getTaller());
+            // Al traer aulas de otro semestre el TIPO NO se copia (decision del 20/11/2026): los tipos
+        // son de cada semestre, y el del origen no existe en el destino. El aula llega como aula
+        // normal y se reclasifica a mano. Copiarlo "a lo bruto" dejaria aulas apuntando a tipos de
+        // otro periodo, que es justo lo que la clave foranea compuesta impide.
+        copia.setTipoEspacioId(null);
+        copia.setTaller(false);
 
             Escuela escuela = new Escuela();
             escuela.setEscuelaId(escuelaId);
@@ -355,6 +364,7 @@ public class AulaServicio {
         dto.setTaller(aula.getTaller());
         if (aula.getSemestre() != null) {
             dto.setSemestreId(aula.getSemestre().getSemestreId());
+        dto.setTipoEspacioId(aula.getTipoEspacioId());
             dto.setSemestreNombre(aula.getSemestre().getNombre());
         }
         if (aula.getTurno() != null) {
@@ -375,6 +385,7 @@ public class AulaServicio {
         dto.setTaller(aula.getTaller());
         if (aula.getSemestre() != null) {
             dto.setSemestreId(aula.getSemestre().getSemestreId());
+        dto.setTipoEspacioId(aula.getTipoEspacioId());
             dto.setSemestreNombre(aula.getSemestre().getNombre());
         }
         if (aula.getTurno() != null) {

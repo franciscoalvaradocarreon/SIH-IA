@@ -3,7 +3,7 @@ import { turnoService } from '../api/turnoService';
 import { horarioService } from '../api/horarioService';
 import { useAuth } from '../context/AuthContext';
 import type { Horario, Turno } from '../types';
-import { MdPictureAsPdf, MdGridOn } from 'react-icons/md';
+import { MdPictureAsPdf, MdGridOn, MdWarning } from 'react-icons/md';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import * as XLSX from 'xlsx';
@@ -261,25 +261,7 @@ const ReporteAsignacion: React.FC = () => {
               Maestros y materias que quedaron en el horario vigente · {semestreActivo?.nombre}
             </p>
           </div>
-          <label className="flex flex-col text-sm text-gray-600 dark:text-gray-300">
-            <span className="mb-1 font-medium">Turno</span>
-            <select
-              value={turnoSeleccionado}
-              onChange={e => setTurnoSeleccionado(Number(e.target.value))}
-              className="px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value={0}>Selecciona un turno…</option>
-              {turnos.map(t => (
-                <option key={t.id} value={t.id}>{t.nombre}</option>
-              ))}
-            </select>
-          </label>
           <div className="flex items-center gap-2 ml-auto">
-            {!turnoListo && (
-              <span className="text-xs text-amber-700 dark:text-amber-400">
-                Selecciona un turno para exportar.
-              </span>
-            )}
             <button
               onClick={exportarPDF}
               disabled={!turnoListo}
@@ -298,11 +280,31 @@ const ReporteAsignacion: React.FC = () => {
         </div>
       </div>
 
-      {!turnoListo && (
-        <div className="bg-white dark:bg-gray-800 border border-gray-400 dark:border-gray-700 rounded-xl shadow-md p-10 text-center text-gray-600 dark:text-gray-300">
-          Selecciona un turno para ver el reporte.
+      {/* Filtro por turno: en su propia tarjeta, fuera del encabezado, igual que en los
+          reportes de grupo y cerebro. */}
+      <div className="no-print bg-white dark:bg-gray-800 rounded-xl shadow-md p-4 mb-6 border border-gray-400 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap">
+            Turno:
+          </label>
+          <select
+            value={turnoSeleccionado}
+            onChange={(e) => setTurnoSeleccionado(Number(e.target.value))}
+            className="w-full sm:max-w-md px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value={0}>Selecciona un turno…</option>
+            {turnos.map(t => (
+              <option key={t.id} value={t.id}>{t.nombre}</option>
+            ))}
+          </select>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            {renglones.length} renglones
+          </span>
         </div>
-      )}
+      </div>
+
+      {/* El aviso de "elige un turno" vive mas abajo, en su bloque amarillo, igual que en
+          los reportes de grupo y cerebro. Aqui habia un duplicado gris que ya no hace falta. */}
 
       {turnoListo && (
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden border border-gray-400 dark:border-gray-700">
@@ -353,6 +355,18 @@ const ReporteAsignacion: React.FC = () => {
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {!turnoListo && (
+        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-8 text-center">
+          <MdWarning className="text-5xl text-yellow-600 dark:text-yellow-400 mx-auto mb-3" />
+          <h3 className="text-lg font-semibold text-yellow-800 dark:text-yellow-200">
+            Elige un turno
+          </h3>
+          <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+            Selecciona un turno para ver el reporte.
+          </p>
         </div>
       )}
 

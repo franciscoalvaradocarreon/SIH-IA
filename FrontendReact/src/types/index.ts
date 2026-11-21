@@ -286,6 +286,23 @@ export interface GrupoResultado {
   score?: string;
 }
 
+// Tipo de espacio (laboratorio o taller), por escuela, semestre y turno
+export interface TipoEspacio {
+    id: number;
+    semestreId: number;
+    turnoId: number;
+    clase: 'LABORATORIO' | 'TALLER';
+    nombre: string;
+    activo: boolean;
+}
+
+export interface TipoEspacioForm {
+    turnoId?: number;
+    clase: 'LABORATORIO' | 'TALLER';
+    nombre: string;
+    activo?: boolean;
+}
+
 // Aula
 export interface Aula {
     id: number;
@@ -295,6 +312,8 @@ export interface Aula {
     descripcion?: string;
     activo: boolean;
     taller?: boolean;
+    /** Laboratorio o taller al que pertenece; null o ausente = aula normal. */
+    tipoEspacioId?: number | null;
     semestreId?: number;
     semestreNombre?: string;
     turnoId?: number;
@@ -308,6 +327,8 @@ export interface AulaForm {
     descripcion?: string;
     activo?: boolean;
     taller?: boolean;
+    /** Laboratorio o taller; vacio = aula normal. `taller` lo deriva el backend. */
+    tipoEspacioId?: number | null;
     semestreId?: number;
     turnoId: number;
 }

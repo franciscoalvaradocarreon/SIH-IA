@@ -31,6 +31,14 @@ public class AulaCrearDTO {
 
     /** true = el aula es un taller (sala de practica). */
     private Boolean taller = false;
+
+    /**
+     * Tipo de laboratorio o taller (migracion 18). Vacio = aula normal.
+     *
+     * <p>{@code taller} deja de escribirse desde la pantalla: lo deriva el servicio de este campo,
+     * para que no puedan contradecirse.
+     */
+    private Long tipoEspacioId;
     
     @NotNull(message = "El semestre es obligatorio")
     private Long semestreId;

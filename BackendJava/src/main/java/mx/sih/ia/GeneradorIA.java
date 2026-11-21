@@ -302,7 +302,7 @@ public class GeneradorIA {
         final Map<Long, Set<Long>> stockPorMateria = new HashMap<>();
 
         /** STOCK DE TALLERES POR MATERIA: las aulas que ya usa la materia en las asignaciones. */
-        final Map<Long, Set<Long>> stockAulasPorMateria = new HashMap<>();
+        final Map<Long, Map<Long, Set<Long>>> stockAulasPorMateria = new HashMap<>();
 
         /**
          * NOMBRE DE CADA MAESTRO (id → nombre), tomado de las asignaciones ya cargadas.
@@ -460,9 +460,10 @@ public class GeneradorIA {
                             a.getMaestro().getTituloNombreCompleto());
                 }
             }
-            // Stock de TALLERES por materia: solo las aulas marcadas como taller (aulas.taller) que ya
-            // usa la materia. Las aulas normales NO entran aqui a proposito: el aula de una asignacion
-            // de teoria no es un comodin para acabar en un taller (ver aulasCandidatas).
+            // Stock de TALLERES por materia Y POR TIPO: solo las aulas de laboratorio o taller que ya usa
+            // la materia, agrupadas por su tipo_espacio_id. El tipo es lo que impide que una practica de
+            // quimica acabe en un taller de mecanica: el horario seria formalmente valido e inservible.
+            // Las aulas normales NO entran aqui: el aula de una asignacion de teoria no es un comodin.
             for (Asignacion a : asignaciones) {
                 if (a.getMateria() == null || a.getAula() == null) {
                     continue;
@@ -470,7 +471,9 @@ public class GeneradorIA {
                 if (!Boolean.TRUE.equals(a.getAula().getTaller())) {
                     continue;
                 }
-                stockAulasPorMateria.computeIfAbsent(a.getMateria().getMateriaId(), k -> new LinkedHashSet<>())
+                stockAulasPorMateria
+                        .computeIfAbsent(a.getMateria().getMateriaId(), k -> new HashMap<>())
+                        .computeIfAbsent(a.getAula().getTipoEspacioId(), k -> new LinkedHashSet<>())
                         .add(a.getAula().getAulaId());
             }
             // Nombre de cada aula por id: se lee de las asignaciones ya cargadas (solo para la bitácora).
@@ -508,13 +511,16 @@ public class GeneradorIA {
                 Set<Long> stock = a.getMateria() != null
                         ? stockPorMateria.getOrDefault(a.getMateria().getMateriaId(), Set.of())
                         : Set.of();
-                // El stock de talleres solo se le da a las sesiones cuya asignacion YA esta en un taller.
-                // Si su aula es normal (o no tiene), el conjunto va vacio: el motor la deja en el aula de
-                // la tabla y no la puede colocar en un taller. Es la regla pedida: las horas de teoria no
-                // juegan a ser taller, y las de taller solo rotan entre talleres.
+                // El stock de talleres solo se le da a las sesiones cuya asignacion YA esta en un taller,
+                // y solo con las aulas DE SU MISMO TIPO. Si su aula es normal (o no tiene), el conjunto va
+                // vacio: el motor la deja en el aula de la tabla. Las horas de teoria no juegan a ser
+                // taller, y las de taller solo rotan entre talleres del mismo tipo.
                 boolean aulaEsTaller = a.getAula() != null && Boolean.TRUE.equals(a.getAula().getTaller());
+                Long tipoAula = a.getAula() != null ? a.getAula().getTipoEspacioId() : null;
                 Set<Long> stockAulas = (a.getMateria() != null && aulaEsTaller)
-                        ? stockAulasPorMateria.getOrDefault(a.getMateria().getMateriaId(), Set.of())
+                        ? stockAulasPorMateria
+                                .getOrDefault(a.getMateria().getMateriaId(), Map.of())
+                                .getOrDefault(tipoAula, Set.of())
                         : Set.of();
                 boolean jovenes = a.getMateria() != null && a.getMateria().getClave() != null
                         && a.getMateria().getClave().contains("óvenes");

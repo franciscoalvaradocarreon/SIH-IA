@@ -1,3 +1,4 @@
+import TiposEspacio from './components/TiposEspacio';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import Login from './components/Login';
@@ -139,6 +140,7 @@ function App() {
 
               {/* Aulas */}
               <Route path="/catalogo/aulas" element={<Aulas />} />
+              <Route path="/catalogo/tipos-espacio" element={<TiposEspacio />} />
               <Route path="/catalogo/aulas/new" element={<AulaForm />} />
               <Route path="/catalogo/aulas/edit/:id" element={<AulaForm />} />
 

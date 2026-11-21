@@ -43,6 +43,18 @@ public class Aula {
     @Column(name = "taller")
     private Boolean taller = false;
 
+    /**
+     * Laboratorio o taller al que pertenece el aula. {@code null} = aula normal.
+     *
+     * <p>Se guarda como id y no como relacion a proposito: el motor compara ids y la pantalla ya
+     * tiene el catalogo cargado, asi que cargar la entidad entera en cada consulta no aporta nada.
+     *
+     * <p>La coherencia de que el tipo sea DEL MISMO SEMESTRE que el aula no la vigila Java: la
+     * garantiza una clave foranea compuesta en la base (migracion 18).
+     */
+    @Column(name = "tipo_espacio_id")
+    private Long tipoEspacioId;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
     

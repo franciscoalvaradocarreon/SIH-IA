@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { aulaService } from '../api/aulaService';
 import { turnoService } from '../api/turnoService';
-import type { AulaForm as AulaFormType, Turno } from '../types';
+import { tiposEspacioService } from '../api/tiposEspacioService';
+import type { AulaForm as AulaFormType, Turno, TipoEspacio } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
   MdSave, MdCancel, MdMeetingRoom, MdHome, MdElevator,
@@ -27,11 +28,12 @@ const AulaForm: React.FC = () => {
     piso: '',
     descripcion: '',
     activo: true,
-    taller: false,
+    tipoEspacioId: null,
     semestreId: semestreActivo?.id || 0,
     turnoId: 0,                          // 🔥 NUEVO
   });
   const [turnos, setTurnos] = useState<Turno[]>([]);
+  const [tipos, setTipos] = useState<TipoEspacio[]>([]);
   const [cargandoTurnos, setCargandoTurnos] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -40,6 +42,29 @@ const AulaForm: React.FC = () => {
   useEffect(() => {
     cargarTurnos();
   }, [semestreActivo?.id]);
+
+  // Catalogo de laboratorios y talleres DEL TURNO del aula, para el desplegable del tipo.
+  // Se recarga al cambiar el turno: cada turno tiene su propia lista y puede tener tipos
+  // distintos al otro turno del semestre. Solo los activos.
+  useEffect(() => {
+    let vivo = true;
+    const cargarTipos = async () => {
+      if (!form.turnoId) {
+        setTipos([]);
+        return;
+      }
+      try {
+        const res = await tiposEspacioService.listar(form.turnoId, true);
+        if (vivo) setTipos(res.data);
+      } catch {
+        if (vivo) setTipos([]);
+      }
+    };
+    void cargarTipos();
+    return () => {
+      vivo = false;
+    };
+  }, [form.turnoId]);
 
   useEffect(() => {
     if (isEdit) {
@@ -84,7 +109,7 @@ const AulaForm: React.FC = () => {
         piso: res.data.piso || '',
         descripcion: res.data.descripcion || '',
         activo: res.data.activo !== undefined ? res.data.activo : true,
-        taller: res.data.taller === true,
+        tipoEspacioId: res.data.tipoEspacioId ?? null,
         semestreId: res.data.semestreId || semestreActivo?.id || 0,
         turnoId: res.data.turnoId || 0,   // 🔥 NUEVO
       });
@@ -331,19 +356,38 @@ const AulaForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Los dos switches en la MISMA linea, para poder leerlos en par. El 'flex-wrap' los
-              apila solos si la pantalla es estrecha, en vez de apretarlos. */}
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
-            {/* Taller */}
-            <SwitchToggle
-              checked={form.taller === true}
-              onChange={(checked) => setForm({ ...form, taller: checked })}
-              label="Es taller (aula de practica)"
-              color="blue"
-              size="md"
-            />
+          {/* Tipo de espacio: laboratorio o taller. Vacio = aula normal.
+              El tipo se declara aqui y el motor lo respeta al reasignar; 'taller' lo deriva
+              el backend de este campo, para que no puedan contradecirse. */}
+          <div>
+            <label className="block mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+              Tipo de espacio
+            </label>
+            <select
+              name="tipoEspacioId"
+              value={form.tipoEspacioId ?? ''}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  tipoEspacioId: e.target.value ? Number(e.target.value) : null,
+                })
+              }
+              className="w-full px-4 py-2.5 border border-gray-400 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+            >
+              <option value="">Aula normal</option>
+              {tipos.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.clase === 'TALLER' ? 'Taller' : 'Laboratorio'} · {t.nombre}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Un solo tipo por aula, o ninguno. Las clases solo rotan entre aulas del mismo tipo.
+            </p>
+          </div>
 
-            {/* Activo */}
+          {/* Activo */}
+          <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
             <SwitchToggle
               checked={form.activo !== false}
               onChange={(checked) => setForm({ ...form, activo: checked })}

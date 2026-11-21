@@ -205,6 +205,15 @@ const Asignaciones: React.FC = () => {
   };
 
   const cargarAsignaciones = async () => {
+    // Sin turno elegido NO se consulta nada. Las asignaciones pertenecen a un turno, y pedir
+    // "todas las del semestre" mezcla turnos: la pantalla ya muestra su aviso en su lugar.
+    // Mismo criterio que Grupos.
+    if (!turnoSeleccionado) {
+      setAsignaciones([]);
+      setTotal(0);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const semestreId = semestreActivo?.id;

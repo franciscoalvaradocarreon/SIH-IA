@@ -64,10 +64,11 @@ jobs:
         with:
           context: .
           push: true
-          # Solo ARM64: es la arquitectura del servidor Y la del runner, asi que
-          # se compila de forma nativa y rapida. Para una maquina x86 esta el WAR
-          # adjunto al Release, que es la via natural alli.
-          platforms: linux/arm64
+          # linux/amd64: la instancia actual (VM.Standard.E2.1.Micro) es x86.
+          # La ARM anterior exigia arm64 y por eso la imagen no arrancaba en la maquina
+          # nueva: "no matching manifest for linux/amd64". Si algun dia se vuelve a ARM,
+          # basta con poner linux/arm64 o los dos separados por coma.
+          platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Estos tres valores son los que devuelve GET /api/version.
