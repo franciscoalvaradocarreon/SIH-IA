@@ -104,7 +104,7 @@ jobs:
       # permisos, filtros que no filtran). Si esto falla, no pasa.
       - name: Pruebas de componentes (Vitest)
         run: npx vitest run
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: frontend-dist
           path: FrontendReact/dist
@@ -205,7 +205,7 @@ jobs:
 
       - name: Empaquetar el programa (WAR ejecutable)
         run: mvn -B package -DskipTests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: sih-war
           path: BackendJava/target/SIH-IA-1.0.war
