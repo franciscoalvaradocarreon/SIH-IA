@@ -393,19 +393,20 @@ const Menu: React.FC = () => {
 
         {/*
           Versión sobre la que se está trabajando, al final del menú.
-          En producción sale "v1.1.5 · 99c9226"; en local, "dev" (y ahí no se añade el commit, porque
-          vale "desconocido" y no aporta nada). El title lleva la fecha del build.
+          Se muestra SOLO la versión: el commit y la fecha del build quedan en el tooltip, que es
+          donde se consultan cuando hace falta (soporte, incidencias), sin ensuciar el menú.
+          px-4 es el mismo margen lateral que los botones de arriba, para que quede alineada.
         */}
         {version && (
           <p
-            className="truncate text-center text-[11px] text-gray-400 dark:text-gray-500"
+            className={`truncate px-4 text-[11px] text-gray-400 dark:text-gray-500 ${
+              collapsed ? 'text-center' : 'text-left'
+            }`}
             title={`${version.aplicacion} ${version.version}
 commit: ${version.commit}
 construido: ${version.construido}`}
           >
-            {collapsed || !version.commit || version.commit === 'desconocido'
-              ? version.version
-              : `${version.version} · ${version.commit}`}
+            {version.version}
           </p>
         )}
       </div>
