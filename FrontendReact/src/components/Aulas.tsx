@@ -600,9 +600,19 @@ const Aulas: React.FC = () => {
                             </div>
                             <span className="text-xl font-medium text-gray-900 dark:text-white">
                               {aula.nombre}
-                              {aula.taller === true && (
-                                <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-300">
-                                  TALLER
+                              {/* Clase del tipo de espacio. `taller` lo deriva el servidor del
+                                  tipo declarado en el aula, asi que no hace falta traer el
+                                  catalogo: con tipoEspacioId != null ya sabemos que tiene tipo,
+                                  y `taller` dice cual de las dos clases es. */}
+                              {aula.tipoEspacioId != null && (
+                                <span
+                                  className={`ml-2 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    aula.taller
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'
+                                      : 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300'
+                                  }`}
+                                >
+                                  {aula.taller ? 'Taller' : 'Laboratorio'}
                                 </span>
                               )}
                             </span>
