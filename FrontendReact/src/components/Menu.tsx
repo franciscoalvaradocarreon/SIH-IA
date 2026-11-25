@@ -382,33 +382,33 @@ const Menu: React.FC = () => {
           )}
         </button>
 
-        <button
-          onClick={handleLogout}
-          className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} w-full px-4 py-2.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200`}
-          title="Cerrar sesión"
-        >
-          <IconsMd.MdLogout className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span className="text-sm font-medium">Cerrar sesión</span>}
-        </button>
+        {/* Cerrar sesión y versión comparten fila: la versión a la misma altura, al extremo
+            derecho. Con el menú colapsado no cabe y se omite (sigue en el tooltip del boton). */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleLogout}
+            className={`flex items-center ${collapsed ? 'justify-center' : 'gap-3'} flex-1 px-4 py-2.5 rounded-lg text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-all duration-200`}
+            title={`Cerrar sesión${version ? ` · ${version.version} (${version.commit})` : ''}`}
+          >
+            <IconsMd.MdLogout className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span className="text-sm font-medium">Cerrar sesión</span>}
+          </button>
 
-        {/*
-          Versión sobre la que se está trabajando, al final del menú.
-          Se muestra SOLO la versión: el commit y la fecha del build quedan en el tooltip, que es
-          donde se consultan cuando hace falta (soporte, incidencias), sin ensuciar el menú.
-          px-4 es el mismo margen lateral que los botones de arriba, para que quede alineada.
-        */}
-        {version && (
-          <p
-            className={`truncate px-4 text-[11px] text-gray-400 dark:text-gray-500 ${
-              collapsed ? 'text-center' : 'text-left'
-            }`}
-            title={`${version.aplicacion} ${version.version}
+          {/*
+            Versión del build. Solo la versión a la vista; el commit y la fecha quedan en el
+            tooltip, que es donde se consultan cuando hace falta (soporte, incidencias).
+          */}
+          {!collapsed && version && (
+            <span
+              className="shrink-0 pr-1 text-[11px] text-gray-400 dark:text-gray-500"
+              title={`${version.aplicacion} ${version.version}
 commit: ${version.commit}
 construido: ${version.construido}`}
-          >
-            {version.version}
-          </p>
-        )}
+            >
+              {version.version}
+            </span>
+          )}
+        </div>
       </div>
     </nav>
   );
