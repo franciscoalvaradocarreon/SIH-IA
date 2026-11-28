@@ -150,6 +150,20 @@ const HorarioIA: React.FC = () => {
   // Hasta que no haya un turno elegido no se habilita nada: generar sin turno no tiene sentido.
   const turnoListo = turnoSeleccionado > 0;
 
+  /**
+   * Corridas guardadas DEL TURNO elegido. El endpoint las devuelve por semestre, y mezclar
+   * turnos en la lista confunde: un horario de MATUTINO no se puede comparar ni aplicar al
+   * VESPERTINO, y sus metricas (huecos, adyacencias) no son comparables entre si.
+   * Sin turno elegido se muestran todas, porque aun no hay nada que filtrar.
+   */
+  const corridasDelTurno = useMemo(
+    () =>
+      turnoSeleccionado > 0
+        ? corridas.filter(c => c.turnoId === turnoSeleccionado)
+        : corridas,
+    [corridas, turnoSeleccionado],
+  );
+
   // Datos de la pre-validación tratados como posiblemente ausentes: si una lista no llega (o llega
   // como null), su bloque se pinta vacío en vez de tumbar la pantalla entera.
   const chequeosValidacion = listaSegura<ChequeoIA>(validacion?.chequeos);
@@ -922,7 +936,7 @@ const HorarioIA: React.FC = () => {
 
       {/* ── corridas guardadas: comparar opciones sin tocar el horario ── */}
       <ListaCorridas
-        corridas={corridas}
+        corridas={corridasDelTurno}
         cargando={cargandoCorridas}
         aplicando={aplicandoCorrida}
         borrando={borrandoCorrida}
